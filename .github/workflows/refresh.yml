@@ -47,7 +47,8 @@ jobs:
         # Without it the page shows Yahoo Finance quotes refreshed by this workflow.
         env:
           FINNHUB_KEY: ${{ vars.FINNHUB_KEY }}
-        run: python -c "import json,os; json.dump({'finnhubKey': os.environ.get('FINNHUB_KEY') or None}, open('web/data/config.json','w'))"
+        run: |
+          python -c "import json, os; json.dump({'finnhubKey': os.environ.get('FINNHUB_KEY') or None}, open('web/data/config.json', 'w'))"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
