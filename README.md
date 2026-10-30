@@ -62,6 +62,19 @@ What triggers a change:
 | Schedule 13G / 13G/A by a manager on a tracked company | ownership stake between 13F reports |
 | 10-Q / 10-K from a tracked company | fundamentals (XBRL re-read for that company only) |
 
+### Live stock prices
+
+| Tier | Source | Freshness | Needs |
+| --- | --- | --- | --- |
+| Real-time | Finnhub websocket (trades) + REST opening quote, straight from the browser | seconds | free key from finnhub.io as repository variable `FINNHUB_KEY` |
+| Delayed | Yahoo Finance chart data written to `data/quotes.json` by the workflow | ≤ 15 min | nothing |
+| Saved copy | prices embedded in the single-file build | frozen | nothing |
+
+Prices drive the price strip, the Price / Today columns, the company page (1D–Max chart, day range,
+market cap and P/E at the live price) and "Top 30 at today's prices". The Finnhub key is visible to
+anyone who opens the page; use a free key dedicated to this site. Yahoo Finance data is unofficial
+and for personal use.
+
 Setup once: push to GitHub, enable Pages with source "GitHub Actions", and set a repository
 variable `SEC_USER_AGENT` to `Your Name your.email@example.com`. GitHub pauses scheduled
 workflows in repositories with no activity for 60 days; any push re-enables them.

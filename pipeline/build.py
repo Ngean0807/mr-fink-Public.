@@ -11,7 +11,7 @@ from pathlib import Path
 
 import hashlib
 
-from . import analytics, config, feed, fundamentals, periods, securities, thirteenf
+from . import analytics, config, feed, fundamentals, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -218,9 +218,15 @@ def main() -> None:
         "securities": sec_meta,
         "feed": feed_events,
     }
+    # Market prices: a delayed quote, five sessions intraday and ten years of daily closes.
+    tickers = sorted({m["ticker"] for m in sec_meta.values()})
+    quote_data, price_history = quotes.build(tickers)
+    data["quotes"] = quote_data
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, separators=(",", ":")))
-    STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None}))
+    OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))
+    OUT.with_name("history.json").write_text(json.dumps(price_history, separators=(",", ":")))
+    STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))
     print(f"Wrote {OUT} ({OUT.stat().st_size/1024:,.0f} KB) in {time.time()-t0:,.0f}s")
 
 

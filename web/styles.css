@@ -140,6 +140,26 @@ button { font: inherit; color: inherit; }
 .chip .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .chip small { font: 400 12px var(--font-body); color: inherit; opacity: .8; }
 
+.tapebar { border-bottom: 1px solid var(--line); background: var(--surface); }
+.tape {
+  max-width: 1280px; margin: 0 auto; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  padding-block: 6px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.tape::-webkit-scrollbar { display: none; }
+.tape-item {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; padding: 6px 10px; border-radius: 8px;
+  color: var(--ink); text-decoration: none !important; font-size: 13px;
+}
+.tape-item:hover { background: var(--surface-2); }
+.tape-t { font: 500 13px var(--font-ui); }
+[data-live="px"] { border-radius: 4px; transition: background-color .8s ease-out; }
+.flash-up { animation: flash-up 1s ease-out; }
+.flash-down { animation: flash-down 1s ease-out; }
+@keyframes flash-up { from { background: var(--pos-soft); } to { background: transparent; } }
+@keyframes flash-down { from { background: var(--neg-soft); } to { background: transparent; } }
+
 /* ---------- Page grid ---------- */
 .page {
   max-width: 1280px; margin: 0 auto;
@@ -289,7 +309,7 @@ sup { font-size: 10px; color: var(--muted); }
 .badge.f13f { background: var(--accent-soft); color: var(--accent-ink); }
 .badge.f13g { background: var(--warn-soft); color: var(--warn); }
 .badge.frep { background: var(--chip); color: var(--ink-2); }
-.feed-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.feed-meta { white-space: nowrap; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: none; padding: 10px; color: var(--accent-ink); font: 500 13px var(--font-ui); cursor: pointer; border-radius: 0 0 var(--radius) var(--radius); }
 .more:hover { background: var(--surface-2); }
 
@@ -348,5 +368,5 @@ sup { font-size: 10px; color: var(--muted); }
   .filter, .filter input { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .live.on .dot { animation: none; }
+  .live.on .dot, .flash-up, .flash-down { animation: none; }
 }

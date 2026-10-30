@@ -1,8 +1,9 @@
 name: Refresh from SEC EDGAR
 
 # EDGAR has no push notifications, so the site polls it: every 15 minutes the pipeline re-reads
-# the managers' and companies' filing indexes, rebuilds only what changed (everything else comes
-# from the cache) and redeploys. The page itself polls data/status.json and updates in place.
+# the managers' and companies' filing indexes and market quotes, rebuilds only what changed
+# (everything else comes from the cache) and redeploys. The page polls data/status.json and
+# data/quotes.json and updates in place; with a Finnhub key it streams real-time trades.
 on:
   schedule:
     - cron: "*/15 * * * *"
@@ -41,6 +42,12 @@ jobs:
           SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'MrFink 13F Dashboard research@example.com' }}
           MRFINK_SUBMISSIONS_TTL: "0"
         run: python -m pipeline.build
+      - name: Price feed config
+        # Optional: a free Finnhub key turns on real-time prices (websocket trades) in the browser.
+        # Without it the page shows Yahoo Finance quotes refreshed by this workflow.
+        env:
+          FINNHUB_KEY: ${{ vars.FINNHUB_KEY }}
+        run: python -c "import json,os; json.dump({'finnhubKey': os.environ.get('FINNHUB_KEY') or None}, open('web/data/config.json','w'))"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

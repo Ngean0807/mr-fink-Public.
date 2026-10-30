@@ -13,11 +13,13 @@
     "Energy": "#b31412", "Materials": "#795548", "Utilities": "#4e6e1e", "Real Estate": "#3949ab",
   };
   const POLL_MS = 60_000;
+  // A bundled copy carries its data inline and never polls; the hosted site fetches and polls.
+  const HOSTED = !window.MRFINK_DATA && location.protocol.startsWith("http");
 
   let D = null;
   let status = null;
   const state = {
-    view: "big3", page: "home", slug: null, range: "5Y", homeMode: "combined", coMode: "price",
+    view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
   };
 
@@ -115,6 +117,138 @@
   const tkChip = (s) => `<span class="tk" style="--tk:${SECTOR_COLOR[s.sector] || "#5f6368"}">${esc(s.ticker)}</span>`;
   const dot = (id) => `<span class="mdot" style="background:${mColor(id)}"></span>`;
 
+  // ---------- market prices ----------
+  // Three tiers: "realtime" (Finnhub websocket trades, needs a key in data/config.json),
+  // "delayed" (data/quotes.json, refreshed by the scheduled pipeline) and "snapshot" (saved copy).
+  const PX_RANGES = [["1D", 1], ["5D", 5], ["1M", 31], ["6M", 183], ["YTD", 0], ["1Y", 365], ["5Y", 1826], ["Max", Infinity]];
+  let Q = {};
+  let H = null;
+  let priceMode = "snapshot";
+  const NYF = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "2-digit", hourCycle: "h23" });
+  function marketOpen(ms = Date.now()) {
+    const p = Object.fromEntries(NYF.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+    const min = (+p.hour % 24) * 60 + +p.minute;
+    return !["Sat", "Sun"].includes(p.weekday) && min >= 570 && min < 960;
+  }
+  const timeNY = (sec) => new Date(sec * 1000).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+  const dayNY = (sec) => new Date(sec * 1000).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" });
+  const pxOf = (t) => (Q[t] && Q[t].price) || null;
+  const dayChg = (t) => (Q[t] && Q[t].price && Q[t].prevClose ? Q[t].price / Q[t].prevClose - 1 : null);
+  function stamp(t) {
+    const q = Q[t];
+    if (!q || !q.time) return "No market price available";
+    const fresh = Date.now() / 1000 - q.time < 1800;
+    if (priceMode === "snapshot") return `Saved copy · prices as of ${dayNY(q.time)}, ${timeNY(q.time)} ET`;
+    if (marketOpen() && fresh) return `${priceMode === "realtime" ? "Real-time" : "Delayed up to 15 min"} · ${timeNY(q.time)} ET`;
+    return `At close · ${dayNY(q.time)}, ${timeNY(q.time)} ET`;
+  }
+  /** Values that move with the market. Rendered once, then patched in place on every tick. */
+  function liveVal(kind, t, n) {
+    const p = pxOf(t);
+    const f = (bySlug(slugOf(t)) || {}).fundamentals || {};
+    switch (kind) {
+      case "px": return price(p);
+      case "pill": return pill(dayChg(t), { sm: true });
+      case "pillLg": return pill(dayChg(t));
+      case "chgabs": { const q = Q[t]; if (!q || !q.prevClose || !p) return "—"; const d = p - q.prevClose; return `<span class="${d >= 0 ? "txt-up" : "txt-down"}">${d >= 0 ? "+" : "-"}${price(Math.abs(d)).slice(1)}</span>`; }
+      case "mcap": return p && f.sharesOutstanding ? usd(p * f.sharesOutstanding) : "n/a";
+      case "pe": return p && f.epsTTM > 0 ? mult(p / f.epsTTM) : "—";
+      case "val": return p ? usd(p * n) : "—";
+      case "stamp": return esc(stamp(t));
+      case "mtm": return mtm();
+      default: return "";
+    }
+  }
+  const live = (kind, t, n = "", tag = "span") => `<${tag} data-live="${kind}" data-t="${esc(t)}"${n !== "" ? ` data-n="${n}"` : ""}>${liveVal(kind, t, n)}</${tag}>`;
+  function mtm() {
+    const v = view();
+    let now = 0, then = 0;
+    for (const r of v.rows) { const p = pxOf(sec(r.cusip).ticker); if (!p) continue; now += r.shares * p; then += r.value; }
+    if (!then) return "—";
+    return `<b>${usd(now)}</b> ${pill(now / then - 1, { sm: true })} <span class="muted">vs ${dateL(D.meta.latest)}</span>`;
+  }
+  let dirty = new Set(), flushTimer = null, lastChartDraw = 0;
+  function setQuote(t, patch, trade = false) {
+    const q = Q[t] || (Q[t] = { intraday: [] });
+    const before = q.price;
+    Object.assign(q, patch);
+    if (trade && patch.price) {
+      q.intraday = q.intraday || [];
+      const last = q.intraday[q.intraday.length - 1];
+      if (last && patch.time - last[0] < 300) last[1] = patch.price;
+      else q.intraday.push([patch.time, patch.price]);
+      if (q.dayHigh != null) q.dayHigh = Math.max(q.dayHigh, patch.price);
+      if (q.dayLow != null) q.dayLow = Math.min(q.dayLow, patch.price);
+    }
+    if (before !== q.price) {
+      q.dir = before == null ? 0 : q.price > before ? 1 : -1;
+      dirty.add(t);
+      if (!flushTimer) flushTimer = setTimeout(flush, 350);
+    }
+  }
+  function flush() {
+    flushTimer = null;
+    const changed = dirty;
+    dirty = new Set();
+    document.querySelectorAll("[data-live]").forEach((n) => {
+      const t = n.dataset.t;
+      if (n.dataset.live !== "mtm" && n.dataset.live !== "stamp" && !changed.has(t)) return;
+      n.innerHTML = liveVal(n.dataset.live, t, n.dataset.n ? +n.dataset.n : "");
+      if (n.dataset.live === "px" && Q[t] && Q[t].dir) {
+        n.classList.remove("flash-up", "flash-down");
+        void n.offsetWidth;
+        n.classList.add(Q[t].dir > 0 ? "flash-up" : "flash-down");
+      }
+    });
+    const s = state.page === "company" && bySlug(state.slug);
+    if (s && changed.has(s.ticker) && state.coMode === "price" && ["1D", "5D"].includes(state.pxRange) && Date.now() - lastChartDraw > 15000) drawCoChart(s);
+  }
+  function loadHistory() {
+    if (H) return Promise.resolve(H);
+    const src = window.MRFINK_HISTORY ? Promise.resolve(window.MRFINK_HISTORY) : fetch("data/history.json").then((r) => r.json());
+    return src.then((raw) => {
+      H = {};
+      for (const [t, h] of Object.entries(raw)) {
+        let d = h.d0;
+        const ms = [d * 86400000];
+        for (const g of h.dd) { d += g; ms.push(d * 86400000); }
+        H[t] = { ms, c: h.c.map((x) => x / 100) };
+      }
+      return H;
+    }).catch(() => (H = {}));
+  }
+  function startRealtime(key) {
+    priceMode = "realtime";
+    const tickers = [...new Set(Object.values(D.securities).map((x) => x.ticker))];
+    // Opening quote for each symbol (free tier: 60 calls/min), then stream trades.
+    tickers.forEach((t, i) => setTimeout(() => {
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t)}&token=${encodeURIComponent(key)}`)
+        .then((r) => r.json()).then((q) => { if (q && q.c) setQuote(t, { price: q.c, prevClose: q.pc, dayHigh: q.h, dayLow: q.l, time: q.t }); })
+        .catch(() => {});
+    }, i * 1100));
+    let backoff = 2000;
+    (function connect() {
+      let ws;
+      try { ws = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(key)}`); } catch (e) { return; }
+      ws.onopen = () => { backoff = 2000; tickers.forEach((t) => ws.send(JSON.stringify({ type: "subscribe", symbol: t }))); };
+      ws.onmessage = (ev) => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.type === "trade") for (const tr of m.data || []) setQuote(tr.s, { price: tr.p, time: Math.floor(tr.t / 1000) }, true);
+        } catch (e) { /* ignore malformed frames */ }
+      };
+      ws.onclose = () => { setTimeout(connect, backoff); backoff = Math.min(60000, backoff * 2); };
+    })();
+  }
+  async function pollQuotes() {
+    try {
+      const r = await fetch("data/quotes.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) return;
+      const data = await r.json();
+      for (const [t, q] of Object.entries(data.quotes || {})) setQuote(t, q);
+    } catch (e) { /* keep last prices */ }
+  }
+
   // ---------- tooltip / toast ----------
   function showTip(html, x, y) {
     const t = $("tip");
@@ -161,13 +295,15 @@
    * Line chart with crosshair. series: [{name, color, values}]. With one series it draws the
    * Google-style area and a dotted reference line at the first value of the range.
    */
-  function lineChart(host, { series, dates, height = 280, fmt = usd, axisFmt = axisUsd }) {
+  function lineChart(host, { series, dates, height = 280, fmt = usd, axisFmt = axisUsd, ref,
+    xLabel = (i) => qshort(dates[i]), tipTitle = (i) => `<strong>${qlabel(dates[i])}</strong> <span class="muted">${dateL(dates[i])}</span>` }) {
     host.innerHTML = "";
     const W = Math.max(280, host.clientWidth || 640);
     const H = height;
     const m = { t: 12, r: 4, b: 28, l: 4 };
     const all = series.flatMap((s) => s.values.filter((v) => v != null));
     if (!all.length) return;
+    if (ref != null) all.push(ref);
     let lo = Math.min(...all), hi = Math.max(...all);
     const pad = (hi - lo) * 0.08 || hi * 0.05 || 1;
     lo = Math.max(0, lo - pad); hi += pad;
@@ -186,10 +322,10 @@
     });
     const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((plotR - m.l) / 72))));
     for (let i = n - 1; i >= 0; i -= every) {
-      el("text", { x: x(i), y: H - 8, "text-anchor": i === n - 1 ? "end" : "middle" }, ax).textContent = qshort(dates[i]);
+      el("text", { x: x(i), y: H - 8, "text-anchor": i === n - 1 ? "end" : "middle" }, ax).textContent = xLabel(i);
     }
     if (series.length === 1) {
-      const first = series[0].values.find((v) => v != null);
+      const first = ref != null ? ref : series[0].values.find((v) => v != null);
       el("line", { x1: m.l, x2: plotR, y1: y(first), y2: y(first), class: "refline" }, svg);
     }
     series.forEach((s) => {
@@ -226,7 +362,7 @@
         dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(v)); dots[k].setAttribute("visibility", "visible");
         rows += `<div class="row"><span>${series.length > 1 ? `<i style="background:${s.color}"></i>` : ""}${esc(s.name)}</span><b>${fmt(v)}</b></div>`;
       });
-      showTip(`<strong>${qlabel(dates[i])}</strong> <span class="muted">${dateL(dates[i])}</span>${rows}`, ev.clientX, ev.clientY);
+      showTip(`${tipTitle(i)}${rows}`, ev.clientX, ev.clientY);
     });
     hit.addEventListener("pointerleave", () => { hl.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); hideTip(); });
   }
@@ -285,6 +421,13 @@
   }
 
   // ---------- header ----------
+  function renderTape() {
+    const rows = view().rows.slice(0, 12);
+    $("tape").innerHTML = rows.map((r) => {
+      const s = sec(r.cusip);
+      return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
+    }).join("");
+  }
   function renderChips() {
     $("chips").innerHTML = VIEWS.map((id) => {
       const t = D.views[id].totals;
@@ -296,7 +439,7 @@
 
   function renderLive() {
     const box = $("live");
-    const live = location.protocol.startsWith("http") && status;
+    const live = HOSTED && status;
     const checked = (status && status.checkedAt) || D.meta.generatedAt;
     const age = (Date.now() - d0(checked).getTime()) / 60000;
     box.classList.toggle("on", !!live && age < 45);
@@ -359,7 +502,7 @@
     }).join("") || `<div class="item"><span></span><span class="nm"><small>No filings in the past year.</small></span><span></span></div>`;
     const tabs = ticker ? "" : `<div class="tabs" role="group" aria-label="Filing type">${[["all", "All"], ["13f", "13F"], ["13g", "13G stakes"], ["report", "10-Q / 10-K"]].map(([k, l]) => `<button type="button" class="tab" data-feed="${k}" aria-pressed="${state.feedTab === k}">${l}</button>`).join("")}</div>`;
     return `<section class="card" aria-labelledby="feed-h">
-      <div class="card-head"><h2 id="feed-h">${ticker ? "Recent filings" : "Latest from SEC EDGAR"}</h2><span class="feed-meta" data-checked></span></div>
+      <div class="card-head"><h2 id="feed-h">${ticker ? "Recent filings" : "Latest SEC filings"}</h2><span class="feed-meta" data-checked></span></div>
       ${tabs}<div class="list">${rows}</div>
       ${items.length > 7 ? `<button type="button" class="more" data-more>${state.feedMore ? "Show fewer" : `Show ${Math.min(30, items.length) - 7} more`}</button>` : ""}
     </section>`;
@@ -374,6 +517,7 @@
     const end = new Date(Date.UTC(y, m + 3, 0));
     return { period: end.toISOString().slice(0, 10), due: new Date(end.getTime() + 45 * 86400000).toISOString().slice(0, 10) };
   }
+  const pxRangeBar = (extra = "") => `<div class="rangebar"><div class="ranges" role="group" aria-label="Price range">${PX_RANGES.map(([k]) => `<button type="button" class="range" data-pxrange="${k}" aria-pressed="${state.pxRange === k}">${k}</button>`).join("")}</div>${extra}</div>`;
   const rangeBar = (extra = "") => `<div class="rangebar"><div class="ranges" role="group" aria-label="Time range">${RANGES.map(([k]) => `<button type="button" class="range" data-range="${k}" aria-pressed="${state.range === k}">${k}</button>`).join("")}</div>${extra}</div>`;
 
   // ---------- home ----------
@@ -424,6 +568,7 @@
           ${state.view === "big3" && state.homeMode === "managers" ? `<div class="legend">${MGRS.map((id) => `<span><i style="background:${mColor(id)}"></i>${MGR_NAME[id]}</span>`).join("")}</div>` : ""}
           <div class="chart" id="home-chart"></div>
           <div class="bridge"><span>Top 30, last quarter:</span><span>net buying <b class="${s.flow >= 0 ? "txt-up" : "txt-down"}">${usdS(s.flow)}</b></span><span>price moves <b class="${s.move >= 0 ? "txt-up" : "txt-down"}">${usdS(s.move)}</b></span><span>${s.added} added, ${s.trimmed} trimmed</span></div>
+          <div class="bridge"><span>Top 30 at today’s prices:</span><span data-live="mtm" data-t="">${mtm()}</span></div>
         </div>
         <section class="section" aria-labelledby="hold-h">
           <div class="section-head">
@@ -509,10 +654,14 @@
       { key: "value", label: "Value", get: (r) => r.value, render: (r) => `<b class="v">${usd(r.value)}</b>` },
     ];
     if (state.tab === "overview") {
+      const tk = (r) => sec(r.cusip).ticker;
+      head.splice(2, 0,
+        { key: "px", label: "Price", get: (r) => pxOf(tk(r)), render: (r) => live("px", tk(r)) },
+        { key: "day", label: "Today", get: (r) => dayChg(tk(r)), render: (r) => live("pill", tk(r)) });
+      head[4].label = "13F value";
       const maxW = Math.max(...view().rows.map((r) => r.value));
       return [...head,
         { key: "weight", label: "% of book", get: (r) => r.value / total, render: (r) => `${pct(r.value / total, 2, false)}<span class="wbar"><i style="width:${(r.value / maxW) * 100}%"></i></span>` },
-        { key: "shares", label: "Shares", get: (r) => r.shares, render: (r) => num(r.shares) },
         { key: "own", label: big3 ? "Combined stake" : "Stake", get: (r) => r.ownership, render: (r) => (r.ownership == null ? '<span class="na">n/a</span>' : pct(r.ownership, 1, false)) },
         { key: "qoq", label: "QoQ shares", get: (r) => r.qoq && r.qoq.dSharesPct, render: (r) => (r.qoq ? (r.qoq.status === "new" ? '<span class="act new">New</span>' : pill(r.qoq.dSharesPct, { sm: true })) : "—") },
         { key: "flow", label: "QoQ net flow", get: (r) => r.qoq && r.qoq.trade, render: (r) => (r.qoq ? signed(r.qoq.trade, usdS, 5e5) : "—") },
@@ -595,7 +744,7 @@
     const t = $("tbl");
     t.classList.toggle("grouped", !!grp);
     t.innerHTML = thead + tbody;
-    t.style.minWidth = state.tab === "overview" ? "920px" : "1240px";
+    t.style.minWidth = state.tab === "overview" ? "1040px" : "1240px";
     $("count").textContent = q ? `${rows.length} of ${v.rows.length} holdings` : `${v.rows.length} holdings`;
     $("foot").innerHTML = {
       overview: "Stake is shares held ÷ shares outstanding (all share classes, as-converted). QoQ net flow is the change in shares valued at the quarter-end price. Select a company for its full page.",
@@ -642,10 +791,6 @@
     const f = s.fundamentals || {};
     const per = D.meta.periods;
     const n = per.length;
-    const i0 = rangeStart(n);
-    const base = holder(c, "big3") || holder(c, MGRS.find((id) => holder(c, id)));
-    const px = base.series.map((x) => (x[0] ? x[1] / x[0] : null));
-    const p0 = px.slice(i0).find((v) => v != null), p1 = px[n - 1];
     const siblings = Object.values(D.securities).filter((o) => o.cik && o.cik === s.cik && o.cusip !== c);
     const latestG = MGRS.map((id) => (s.stakes13g || []).find((g) => g.manager === id && g.percent > 0)).filter(Boolean);
     const fin = !!f.financialsNote;
@@ -654,9 +799,9 @@
     const yoy = (a, b) => (a != null && b ? a / b - 1 : null);
 
     const ownRow = (label, mark, h, extra = "") => {
-      if (!h) return `<tr><td class="l">${mark}${label}</td><td colspan="7" class="na l">Not held</td></tr>`;
+      if (!h) return `<tr><td class="l">${mark}${label}</td><td colspan="8" class="na l">Not held</td></tr>`;
       const cur = lastOf(h);
-      return `<tr${extra}><td class="l">${mark}${label}</td><td>${usd(cur[1])}</td><td>${num(cur[0])}</td><td>${h.ownership == null ? "n/a" : pct(h.ownership, 2, false)}</td><td>${h.rank ? "#" + h.rank : "—"}</td><td>${h.qoq ? pill(h.qoq.dSharesPct, { sm: true }) : "—"}</td><td>${h.yoy ? pill(h.yoy.dSharesPct, { sm: true }) : "—"}</td><td>${signed(h.inception.dSharesPct)} <span class="muted">from ${qshort(h.inception.period)}</span></td></tr>`;
+      return `<tr${extra}><td class="l">${mark}${label}</td><td>${usd(cur[1])}</td><td>${live("val", s.ticker, cur[0])}</td><td>${num(cur[0])}</td><td>${h.ownership == null ? "n/a" : pct(h.ownership, 2, false)}</td><td>${h.rank ? "#" + h.rank : "—"}</td><td>${h.qoq ? pill(h.qoq.dSharesPct, { sm: true }) : "—"}</td><td>${h.yoy ? pill(h.yoy.dSharesPct, { sm: true }) : "—"}</td><td>${signed(h.inception.dSharesPct)} <span class="muted">from ${qshort(h.inception.period)}</span></td></tr>`;
     };
     const notes = [];
     (s.splits || []).forEach((sp) => notes.push(sp.ratio >= 1
@@ -676,24 +821,19 @@
           <nav class="crumbs" aria-label="Breadcrumb"><a href="#${state.view}">${esc(MGR_NAME[state.view])}</a><span aria-hidden="true">›</span><span>${esc(s.ticker)}${s.exchange ? " • " + esc(s.exchange.toUpperCase()) : ""}</span></nav>
           <h1>${esc(niceName(s.name))} ${tkChip(s)}</h1>
           <p class="hero-sub">${esc(s.sector || "")}${s.industry ? " · " + esc(s.industry) : ""}</p>
-          <div class="figure">
-            <span class="figure-value">${price(p1)}</span>
-            ${pill(p1 / p0 - 1)}
-            <span class="figure-chg ${p1 >= p0 ? "txt-up" : "txt-down"}">${p1 - p0 >= 0 ? "+" : "-"}${price(Math.abs(p1 - p0))}</span>
-            <span class="muted">${rangeLabel()}</span>
-          </div>
-          <p class="figure-note">Quarter-end price on ${dateL(D.meta.latest)}, implied by the 13F filings (value ÷ shares) and split-adjusted</p>
+          <div class="figure" id="co-figure">${coFigure(s)}</div>
+          <p class="figure-note">${live("stamp", s.ticker)} · 13F quarter-end price ${price(s.price)} on ${dateL(D.meta.latest)}</p>
         </div>
         <div class="chart-block">
-          ${rangeBar(`<div class="toggles" role="group" aria-label="Chart metric">${[["price", "Price"], ["shares", "Shares held"], ["value", "Value held"]].map(([k, l]) => `<button type="button" class="chip" data-co-mode="${k}" aria-pressed="${state.coMode === k}">${l}</button>`).join("")}</div>`)}
+          ${(state.coMode === "price" ? pxRangeBar : rangeBar)(`<div class="toggles" role="group" aria-label="Chart metric">${[["price", "Price"], ["shares", "Shares held"], ["value", "Value held"]].map(([k, l]) => `<button type="button" class="chip" data-co-mode="${k}" aria-pressed="${state.coMode === k}">${l}</button>`).join("")}</div>`)}
           ${state.coMode !== "price" ? `<div class="legend">${MGRS.filter((id) => holder(c, id)).map((id) => `<span><i style="background:${mColor(id)}"></i>${MGR_NAME[id]}</span>`).join("")}</div>` : ""}
           <div class="chart" id="co-chart"></div>
-          ${(s.splits || []).length ? `<p class="figure-note">Split-adjusted for ${(s.splits || []).map((sp) => (sp.ratio >= 1 ? `${sp.ratio}:1` : `1:${Math.round(1 / sp.ratio)}`) + " in " + qlabel(sp.period)).join(" and ")}.</p>` : ""}
+          ${state.coMode !== "price" && (s.splits || []).length ? `<p class="figure-note">Share counts split-adjusted for ${(s.splits || []).map((sp) => (sp.ratio >= 1 ? `${sp.ratio}:1` : `1:${Math.round(1 / sp.ratio)}`) + " in " + qlabel(sp.period)).join(" and ")}.</p>` : ""}
         </div>
         <section class="section" aria-labelledby="own-h">
           <div class="section-head"><h2 id="own-h">Big Three ownership</h2><span class="note">${qlabel(D.meta.latest)} 13F filings</span></div>
           <div class="table-scroll flat"><table class="own-table">
-            <thead><tr><th class="l" scope="col">Manager</th><th scope="col">Value</th><th scope="col">Shares</th><th scope="col">Stake</th><th scope="col">Rank</th><th scope="col">QoQ shares</th><th scope="col">YoY shares</th><th scope="col">Since first held</th></tr></thead>
+            <thead><tr><th class="l" scope="col">Manager</th><th scope="col">13F value</th><th scope="col">Value today</th><th scope="col">Shares</th><th scope="col">Stake</th><th scope="col">Rank</th><th scope="col">QoQ shares</th><th scope="col">YoY shares</th><th scope="col">Since first held</th></tr></thead>
             <tbody>${MGRS.map((id) => ownRow(MGR_NAME[id], dot(id), holder(c, id))).join("")}${ownRow("Big Three", "", b3, ' class="total"')}</tbody>
           </table></div>
           ${latestG.length ? `<div class="g13"><b>Latest Schedule 13G stakes</b>${latestG.map((g) => `<span>${dot(g.manager)}${esc(g.reporter)}: <b>${pct(g.percent, 2, false)}</b> of the class as of ${dateL(g.eventDate)} · <a href="${g.url}" target="_blank" rel="noopener">filed ${dateL(g.filed)}</a></span>`).join("")}</div>` : ""}
@@ -735,9 +875,12 @@
         <section class="card" aria-labelledby="cks-h">
           <div class="card-head"><h2 id="cks-h">Key stats</h2></div>
           <dl class="kv">
-            <div><dt>Quarter-end price</dt><dd>${price(s.price)}</dd></div>
-            <div><dt>Market cap</dt><dd>${f.marketCap ? usd(f.marketCap) : "n/a"}</dd></div>
-            <div><dt>P/E ratio</dt><dd>${mult(f.pe)}</dd></div>
+            <div><dt>Previous close</dt><dd>${price(Q[s.ticker]?.prevClose)}</dd></div>
+            <div><dt>Day range</dt><dd>${Q[s.ticker]?.dayLow ? `${price(Q[s.ticker].dayLow)} – ${price(Q[s.ticker].dayHigh)}` : "—"}</dd></div>
+            <div><dt>Year range</dt><dd>${Q[s.ticker]?.low52 ? `${price(Q[s.ticker].low52)} – ${price(Q[s.ticker].high52)}` : "—"}</dd></div>
+            <div><dt>Volume</dt><dd>${Q[s.ticker]?.volume ? num(Q[s.ticker].volume) : "—"}</dd></div>
+            <div><dt>Market cap</dt><dd>${live("mcap", s.ticker)}</dd></div>
+            <div><dt>P/E ratio</dt><dd>${live("pe", s.ticker)}</dd></div>
             <div><dt>Price / sales</dt><dd>${mult(f.ps)}</dd></div>
             ${fin ? "" : `<div><dt>FCF yield</dt><dd>${f.fcfYield == null ? "—" : pct(f.fcfYield, 1, false)}</dd></div>`}
             <div><dt>Revenue (TTM)</dt><dd>${usd(f.revenueTTM)}</dd></div>
@@ -756,27 +899,80 @@
         </section>
       </aside>`;
 
-    const dates = per.slice(i0);
-    let series, fmt = price, axisFmt = axisUsd;
-    if (state.coMode === "price") {
-      series = [{ name: "Price", color: p1 >= p0 ? "var(--pos-line)" : "var(--neg-line)", values: px.slice(i0) }];
-    } else {
-      const k = state.coMode === "shares" ? 0 : 1;
-      series = MGRS.filter((id) => holder(c, id)).map((id) => ({ name: MGR_NAME[id], color: mColor(id), values: holder(c, id).series.slice(i0).map((x) => (x[0] ? x[k] : null)) }));
-      fmt = k ? usd : (v) => num(v) + " shares";
-      axisFmt = k ? axisUsd : axisNum;
-    }
-    lineChart($("co-chart"), { series, dates, height: 280, fmt, axisFmt });
+    drawCoChart(s);
     if (f.available && q.length) finChart($("fin-chart"), q);
     const app = $("app");
     wireCommon(app);
     app.querySelectorAll("[data-co-mode]").forEach((b) => b.addEventListener("click", () => { state.coMode = b.dataset.coMode; render(); }));
+    app.querySelectorAll("[data-pxrange]").forEach((b) => b.addEventListener("click", () => { state.pxRange = b.dataset.pxrange; render(); }));
+    if (!H) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
+  }
+
+  /** Price points for the selected range: intraday for 1D/5D, daily closes otherwise, live price appended. */
+  function pricePoints(t) {
+    const q = Q[t] || {};
+    const r = state.pxRange;
+    if (r === "1D" || r === "5D") {
+      let pts = (q.intraday || []).slice();
+      if (r === "1D" && pts.length) {
+        const lastDay = dayNY(pts[pts.length - 1][0]);
+        pts = pts.filter(([ts]) => dayNY(ts) === lastDay);
+      }
+      return { pts: pts.map(([ts, p]) => [ts * 1000, p]), base: r === "1D" ? q.prevClose : pts.length ? pts[0][1] : null, intraday: true };
+    }
+    const h = H && H[t];
+    if (!h) return { pts: [], base: null };
+    const now = Date.now();
+    const start = r === "YTD" ? Date.UTC(new Date().getUTCFullYear(), 0, 1) : r === "Max" ? 0 : now - PX_RANGES.find(([k]) => k === r)[1] * 86400000;
+    const pts = [];
+    h.ms.forEach((ms, i) => { if (ms >= start) pts.push([ms, h.c[i]]); });
+    if (q.price && q.time && (!pts.length || q.time * 1000 - pts[pts.length - 1][0] > 12 * 3600000)) pts.push([q.time * 1000, q.price]);
+    else if (q.price && pts.length) pts[pts.length - 1][1] = q.price;
+    return { pts, base: pts.length ? pts[0][1] : null };
+  }
+  function coFigure(s) {
+    const t = s.ticker;
+    const label = { "1D": "today", "5D": "past 5 days", "1M": "past month", "6M": "past 6 months", YTD: "year to date", "1Y": "past year", "5Y": "past 5 years", Max: "past 10 years" }[state.pxRange];
+    if (!pxOf(t)) return `<span class="figure-value">${price(s.price)}</span><span class="muted">13F quarter-end price</span>`;
+    if (state.pxRange === "1D" || state.coMode !== "price") return `<span class="figure-value">${live("px", t)}</span>${live("pillLg", t)}<span class="figure-chg">${live("chgabs", t)}</span><span class="muted">today</span>`;
+    const { base } = pricePoints(t);
+    const p = pxOf(t);
+    if (!base) return `<span class="figure-value">${live("px", t)}</span>${live("pillLg", t)}<span class="muted">today</span>`;
+    return `<span class="figure-value">${live("px", t)}</span>${pill(p / base - 1)}<span class="figure-chg ${p >= base ? "txt-up" : "txt-down"}">${p >= base ? "+" : "-"}${price(Math.abs(p - base)).slice(1)}</span><span class="muted">${label}</span>`;
+  }
+  function drawCoChart(s) {
+    const host = $("co-chart");
+    if (!host) return;
+    lastChartDraw = Date.now();
+    const c = s.cusip;
+    const per = D.meta.periods;
+    if (state.coMode === "price") {
+      const { pts, base, intraday } = pricePoints(s.ticker);
+      if (pts.length < 2) { host.innerHTML = `<p class="empty-state">${H ? "No price history for this range." : "Loading price history…"}</p>`; return; }
+      const last = pts[pts.length - 1][1];
+      const fmtX = intraday
+        ? (state.pxRange === "1D" ? (i) => timeNY(pts[i][0] / 1000) : (i) => dayNY(pts[i][0] / 1000))
+        : (i) => new Date(pts[i][0]).toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" }).replace(" ", " ’");
+      const tip = intraday
+        ? (i) => `<strong>${dayNY(pts[i][0] / 1000)}, ${timeNY(pts[i][0] / 1000)} ET</strong>`
+        : (i) => `<strong>${dateL(new Date(pts[i][0]).toISOString().slice(0, 10))}</strong>`;
+      lineChart(host, {
+        series: [{ name: "Price", color: last >= base ? "var(--pos-line)" : "var(--neg-line)", values: pts.map((p) => p[1]) }],
+        dates: pts.map((p) => p[0]), height: 280, fmt: price, axisFmt: (v) => "$" + trim(compact(v)), ref: base, xLabel: fmtX, tipTitle: tip,
+      });
+      return;
+    }
+    const i0 = rangeStart(per.length);
+    const k = state.coMode === "shares" ? 0 : 1;
+    const series = MGRS.filter((id) => holder(c, id)).map((id) => ({ name: MGR_NAME[id], color: mColor(id), values: holder(c, id).series.slice(i0).map((x) => (x[0] ? x[k] : null)) }));
+    lineChart(host, { series, dates: per.slice(i0), height: 280, fmt: k ? usd : (v) => num(v) + " shares", axisFmt: k ? axisUsd : axisNum });
   }
 
   // ---------- routing ----------
   function render() {
     hideTip();
     renderChips();
+    renderTape();
     if (state.page === "company") renderCompany();
     else renderHome();
     renderLive();
@@ -817,13 +1013,23 @@
 
   function boot(data) {
     D = data;
+    Q = JSON.parse(JSON.stringify((D.quotes && D.quotes.quotes) || {}));
     try { const t = localStorage.getItem("mrfink.tab"); if (["overview", "analytics", "fundamentals"].includes(t)) state.tab = t; } catch (e) { /* storage unavailable */ }
     setupSearch();
     window.addEventListener("hashchange", route);
     let rt, lastW = innerWidth;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 150); });
     route();
-    if (location.protocol.startsWith("http")) { poll(); setInterval(poll, POLL_MS); }
+    if (HOSTED) {
+      poll();
+      setInterval(poll, POLL_MS);
+      fetch("data/config.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
+        if (cfg && cfg.finnhubKey) startRealtime(cfg.finnhubKey);
+        else { priceMode = "delayed"; setInterval(pollQuotes, POLL_MS); }
+        flush();
+      });
+    }
+    setInterval(() => { document.querySelectorAll('[data-live="stamp"]').forEach((n) => { n.innerHTML = liveVal("stamp", n.dataset.t); }); }, 30_000);
     setInterval(renderLive, 30_000);
   }
 
