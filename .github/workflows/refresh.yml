@@ -1,0 +1,56 @@
+name: Refresh from SEC EDGAR
+
+# EDGAR has no push notifications, so the site polls it: every 15 minutes the pipeline re-reads
+# the managers' and companies' filing indexes, rebuilds only what changed (everything else comes
+# from the cache) and redeploys. The page itself polls data/status.json and updates in place.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore EDGAR cache
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: edgar-${{ github.run_id }}
+          restore-keys: edgar-
+      - name: Unit tests
+        run: python -m unittest discover -s tests -t .
+      - name: Build data from EDGAR
+        env:
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'MrFink 13F Dashboard research@example.com' }}
+          MRFINK_SUBMISSIONS_TTL: "0"
+        run: python -m pipeline.build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
