@@ -39,7 +39,7 @@ jobs:
         run: python -m unittest discover -s tests -t .
       - name: Build data from EDGAR
         env:
-          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'MrFink 13F Dashboard research@example.com' }}
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'Mr Fink nissim711@gmail.com' }}
           MRFINK_SUBMISSIONS_TTL: "0"
         run: python -m pipeline.build
       - name: Price feed config

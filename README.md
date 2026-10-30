@@ -75,8 +75,9 @@ market cap and P/E at the live price) and "Top 30 at today's prices". The Finnhu
 anyone who opens the page; use a free key dedicated to this site. Yahoo Finance data is unofficial
 and for personal use.
 
-Setup once: push to GitHub, enable Pages with source "GitHub Actions", and set a repository
-variable `SEC_USER_AGENT` to `Your Name your.email@example.com`. GitHub pauses scheduled
+Setup once: push to GitHub and enable Pages with source "GitHub Actions". The workflow identifies
+itself to SEC with the maintainer's contact; override it with a repository variable
+`SEC_USER_AGENT`. GitHub pauses scheduled
 workflows in repositories with no activity for 60 days; any push re-enables them.
 
 ## Layout
