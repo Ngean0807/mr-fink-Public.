@@ -139,7 +139,7 @@
     if (!q || !q.time) return "No market price available";
     const fresh = Date.now() / 1000 - q.time < 1800;
     if (priceMode === "snapshot") return `Saved copy · prices as of ${dayNY(q.time)}, ${timeNY(q.time)} ET`;
-    if (marketOpen() && fresh) return `${priceMode === "realtime" ? "Real-time" : "Delayed up to 15 min"} · ${timeNY(q.time)} ET`;
+    if (marketOpen() && fresh) return `${priceMode === "realtime" ? "Real-time" : "Delayed up to 5 min"} · ${timeNY(q.time)} ET`;
     return `At close · ${dayNY(q.time)}, ${timeNY(q.time)} ET`;
   }
   /** Values that move with the market. Rendered once, then patched in place on every tick. */
@@ -774,7 +774,7 @@
         <li>Every Form 13F-HR from BlackRock (2 registrants), Vanguard (11 advisers; Vanguard Group has reported through affiliates since Q1 2026) and State Street, Q1 2017 to ${qlabel(D.meta.latest)}, read directly from SEC EDGAR. Restatements replace the original filing and new-holdings amendments add to it. Options and bonds are excluded.</li>
         <li>Stock splits and CUSIP changes are detected from the filings and adjusted, so share counts compare across time. Funds and ETFs are identified with OpenFIGI and excluded.</li>
         <li>Fundamentals come from the XBRL data companies file with their 10-Q and 10-K. Schedule 13G stakes come from the managers’ ownership filings, which arrive between 13F reports.</li>
-        <li>The hosted version re-reads EDGAR every 15 minutes and refreshes this page when a new 13F, 13G, 10-Q or 10-K appears. 13F reports lag the quarter by up to 45 days and cover US-listed long positions only. Not investment advice.</li>
+        <li>The hosted version re-reads EDGAR every 5 minutes and refreshes this page when a new 13F, 13G, 10-Q or 10-K appears. 13F reports lag the quarter by up to 45 days and cover US-listed long positions only. Not investment advice.</li>
       </ul>
       <p class="foot">${qlabel(D.meta.latest)} filings: ${view().sources.map((x) => `<a href="${x.url}" target="_blank" rel="noopener">${esc(x.entity)}</a>`).join(" · ")}</p>
     </section>`;

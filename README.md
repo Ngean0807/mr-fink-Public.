@@ -48,7 +48,7 @@ python -m unittest discover -s tests -t .
 ## Live updates
 
 EDGAR has no webhooks and blocks browser requests (no CORS), so updates come from a scheduled
-poller: `.github/workflows/refresh.yml` runs every 15 minutes on GitHub Actions, re-reads the
+poller: `.github/workflows/refresh.yml` runs every 5 minutes on GitHub Actions, re-reads the
 filing indexes of every manager entity and every tracked company, rebuilds what changed and
 deploys `web/` to GitHub Pages. Each run writes `data/status.json` with a fingerprint of every
 filing behind the page; open browsers poll it every minute and swap in the new data with a
@@ -67,7 +67,7 @@ What triggers a change:
 | Tier | Source | Freshness | Needs |
 | --- | --- | --- | --- |
 | Real-time | Finnhub websocket (trades) + REST opening quote, straight from the browser | seconds | free key from finnhub.io as repository variable `FINNHUB_KEY` |
-| Delayed | Yahoo Finance chart data written to `data/quotes.json` by the workflow | ≤ 15 min | nothing |
+| Delayed | Yahoo Finance chart data written to `data/quotes.json` by the workflow | ≤ 5 min | nothing |
 | Saved copy | prices embedded in the single-file build | frozen | nothing |
 
 Prices drive the price strip, the Price / Today columns, the company page (1D–Max chart, day range,

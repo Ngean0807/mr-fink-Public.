@@ -1,12 +1,13 @@
 name: Refresh from SEC EDGAR
 
-# EDGAR has no push notifications, so the site polls it: every 15 minutes the pipeline re-reads
+# EDGAR has no push notifications, so the site polls it: every 5 minutes (GitHub's shortest
+# schedule; runs can start a few minutes late under load) the pipeline re-reads
 # the managers' and companies' filing indexes and market quotes, rebuilds only what changed
 # (everything else comes from the cache) and redeploys. The page polls data/status.json and
 # data/quotes.json and updates in place; with a Finnhub key it streams real-time trades.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
   push:
     branches: [main]
