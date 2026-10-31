@@ -35,7 +35,11 @@ FUNDS = [
 
 def filings(series: str, ttl_hours: float) -> list[dict]:
     """The fund's N-PORT-P filings, newest reporting period first."""
-    data = edgar.cached_json(SEARCH.format(series=series), ttl_hours=ttl_hours)
+    url = SEARCH.format(series=series)
+    data = edgar.cached_json(url, ttl_hours=ttl_hours)
+    if "hits" not in data:  # EDGAR full-text search answers some outages with an error body and status 200
+        edgar.forget(url)
+        raise RuntimeError(f"EDGAR search error: {str(data.get('errorMessage') or data)[:120]}")
     out = {}
     for h in data.get("hits", {}).get("hits", []):
         acc, _, doc = h["_id"].partition(":")

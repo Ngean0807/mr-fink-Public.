@@ -81,6 +81,11 @@ def cached_json(url: str, *, ttl_hours: float | None = None, version: str | None
     return json.loads(cached_bytes(url, ttl_hours=ttl_hours, version=version))
 
 
+def forget(url: str) -> None:
+    """Drop a cached response (e.g. an error body the server returned with status 200)."""
+    _cache_path(url).unlink(missing_ok=True)
+
+
 def load_artifact(name: str):
     path = CACHE_DIR / "derived" / name
     if path.exists():

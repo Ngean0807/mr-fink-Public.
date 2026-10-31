@@ -182,3 +182,15 @@ class AuditTest(unittest.TestCase):
         from pipeline import audit
         views = {"big3": {"name": "Big Three", "totals": [15e12, 17e12], "rows": [{"cusip": "X", "qoq": {"dSharesPct": 0.02}}]}}
         self.assertEqual(audit.check(views, "2026-06-30", ["2026-03-31", "2026-06-30"]), [])
+
+
+class NportSearchErrorTest(unittest.TestCase):
+    def test_an_error_body_is_not_kept_as_an_answer(self):
+        from unittest import mock
+        from pipeline import edgar, nport
+        forgotten = []
+        with mock.patch.object(edgar, "cached_json", return_value={"errorType": "ConnectionError", "errorMessage": "getaddrinfo EBUSY"}), \
+                mock.patch.object(edgar, "forget", side_effect=forgotten.append):
+            with self.assertRaises(RuntimeError):
+                nport.filings("S000006414", ttl_hours=24)
+        self.assertEqual(len(forgotten), 1)
