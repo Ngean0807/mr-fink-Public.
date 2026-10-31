@@ -133,3 +133,19 @@ class QuarterStatusTest(unittest.TestCase):
         m = movers.quarter_moves(book, "2026-06-30", "2026-03-31", per, figi)
         self.assertEqual([r["cusip"] for r in m["bought"]], ["BUY000001"])   # ACME's CUSIP change is not a buy; the ETF is skipped
         self.assertEqual([(r["cusip"], r["status"]) for r in m["sold"]], [("SOLD00001", "exited")])
+
+
+class MoversPairingTest(unittest.TestCase):
+    def test_adr_to_ordinary_is_netted_and_cash_takeover_is_not_a_sale(self):
+        from pipeline import movers
+        per = ["2026-03-31", "2026-06-30"]
+        book = {"2026-03-31": {"ADR000001": [200, 20_000, "ASTRAZENECA PLC SPONSORED ADR", "ADR"], "TGT000001": [10, 1_000, "TARGETCO INC", "COM"],
+                               "HOLD00001": [100, 1_000, "KEEP INC", "COM"]},
+                "2026-06-30": {"ORD000001": [100, 20_500, "ASTRAZENECA PLC", "ORD"], "HOLD00001": [50, 500, "KEEP INC", "COM"]}}
+        co = {"type": "Common Stock", "ticker": "X"}
+        figi = {c: co for c in ("ADR000001", "ORD000001", "TGT000001", "HOLD00001")}
+        m = movers.quarter_moves(book, "2026-06-30", "2026-03-31", per, figi, universe_now=book["2026-06-30"])
+        azn = [r for r in m["bought"] if r["cusip"] == "ORD000001"]
+        self.assertTrue(not azn or azn[0]["flow"] < 1_000)                       # 20.5K bought vs 20K sold: netted
+        self.assertEqual([r["cusip"] for r in m["sold"]], ["HOLD00001"])         # the takeover target is not "sold"
+        self.assertEqual([r["cusip"] for r in m["gone"]], ["TGT000001"])

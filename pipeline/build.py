@@ -316,7 +316,7 @@ def main() -> None:
     # per-run budget; a first run fills in over several refreshes.
     for meta in list(sec_meta.values()) + list(lite.values()):
         if meta.get("cik"):
-            meta["insiders"] = insiders.company(meta["cik"], ttl_hours=6, budget=1500)
+            meta["insiders"] = insiders.company(meta["cik"], ttl_hours=6, budget=800)
     insiders.prune()
     insiders.save()
     for r in emerging_rows:
@@ -367,7 +367,7 @@ def main() -> None:
         }
         if vid in early:
             out_views[vid]["early"] = early_view(complexes[vid], early[vid], latest, figi, sec_meta)
-        moves = movers.quarter_moves(book, latest, prev, period_list, figi, n=25)
+        moves = movers.quarter_moves(book, latest, prev, period_list, figi, n=25, universe_now=books_with_big3["big3"][latest])
         for side in moves.values():
             for r in side:
                 meta = sec_meta.get(r["cusip"])

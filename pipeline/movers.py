@@ -40,7 +40,8 @@ def candidates(now: dict, prev: dict, k: int = 120) -> list[str]:
     return buys + sells
 
 
-def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], figi: dict, n: int = 25) -> dict:
+def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], figi: dict, n: int = 25,
+                  universe_now: dict | None = None) -> dict:
     """{"bought": [...], "sold": [...]}: the n largest net buys and sells of operating companies."""
     now, before = book.get(latest, {}), book.get(prev, {})
     linked: dict[str, str] = {}  # new CUSIP -> the CUSIP it replaced
@@ -67,6 +68,32 @@ def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], fi
             "dSharesPct": (cur[0] / old_sh - 1) if cur and old_sh else None,
             "status": "new" if not old else "exited" if not cur else None,
         })
+    # A listing that replaced another one for the same issuer (ADR to ordinary shares, a new
+    # holding company) shows as an exit plus a new position: net the two into one row.
+    by_key: dict[str, list[dict]] = {}
+    for r in rows:
+        by_key.setdefault(_key(r["name"]), []).append(r)
+    for group in by_key.values():
+        if len(group) < 2:
+            continue
+        ins = [r for r in group if r["flow"] > 0]
+        outs = [r for r in group if r["flow"] < 0 and r["status"] == "exited"]
+        if ins and outs:
+            keep = max(ins, key=lambda r: r["flow"])
+            for o in outs:
+                keep["flow"] += o["flow"]
+                o["flow"] = 0
+            keep.update(status="converted", dSharesPct=None)
+    # A company that left every Big Three book (acquired for cash, delisted) was not sold by choice.
+    gone = [r for r in rows if r["status"] == "exited" and r["flow"] and universe_now is not None and not universe_now.get(r["cusip"])]
+    gone_ids = {r["cusip"] for r in gone}
     bought = sorted((r for r in rows if r["flow"] > 0), key=lambda r: -r["flow"])[:n]
-    sold = sorted((r for r in rows if r["flow"] < 0), key=lambda r: r["flow"])[:n]
-    return {"bought": bought, "sold": sold}
+    sold = sorted((r for r in rows if r["flow"] < 0 and r["cusip"] not in gone_ids), key=lambda r: r["flow"])[:n]
+    return {"bought": bought, "sold": sold, "gone": sorted(gone, key=lambda r: r["flow"])[:8]}
+
+
+ADR_WORDS = {"SPONSORED", "SPON", "ADR", "ADS", "AMERICAN", "DEPOSITARY", "DEPOSITORY", "SHARES", "SHS", "RECEIPTS", "EACH", "REPSTG", "REP"}
+
+
+def _key(name: str) -> str:
+    return " ".join(w for w in analytics._issuer_key(name).split() if w not in ADR_WORDS)

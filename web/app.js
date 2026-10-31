@@ -662,7 +662,7 @@
     if (!lines.length) return "";
     const nextQ = (D.views[lines[0].id].early || {}).label || qlabel(Qs[lines[0].id].progress.period);
     if (state.view === "big3") {
-      return `<div class="season"><b>${nextQ} 13F season.</b> ${lines.map((l) => `<a href="#${l.id}">${l.text}</a>`).join(" · ")}. The tables stay at ${qlabel(D.meta.latest)} until all three have filed, so every view compares the same quarter.</div>`;
+      return `<div class="season"><span><b>${nextQ} 13F season:</b> ${lines.map((l) => `<a href="#${l.id}">${l.text}</a>`).join(" · ")}. The tables stay at ${qlabel(D.meta.latest)} until all three have filed, so every view compares the same quarter.</span></div>`;
     }
     const mine = lines.find((l) => l.id === state.view);
     if (!mine) return "";
@@ -679,7 +679,8 @@
     return list.map((r) => {
       const sl = slugOf(r.ticker);
       const href = bySlug(sl) || emergingAll().some((x) => x.ticker === r.ticker) ? `#t-${sl}` : null;
-      const tag = r.status === "new" ? '<span class="act new">New</span>' : r.status === "exited" ? '<span class="act out">Sold out</span>' : pill(r.dSharesPct, { sm: true });
+      const tag = r.status === "new" ? '<span class="act new">New</span>' : r.status === "exited" ? '<span class="act out">Sold out</span>'
+        : r.status === "converted" ? '<span class="act" title="Net of the listing it replaced (for example ADR to ordinary shares)">Listing change</span>' : pill(r.dSharesPct, { sm: true });
       const inner = `${tkChip(r)}<span class="nm"><b>${esc(niceName(r.name))}</b><small>${numS(r.dShares)} shares</small></span><span class="rt"><b class="${r.flow >= 0 ? "txt-up" : "txt-down"}">${usdS(r.flow)}</b>${tag}</span>`;
       return href ? `<a href="${href}">${inner}</a>` : `<div class="item">${inner}</div>`;
     }).join("");
@@ -693,14 +694,14 @@
       const mv = r.prevRank ? r.prevRank - r.rank : null;
       const rk = `${r.rank}${mv == null ? '<small class="txt-up">new</small>' : mv > 0 ? `<small class="txt-up">▲${mv}</small>` : mv < 0 ? `<small class="txt-down">▼${-mv}</small>` : ""}`;
       const co = `${tkChip(r)}<span class="co-nm"><b>${esc(niceName(r.name))}</b></span>`;
-      return `<tr><td><span class="rk">${rk}</span></td><td class="l">${href ? `<a class="co" href="${href}">${co}</a>` : `<span class="co">${co}</span>`}</td>
+      return `<tr><td><span class="rk">${rk}</span></td><td class="l fz fz-em">${href ? `<a class="co" href="${href}">${co}</a>` : `<span class="co">${co}</span>`}</td>
         <td><b class="v">${usd(r.value)}</b></td><td>${r.prevValue == null ? "—" : usd(r.prevValue)}</td>
         <td>${r.dSharesPct == null ? '<span class="act new">New</span>' : pill(r.dSharesPct, { sm: true })}${r.split ? ` <small class="muted" title="Share counts adjusted for a ${r.split >= 1 ? r.split + "-for-1 split" : "1-for-" + Math.round(1 / r.split) + " reverse split"}">split-adj.</small>` : ""}</td></tr>`;
     }).join("");
     return `<section class="section early" aria-labelledby="early-h">
       <div class="section-head"><div><h2 id="early-h">${esc(v.name)} ${e.label}: top ${e.rows.length}</h2>
         <p class="note">Filed ${dateL(e.filed)} · book ${usd(e.total)} (${pill(e.total / t0 - 1, { sm: true })} vs ${qlabel(D.meta.latest)}) · ${e.positions.toLocaleString("en-US")} securities · changes against ${esc(v.name)}’s own ${qlabel(D.meta.latest)} filing</p></div></div>
-      <div class="table-scroll"><table class="tbl"><thead><tr><th scope="col">#</th><th scope="col" class="l">Company</th><th scope="col">${e.label} value</th><th scope="col">${qlabel(D.meta.latest)} value</th><th scope="col">Shares QoQ</th></tr></thead><tbody>${body}</tbody></table></div>
+      <div class="table-scroll"><table class="tbl"><thead><tr><th scope="col">#</th><th scope="col" class="l fz fz-em">Company</th><th scope="col">${e.label} value</th><th scope="col">${qlabel(D.meta.latest)} value</th><th scope="col">Shares QoQ</th></tr></thead><tbody>${body}</tbody></table></div>
       <p class="foot">Sources: ${e.sources.map((x) => `<a href="${x.url}" target="_blank" rel="noopener">${esc(x.entity)} ${esc(x.form)}</a>`).join(", ")}</p>
     </section>`;
   }
@@ -774,6 +775,7 @@
           <div class="card-head"><h2 id="mv-h">Biggest moves last quarter</h2><span class="feed-meta">${v.moves ? `all ${v.positions.toLocaleString("en-US")} securities` : `top ${D.meta.topN}`}</span></div>
           <div class="tabs" role="group" aria-label="Direction">${[["bought", "Bought"], ["sold", "Sold"]].map(([k, l]) => `<button type="button" class="tab" data-movers="${k}" aria-pressed="${state.movers === k}">${l}</button>`).join("")}</div>
           <div class="list">${v.moves ? wholeBookMoves(v) : movers.map((r) => { const c = sec(r.cusip); return `<a href="#t-${slugOf(c.ticker)}">${tkChip(c)}<span class="nm"><b>${esc(niceName(c.name))}</b><small>${numS(r.qoq.dShares)} shares</small></span><span class="rt"><b class="${r.qoq.trade >= 0 ? "txt-up" : "txt-down"}">${usdS(r.qoq.trade)}</b>${pill(r.qoq.dSharesPct, { sm: true })}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>None this quarter.</small></span><span></span></div>'}</div>
+          ${v.moves && state.movers === "sold" && (v.moves.gone || []).length ? `<p class="foot mv-gone">Not counted as sales: ${v.moves.gone.map((r) => `<b>${esc(r.ticker)}</b>`).join(", ")} left every Big Three book (acquired or delisted).</p>` : ""}
           ${v.moves ? `<button type="button" class="more" data-moves-more>${state.movesMore ? "Show fewer" : `Show top ${v.moves[state.movers].length}`}</button>` : ""}
         </section>
         <section class="card" aria-labelledby="cmp-h">
@@ -1333,8 +1335,8 @@
     return `<section class="section" aria-labelledby="ins-h">
       <div class="section-head"><h2 id="ins-h">Insider trades</h2><span class="note">Form 4 · last ${ins.days} days</span></div>
       <div class="ins-sum">
-        <span>Bought <b class="txt-up">${usd(ins.bought)}</b> <small class="muted">${ins.buys} trade${ins.buys === 1 ? "" : "s"}, ${ins.buyers} insider${ins.buyers === 1 ? "" : "s"}</small></span>
-        <span>Sold <b class="txt-down">${usd(ins.sold)}</b> <small class="muted">${ins.sells} trade${ins.sells === 1 ? "" : "s"}</small></span>
+        <span>Bought <b class="txt-up">${ins.bought ? usd(ins.bought) : "none"}</b> <small class="muted">${ins.buys} trade${ins.buys === 1 ? "" : "s"}, ${ins.buyers} insider${ins.buyers === 1 ? "" : "s"}</small></span>
+        <span>Sold <b class="txt-down">${ins.sold ? usd(ins.sold) : "none"}</b> <small class="muted">${ins.sells} trade${ins.sells === 1 ? "" : "s"}</small></span>
         <span>Net <b class="${net >= 0 ? "txt-up" : "txt-down"}">${usdS(net)}</b></span>
       </div>
       ${rows ? `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Date</th><th class="l" scope="col">Insider</th><th scope="col">Trade</th><th scope="col">Shares</th><th scope="col">Price</th><th scope="col">Value</th><th scope="col"><span class="sr">Filing</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
@@ -1750,7 +1752,7 @@
     const how = installPrompt
       ? `<div><button type="button" class="btn primary" id="np-install">Install Mr. Fink</button></div>`
       : isIOS()
-        ? `<p>In Safari, tap <b>Share</b> <span aria-hidden="true">⎋</span>, then <b>Add to Home Screen</b>. Once installed, the bell's browser notifications also work on iPhone while the app is open.</p>`
+        ? `<p>In Safari, tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b>. Once installed, the bell's browser notifications also work on iPhone while the app is open.</p>`
         : `<p>In Chrome or Edge, open the browser menu and choose <b>Install app</b> (or <b>Add to Home screen</b> on Android).</p>`;
     return `<section class="np-sec"><h3>Install as an app</h3><p>An icon on your home screen, full screen without the browser bar, and the last data available offline.</p>${how}</section>`;
   }
