@@ -1424,6 +1424,9 @@
   }
   function openNotify() {
     renderNotifyPanel();
+    // Open just under the bell, which sits on a second header row on phones.
+    const top = Math.round($("bell").getBoundingClientRect().bottom + 8);
+    Object.assign($("npanel").style, { top: top + "px", maxHeight: `calc(100vh - ${top + 16}px)` });
     $("npanel").hidden = false;
     $("bell").setAttribute("aria-expanded", "true");
     $("np-close").focus();
