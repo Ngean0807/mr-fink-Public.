@@ -75,7 +75,20 @@ market cap and P/E at the live price) and "Top 30 at today's prices". The Finnhu
 anyone who opens the page; use a free key dedicated to this site. Yahoo Finance data is unofficial
 and for personal use.
 
-### Phone notifications
+### Notifications for every visitor
+
+The bell in the header opens a notification center. Each visitor picks the filing types they care
+about (13F, 13G/13D, material 8-Ks, 10-Q/10-K, N-PORT) and how to hear about them:
+
+- **In the browser**, with no install: notifications while the site is open in a tab.
+- **On the phone, even when the site is closed**: subscribe in the free ntfy app to the public
+  channel of each type (`mrfink-ngean0807-13f`, `-stakes`, `-8k`, `-reports`, `-funds`). The
+  refresh publishes every new filing to its channel. Channels carry public SEC data only.
+
+Fully install-free push to a closed browser needs a server that stores subscriptions, which a
+static GitHub Pages site does not have.
+
+### Owner's phone notifications
 
 Each refresh compares the filing feed with what it has already announced and pushes the new
 ones to a phone through [ntfy](https://ntfy.sh) (free app for iOS and Android, no account):

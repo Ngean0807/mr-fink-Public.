@@ -65,3 +65,16 @@ EMERGING = {
     "min_stake_change": 0.01,  # +1 percentage point of shares outstanding, year over year
     "profiled": 120,           # rows that get a full company page; all passing rows are listed
 }
+
+# Public notification channels on ntfy.sh, one per filing type, that any visitor can subscribe to
+# from the site. They carry only public SEC information. The owner's private channel
+# (NTFY_TOPIC secret) keeps receiving everything as before.
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+NTFY_PUBLIC_PREFIX = os.environ.get("NTFY_PUBLIC_PREFIX", "mrfink-ngean0807")
+NTFY_CATEGORIES = {"13f": "13f", "13g": "stakes", "8k": "8k", "report": "reports", "nport": "funds"}
+
+
+def public_topics() -> dict[str, str]:
+    if not NTFY_PUBLIC_PREFIX:
+        return {}
+    return {kind: f"{NTFY_PUBLIC_PREFIX}-{suffix}" for kind, suffix in NTFY_CATEGORIES.items()}

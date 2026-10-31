@@ -233,6 +233,7 @@ def main() -> None:
             "periodLabels": [periods.label(p) for p in period_list],
             "managers": [{"id": m["id"], "name": m["name"], "ciks": m["ciks"]} for m in config.MANAGERS],
             "topN": config.TOP_N,
+            "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics()},
         },
         "views": out_views,
         "securities": sec_meta,
@@ -247,7 +248,11 @@ def main() -> None:
     # Market prices: a delayed quote, five sessions intraday and ten years of daily closes.
     tickers = sorted({m["ticker"] for m in sec_meta.values()})
     quote_data, price_history = quotes.build(tickers)
-    data["quotes"] = quote_data
+    # Emerging names without a full company page still need a price on first paint.
+    light = sorted({r["ticker"] for r in emerging_rows} - set(quote_data["quotes"]))
+    quote_data["quotes"].update(quotes.batch_quotes(light))
+    # The page ships without intraday series (they are in quotes.json, loaded for 1D/5D charts).
+    data["quotes"] = {**quote_data, "quotes": {t: {k: v for k, v in q.items() if k != "intraday"} for t, q in quote_data["quotes"].items()}}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))

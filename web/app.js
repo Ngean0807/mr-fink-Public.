@@ -21,7 +21,7 @@
   const state = {
     view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
-    em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1 },
+    em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
   };
 
   // ---------- formatting ----------
@@ -203,6 +203,18 @@
     });
     const s = state.page === "company" && bySlug(state.slug);
     if (s && changed.has(s.ticker) && state.coMode === "price" && ["1D", "5D"].includes(state.pxRange) && Date.now() - lastChartDraw > 15000) drawCoChart(s);
+  }
+  // Intraday series live in quotes.json, fetched the first time a 1D or 5D chart needs them.
+  let intradayLoad = null;
+  function loadIntraday() {
+    if (!intradayLoad) {
+      intradayLoad = fetch("data/quotes.json", { cache: "no-store" }).then((r) => r.json()).then((data) => {
+        for (const [t, q] of Object.entries(data.quotes || {})) {
+          if (q.intraday) (Q[t] || (Q[t] = {})).intraday = Q[t] && Q[t].intraday && Q[t].intraday.length > q.intraday.length ? Q[t].intraday : q.intraday;
+        }
+      }).catch(() => {});
+    }
+    return intradayLoad;
   }
   function loadHistory() {
     if (H) return Promise.resolve(H);
@@ -911,7 +923,7 @@
       const up = m && m.stake - (m.stakeYearAgo || 0) > 0.001;
       return `<span class="mdot ${up ? "" : "off"}" style="background:${mColor(id)}" title="${MGR_NAME[id]}: ${m ? pct(m.stake, 2, false) + " now, " + (m.stakeYearAgo == null ? "not held" : pct(m.stakeYearAgo, 2, false)) + " a year ago" : "not held"}"></span>`;
     }).join("");
-    const body = sorted.map((r) => {
+    const body = sorted.slice(0, f.limit).map((r) => {
       const s = emSec(r);
       const fund = s.fundamentals || {};
       const flags = liveFlags(r);
@@ -960,6 +972,7 @@
           <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
           <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
         </table></div>
+        ${sorted.length > f.limit ? `<button type="button" class="more" id="em-more" style="border:1px solid var(--line);border-radius:var(--radius)">Show all ${sorted.length} companies</button>` : ""}
         <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. Names without a full company page open on SEC EDGAR (↗). pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
       </div>
       <aside class="rail" aria-label="About the screen">
@@ -999,7 +1012,8 @@
     $("em-deals").addEventListener("change", (e) => { f.hideDeals = e.target.checked; render(); });
     $("em-thin").addEventListener("change", (e) => { f.hideThin = e.target.checked; render(); });
     $("em-three").addEventListener("change", (e) => { f.allThree = e.target.checked; render(); });
-    app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; render(); }));
+    app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; f.limit = 100; render(); }));
+    $("em-more")?.addEventListener("click", () => { f.limit = Infinity; render(); });
     app.querySelectorAll("[data-emsort]").forEach((b) => b.addEventListener("click", () => {
       const k = b.dataset.emsort;
       f.dir = f.sort === k ? -f.dir : k === "ticker" ? 1 : -1;
@@ -1207,6 +1221,12 @@
     const c = s.cusip;
     const per = D.meta.periods;
     if (state.coMode === "price") {
+      const intradayRange = ["1D", "5D"].includes(state.pxRange);
+      if (intradayRange && !(Q[s.ticker] && Q[s.ticker].intraday)) {
+        host.innerHTML = '<p class="empty-state">Loading today’s prices…</p>';
+        loadIntraday().then(() => { if (bySlug(state.slug) === s && Q[s.ticker] && Q[s.ticker].intraday) drawCoChart(s); });
+        return;
+      }
       const { pts, base, intraday } = pricePoints(s.ticker);
       if (pts.length < 2) { host.innerHTML = `<p class="empty-state">${H ? "No price history for this range." : "Loading price history…"}</p>`; return; }
       const last = pts[pts.length - 1][1];
@@ -1259,6 +1279,110 @@
   }
 
   // ---------- live updates ----------
+  // ---------- notifications ----------
+  // Two ways to be told about new filings: browser notifications while the site is open in a tab,
+  // or the free ntfy app, subscribed to the public channel of each filing type (works when closed).
+  const NKINDS = [
+    ["13f", "13F holdings", "BlackRock, Vanguard or State Street files its quarterly holdings"],
+    ["13g", "13G / 13D stakes", "A manager reports owning more than 5% of a tracked company"],
+    ["8k", "Material 8-K events", "Deals, bankruptcy, delisting, financings or executive changes at tracked companies"],
+    ["report", "10-Q / 10-K", "A tracked company files its quarterly or annual report"],
+    ["nport", "Fund holdings (N-PORT)", "A flagship index fund (IWM, VTI, SPSM…) publishes its portfolio"],
+  ];
+  const nprefs = (() => {
+    try { return JSON.parse(localStorage.getItem("mrfink.notify") || "null"); } catch (e) { return null; }
+  })() || { kinds: ["13f", "13g", "8k"], browser: false };
+  const saveN = () => { try { localStorage.setItem("mrfink.notify", JSON.stringify(nprefs)); } catch (e) { /* storage unavailable */ } };
+  const canNotify = () => "Notification" in window;
+  function browserNotify(events) {
+    if (!nprefs.browser || !canNotify() || Notification.permission !== "granted") return;
+    events.filter((e) => nprefs.kinds.includes(e.kind) && (e.kind !== "8k" || e.key)).slice(0, 5).forEach((e) => {
+      const [title, body] = feedTitle(e);
+      try {
+        const n = new Notification(title, { body, tag: e.accession });
+        n.onclick = () => {
+          window.focus();
+          const t = (e.tickers || [])[0];
+          if (t && bySlug(slugOf(t))) location.hash = "t-" + slugOf(t);
+          else location.hash = e.manager || "big3";
+        };
+      } catch (err) { /* some mobile browsers only notify from a service worker */ }
+    });
+  }
+  function renderNotifyPanel() {
+    const topics = (D.meta.notify && D.meta.notify.topics) || {};
+    const server = (D.meta.notify && D.meta.notify.server) || "https://ntfy.sh";
+    const perm = canNotify() ? Notification.permission : "unsupported";
+    const browserState = perm === "unsupported" ? "This browser cannot show notifications."
+      : perm === "denied" ? "Notifications are blocked for this site in your browser settings."
+      : nprefs.browser && perm === "granted" ? "On. You will be notified while Mr. Fink is open in a tab." : "Off.";
+    const chosen = NKINDS.filter(([k]) => nprefs.kinds.includes(k) && topics[k]);
+    $("npanel").innerHTML = `
+      <div class="np-head"><h2 id="np-h">Notifications</h2><button type="button" class="btn" id="np-close">Close</button></div>
+      <section class="np-sec">
+        <h3>Notify me about</h3>
+        ${NKINDS.map(([k, l, d]) => `<label class="np-kind"><input type="checkbox" data-nkind="${k}" ${nprefs.kinds.includes(k) ? "checked" : ""}><span>${l}</span><small>${d}</small></label>`).join("")}
+      </section>
+      <section class="np-sec">
+        <h3>In this browser</h3>
+        <p>No install. Works while the site is open in a tab, on desktop and Android.</p>
+        <div><button type="button" class="btn ${nprefs.browser && perm === "granted" ? "" : "primary"}" id="np-browser" ${perm === "unsupported" || perm === "denied" ? "disabled" : ""}>${nprefs.browser && perm === "granted" ? "Turn off" : "Turn on browser notifications"}</button>
+        ${nprefs.browser && perm === "granted" ? '<button type="button" class="btn" id="np-test">Send a test</button>' : ""}</div>
+        <p class="np-status">${esc(browserState)}</p>
+      </section>
+      <section class="np-sec">
+        <h3>On your phone, even when the site is closed</h3>
+        <p>1. Install the free ntfy app, no account needed: <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a></p>
+        <p>2. Subscribe to the channels you want. In the app tap +, then paste the channel name, or open the link on your phone.</p>
+        ${chosen.length ? chosen.map(([k, l]) => `<div class="np-sub"><span><b>${l}</b><br><code>${esc(topics[k])}</code></span><button type="button" class="btn" data-copy="${esc(topics[k])}">Copy</button><a class="btn" href="${esc(server.replace(/\/$/, ""))}/${esc(topics[k])}" target="_blank" rel="noopener">Open</a></div>`).join("") : '<p class="np-status">Pick at least one filing type above.</p>'}
+        <p class="np-status">Channels carry public SEC filings only. Anyone can subscribe to them.</p>
+      </section>`;
+    $("np-close").addEventListener("click", closeNotify);
+    $("npanel").querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
+      nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => $("npanel").querySelector(`[data-nkind="${k}"]`).checked);
+      saveN();
+      renderNotifyPanel();
+    }));
+    $("np-browser")?.addEventListener("click", async () => {
+      if (nprefs.browser && Notification.permission === "granted") { nprefs.browser = false; saveN(); renderNotifyPanel(); return; }
+      const res = await Notification.requestPermission();
+      nprefs.browser = res === "granted";
+      saveN();
+      renderNotifyPanel();
+      if (nprefs.browser) toast("Browser notifications are on.");
+    });
+    $("np-test")?.addEventListener("click", () => {
+      try { new Notification("Mr. Fink notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
+      catch (e) { toast("This browser shows notifications only from installed apps."); }
+    });
+    $("npanel").querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
+      const v = b.dataset.copy;
+      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(`Copied ${v}`), () => {
+        const code = b.parentElement.querySelector("code");
+        const r = document.createRange(); r.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        toast("Press copy to copy the selected channel name.");
+      });
+    }));
+    $("bell-dot").hidden = !(nprefs.browser && perm === "granted");
+  }
+  function openNotify() {
+    renderNotifyPanel();
+    $("npanel").hidden = false;
+    $("bell").setAttribute("aria-expanded", "true");
+    $("np-close").focus();
+  }
+  function closeNotify() {
+    $("npanel").hidden = true;
+    $("bell").setAttribute("aria-expanded", "false");
+    $("bell").focus();
+  }
+  function setupNotify() {
+    $("bell").addEventListener("click", () => ($("npanel").hidden ? openNotify() : closeNotify()));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("npanel").hidden) closeNotify(); });
+    document.addEventListener("click", (e) => { if (!$("npanel").hidden && !e.target.closest("#npanel, #bell")) closeNotify(); });
+    $("bell-dot").hidden = !(nprefs.browser && canNotify() && Notification.permission === "granted");
+  }
+
   async function poll() {
     try {
       const r = await fetch("data/status.json?t=" + Date.now(), { cache: "no-store" });
@@ -1267,10 +1391,12 @@
       if (status.fingerprint && status.fingerprint !== D.meta.fingerprint) {
         const known = new Set((D.feed || []).map((e) => e.accession));
         const fresh = await (await fetch("data/dashboard.json?t=" + Date.now(), { cache: "no-store" })).json();
-        const e = (fresh.feed || []).find((x) => !known.has(x.accession));
+        const added = (fresh.feed || []).filter((x) => !known.has(x.accession));
+        const e = added[0];
         D = fresh;
         render();
         toast(e ? `New SEC filing: ${feedTitle(e)[0]}. Data updated.` : "Updated with the latest SEC data.");
+        browserNotify(added);
       } else {
         renderLive();
       }
@@ -1282,6 +1408,7 @@
     Q = JSON.parse(JSON.stringify((D.quotes && D.quotes.quotes) || {}));
     try { const t = localStorage.getItem("mrfink.tab"); if (["overview", "analytics", "fundamentals"].includes(t)) state.tab = t; } catch (e) { /* storage unavailable */ }
     setupSearch();
+    setupNotify();
     window.addEventListener("hashchange", route);
     let rt, lastW = innerWidth;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 150); });

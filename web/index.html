@@ -23,7 +23,13 @@
       <input id="q" type="search" placeholder="Search holdings by ticker or company" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="suggest">
       <div class="suggest" id="suggest" role="listbox" hidden></div>
     </div>
-    <span class="live" id="live" aria-live="polite"><span class="dot"></span><span id="live-text">Loading</span></span>
+    <div class="top-actions">
+      <span class="live" id="live" aria-live="polite"><span class="dot"></span><span id="live-text">Loading</span></span>
+      <button type="button" class="bell" id="bell" aria-haspopup="dialog" aria-expanded="false" aria-controls="npanel" title="Notifications">
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        <span class="sr">Notifications</span><span class="bell-dot" id="bell-dot" hidden></span>
+      </button>
+    </div>
   </div>
 </header>
 <nav class="chipbar" aria-label="Managers"><div class="chipbar-inner" id="chips"></div></nav>
@@ -33,6 +39,7 @@
 
 <div class="tip" id="tip" role="tooltip" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="npanel" id="npanel" role="dialog" aria-labelledby="np-h" hidden></div>
 
 <script src="app.js"></script>
 </body>

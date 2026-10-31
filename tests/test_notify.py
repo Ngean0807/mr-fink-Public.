@@ -63,6 +63,15 @@ class NotifyTest(unittest.TestCase):
         title = notify.describe_unit(burst)[0]
         self.assertEqual(title, "Vanguard 13F: 10 filings for Q3 2026")
 
+    def test_routing_to_private_and_public_channels(self):
+        self.state.write_text(json.dumps({"seen": [], "kinds": sorted(notify.ALL_KINDS)}))
+        sent_to = []
+        with mock.patch.object(notify, "_send", lambda server, topic, unit, site: sent_to.append((topic, unit[0]["accession"]))), \
+             mock.patch.dict(os.environ, {"NTFY_TOPIC": "private-x", "GITHUB_REPOSITORY": "o/r"}), \
+             mock.patch.object(notify.config, "public_topics", lambda: {"13f": "pub-13f", "13g": "pub-stakes", "report": "pub-reports"}):
+            notify.notify_new(EVENTS[1:], log=lambda *_: None)
+        self.assertEqual(sorted(sent_to), sorted([("private-x", "A2"), ("pub-stakes", "A2"), ("private-x", "A3"), ("pub-reports", "A3")]))
+
     def test_messages_and_links(self):
         title, _, priority, _ = notify.describe(EVENTS[0])
         self.assertEqual((title, priority), ("Vanguard 13F: new holdings for Q3 2026", "high"))

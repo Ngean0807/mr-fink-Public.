@@ -81,6 +81,33 @@ def history(ticker: str) -> dict:
     return out
 
 
+SPARK = "https://query1.finance.yahoo.com/v8/finance/spark?symbols={syms}&range=1d&interval=1d"
+
+
+def batch_quotes(tickers: list[str], log=print) -> dict:
+    """Last price and previous close for many tickers, 20 per request (no intraday or history)."""
+    out = {}
+    for i in range(0, len(tickers), 20):
+        chunk = tickers[i : i + 20]
+        try:
+            data = _get(SPARK.format(syms=",".join(yahoo_symbol(t) for t in chunk)))
+        except Exception as e:
+            log(f"  batch quotes failed for {chunk[0]}..: {e}")
+            continue
+        by_symbol = {yahoo_symbol(t): t for t in chunk}
+        for sym, q in data.items():
+            closes = [c for c in q.get("close") or [] if c is not None]
+            if sym in by_symbol and closes:
+                out[by_symbol[sym]] = {
+                    "price": round(closes[-1], 4),
+                    "prevClose": q.get("chartPreviousClose") or q.get("previousClose"),
+                    "time": (q.get("timestamp") or [None])[-1],
+                }
+        time.sleep(0.25)
+    log(f"Batch quotes: {len(out)}/{len(tickers)} tickers")
+    return out
+
+
 def build(tickers: list[str], log=print) -> tuple[dict, dict]:
     quotes, hist = {}, {}
     for t in tickers:
