@@ -160,9 +160,11 @@ button { font: inherit; color: inherit; }
 @keyframes flash-up { from { background: var(--pos-soft); } to { background: transparent; } }
 @keyframes flash-down { from { background: var(--neg-soft); } to { background: transparent; } }
 
+/* Components below set their own display, which would otherwise override the hidden attribute. */
+[hidden] { display: none !important; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
-.bell { position: relative; width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
-.bell svg { fill: var(--ink-2); }
+.bell { position: relative; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; display: grid; place-items: center; flex: none; }
+.bell svg { fill: var(--ink); }
 .bell:hover, .bell[aria-expanded="true"] { background: var(--chip); }
 .bell-dot { position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .npanel {
@@ -183,6 +185,8 @@ button { font: inherit; color: inherit; }
 .btn { height: 32px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--accent-ink); font: 500 13px var(--font-ui); cursor: pointer; display: inline-flex; align-items: center; text-decoration: none !important; white-space: nowrap; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
 .btn:hover { background: var(--accent-soft); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:disabled:hover { background: inherit; }
 .btn.primary:hover { background: var(--accent-ink); }
 .np-status { font-size: 12px; color: var(--muted); }
 

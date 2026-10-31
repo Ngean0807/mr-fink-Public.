@@ -152,7 +152,7 @@
       case "pill": return pill(dayChg(t), { sm: true });
       case "pillLg": return pill(dayChg(t));
       case "chgabs": { const q = Q[t]; if (!q || !q.prevClose || !p) return "—"; const d = p - q.prevClose; return `<span class="${d >= 0 ? "txt-up" : "txt-down"}">${d >= 0 ? "+" : "-"}${price(Math.abs(d)).slice(1)}</span>`; }
-      case "mcap": return p && f.sharesOutstanding ? usd(p * f.sharesOutstanding) : "n/a";
+      case "mcap": { const so = f.sharesOutstanding || emShares(t); return p && so ? usd(p * so) : "n/a"; }
       case "pe": return p && f.epsTTM > 0 ? mult(p / f.epsTTM) : "—";
       case "val": return p ? usd(p * n) : "—";
       case "stamp": return esc(stamp(t));
@@ -160,6 +160,12 @@
       default: return "";
     }
   }
+  /** Shares outstanding the Emerging screen measured (balance sheet at the quarter end), by ticker. */
+  let emSO = null;
+  const emShares = (t) => {
+    if (!emSO) emSO = Object.fromEntries((D.emerging ? D.emerging.rows : []).map((r) => [r.ticker, r.sharesOutstanding]));
+    return emSO[t] || null;
+  };
   const live = (kind, t, n = "", tag = "span") => `<${tag} data-live="${kind}" data-t="${esc(t)}"${n !== "" ? ` data-n="${n}"` : ""}>${liveVal(kind, t, n)}</${tag}>`;
   function mtm() {
     const v = view();
@@ -216,19 +222,43 @@
     }
     return intradayLoad;
   }
+  /** Compact daily closes (first day, day gaps, cents) to timestamps and dollars. */
+  function decodeHistory(h) {
+    let d = h.d0;
+    const ms = [d * 86400000];
+    for (const g of h.dd) { d += g; ms.push(d * 86400000); }
+    return { ms, c: h.c.map((x) => x / 100) };
+  }
   function loadHistory() {
     if (H) return Promise.resolve(H);
     const src = window.MRFINK_HISTORY ? Promise.resolve(window.MRFINK_HISTORY) : fetch("data/history.json").then((r) => r.json());
     return src.then((raw) => {
       H = {};
-      for (const [t, h] of Object.entries(raw)) {
-        let d = h.d0;
-        const ms = [d * 86400000];
-        for (const g of h.dd) { d += g; ms.push(d * 86400000); }
-        H[t] = { ms, c: h.c.map((x) => x / 100) };
-      }
+      for (const [t, h] of Object.entries(raw)) H[t] = decodeHistory(h);
       return H;
     }).catch(() => (H = {}));
+  }
+  // Emerging names outside the main data file have their own file (data/co/<slug>.json), fetched
+  // when the company page opens: profile, ownership, fundamentals, price history and intraday.
+  const HL = {};
+  const histOf = (t) => (H && H[t]) || HL[t] || null;
+  const coLoads = {};
+  function loadCompany(slug) {
+    if (!coLoads[slug]) {
+      coLoads[slug] = fetch(`data/co/${slug}.json`, { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      }).then(({ security: s, history: h, quote: q }) => {
+        D.securities[s.cusip] = { ...s, lite: true };
+        if (h && h.c && h.c.length) HL[s.ticker] = decodeHistory(h);
+        if (q) {
+          const cur = Q[s.ticker] || (Q[s.ticker] = {});
+          for (const [k, v] of Object.entries(q)) if (cur[k] == null || (k === "intraday" && !(cur.intraday || []).length)) cur[k] = v;
+        }
+        return true;
+      }).catch(() => { delete coLoads[slug]; return false; });
+    }
+    return coLoads[slug];
   }
   // Finnhub's free tier streams at most 50 symbols per connection, so only what is on screen is
   // subscribed; navigating swaps the set. Opening quotes come over REST (60 calls a minute).
@@ -501,15 +531,17 @@
     let sel = -1;
     function results() {
       const t = q.value.trim().toLowerCase();
-      const list = Object.values(D.securities).map((s) => ({ s, v: holder(s.cusip, "big3") }))
+      const held = (s) => { const v = holder(s.cusip, "big3"); return v ? lastOf(v)[1] : 0; };
+      const list = Object.values(D.securities).map((s) => ({ s, held: held(s) }))
+        .concat(emergingAll().filter((r) => !D.securities[r.cusip]).map((r) => ({ s: r, held: r.value })))
         .filter(({ s }) => !t || s.ticker.toLowerCase().startsWith(t) || niceName(s.name).toLowerCase().includes(t));
-      list.sort((a, b) => (b.v ? lastOf(b.v)[1] : 0) - (a.v ? lastOf(a.v)[1] : 0));
+      list.sort((a, b) => b.held - a.held);
       return list.slice(0, 8);
     }
     function draw() {
       const r = results();
       box.innerHTML = r.length
-        ? r.map(({ s, v }, i) => `<a href="#t-${slugOf(s.ticker)}" role="option" aria-selected="${i === sel}">${tkChip(s)}<span class="nm">${esc(niceName(s.name))}</span><span class="muted">${v ? usd(lastOf(v)[1]) + " held" : ""}</span></a>`).join("")
+        ? r.map(({ s, held }, i) => `<a href="#t-${slugOf(s.ticker)}" role="option" aria-selected="${i === sel}">${tkChip(s)}<span class="nm">${esc(niceName(s.name))}</span><span class="muted">${held ? usd(held) + " held" : ""}</span></a>`).join("")
         : `<div class="empty">No holding matches “${esc(q.value)}”. Mr. Fink covers the Big Three’s largest company holdings.</div>`;
       box.hidden = false;
       q.setAttribute("aria-expanded", "true");
@@ -538,7 +570,14 @@
   }
   function feedCard(ticker = null) {
     let items = D.feed || [];
-    if (ticker) items = items.filter((e) => (e.tickers || []).includes(ticker));
+    if (ticker) {
+      // Names outside the feed carry their own recent filings (data/co/); merged without duplicates.
+      const own = (bySlug(slugOf(ticker)) || {}).filings || [];
+      const seen = new Set();
+      items = items.filter((e) => (e.tickers || []).includes(ticker)).concat(own)
+        .filter((e) => !seen.has(e.accession) && seen.add(e.accession))
+        .sort((a, b) => (a.accepted < b.accepted ? 1 : -1));
+    }
     else if (state.feedTab !== "all") items = items.filter((e) => e.kind === state.feedTab);
     const shown = items.slice(0, state.feedMore ? 30 : 7);
     const badge = (e) => `<span class="badge ${e.kind === "13f" || e.kind === "nport" ? "f13f" : e.kind === "13g" || (e.kind === "8k" && e.key) ? "f13g" : "frep"}">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", "").replace("NPORT-P", "N-PORT"))}</span>`;
@@ -846,7 +885,8 @@
   const emergingAll = () => (D.emerging ? D.emerging.rows : []);
   /** Identity for an Emerging row: the full security record when profiled, else the row itself. */
   const emSec = (r) => D.securities[r.cusip] || r;
-  const emLink = (r) => (D.securities[r.cusip] ? `#t-${slugOf(r.ticker)}` : `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${r.cik}&owner=include&count=40`);
+  const emLink = (r) => `#t-${slugOf(r.ticker)}`;
+  const edgarLink = (cik) => `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&owner=include&count=40`;
   const liveFlags = (r) => {
     const q = Q[r.ticker];
     return r.flags.concat(q && q.avgDollarVolume != null && q.avgDollarVolume < 1e6 ? ["thin"] : []);
@@ -927,9 +967,8 @@
       const s = emSec(r);
       const fund = s.fundamentals || {};
       const flags = liveFlags(r);
-      const external = !D.securities[r.cusip];
-      return `<tr ${external ? "" : `data-slug="${slugOf(s.ticker)}"`}>
-        <td class="l fz fz-em"><a class="co" href="${emLink(r)}"${external ? ' target="_blank" rel="noopener" title="Opens the company on SEC EDGAR"' : ""}>${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}${external ? ' <span class="muted">↗</span>' : ""}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
+      return `<tr data-slug="${slugOf(s.ticker)}">
+        <td class="l fz fz-em"><a class="co" href="${emLink(r)}">${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
         <td>${live("px", s.ticker)}</td><td>${live("pill", s.ticker)}</td>
         <td>${live("val", s.ticker, r.sharesOutstanding)}</td>
         <td class="sep"><b class="v">${pct(r.stake, 1, false)}</b></td>
@@ -973,7 +1012,7 @@
           <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
         </table></div>
         ${sorted.length > f.limit ? `<button type="button" class="more" id="em-more" style="border:1px solid var(--line);border-radius:var(--radius)">Show all ${sorted.length} companies</button>` : ""}
-        <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. Names without a full company page open on SEC EDGAR (↗). pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
+        <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
       </div>
       <aside class="rail" aria-label="About the screen">
         <section class="card" aria-labelledby="fun-h">
@@ -1027,6 +1066,18 @@
   function renderCompany() {
     const s = bySlug(state.slug);
     if (!s) {
+      const slug = state.slug;
+      const row = emergingAll().find((r) => slugOf(r.ticker) === slug);
+      if (row) {
+        $("app").innerHTML = `<div class="main"><p class="empty-state">Loading ${esc(row.ticker)}…</p></div>`;
+        loadCompany(slug).then((ok) => {
+          if (state.page !== "company" || state.slug !== slug) return;
+          if (ok && bySlug(slug)) { render(); return; }
+          delete coLoads[slug];
+          $("app").innerHTML = `<div class="main"><p class="empty-state">The page for ${esc(niceName(row.name))} could not be loaded. <a href="${edgarLink(row.cik)}" target="_blank" rel="noopener">Open it on SEC EDGAR</a> or <a href="#emerging">go back to Emerging</a>.</p></div>`;
+        });
+        return;
+      }
       $("app").innerHTML = `<div class="main"><p class="empty-state">That company isn’t among the Big Three’s largest holdings. <a href="#${state.view}">Back to holdings</a></p></div>`;
       return;
     }
@@ -1150,7 +1201,7 @@
     wireCommon(app);
     app.querySelectorAll("[data-co-mode]").forEach((b) => b.addEventListener("click", () => { state.coMode = b.dataset.coMode; render(); }));
     app.querySelectorAll("[data-pxrange]").forEach((b) => b.addEventListener("click", () => { state.pxRange = b.dataset.pxrange; render(); }));
-    if (!H) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
+    if (!H && !s.lite) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
   }
 
   function fundsSection(s) {
@@ -1194,7 +1245,7 @@
       }
       return { pts: pts.map(([ts, p]) => [ts * 1000, p]), base: r === "1D" ? q.prevClose : pts.length ? pts[0][1] : null, intraday: true };
     }
-    const h = H && H[t];
+    const h = histOf(t);
     if (!h) return { pts: [], base: null };
     const now = Date.now();
     const start = r === "YTD" ? Date.UTC(new Date().getUTCFullYear(), 0, 1) : r === "Max" ? 0 : now - PX_RANGES.find(([k]) => k === r)[1] * 86400000;
@@ -1222,13 +1273,19 @@
     const per = D.meta.periods;
     if (state.coMode === "price") {
       const intradayRange = ["1D", "5D"].includes(state.pxRange);
-      if (intradayRange && !(Q[s.ticker] && Q[s.ticker].intraday)) {
+      const hasDay = () => Q[s.ticker] && Q[s.ticker].intraday && Q[s.ticker].intraday.length;
+      if (intradayRange && !hasDay()) {
+        if (s.lite) { host.innerHTML = '<p class="empty-state">Intraday prices for this company are not available yet. Choose 1M or longer.</p>'; return; }
         host.innerHTML = '<p class="empty-state">Loading today’s prices…</p>';
-        loadIntraday().then(() => { if (bySlug(state.slug) === s && Q[s.ticker] && Q[s.ticker].intraday) drawCoChart(s); });
+        loadIntraday().then(() => {
+          if (bySlug(state.slug) !== s || state.coMode !== "price") return;
+          if (hasDay()) drawCoChart(s);
+          else if ($("co-chart")) $("co-chart").innerHTML = '<p class="empty-state">Intraday prices are not available. Choose 1M or longer.</p>';
+        });
         return;
       }
       const { pts, base, intraday } = pricePoints(s.ticker);
-      if (pts.length < 2) { host.innerHTML = `<p class="empty-state">${H ? "No price history for this range." : "Loading price history…"}</p>`; return; }
+      if (pts.length < 2) { host.innerHTML = `<p class="empty-state">${H || histOf(s.ticker) ? "No price history for this range." : "Loading price history…"}</p>`; return; }
       const last = pts[pts.length - 1][1];
       const fmtX = intraday
         ? (state.pxRange === "1D" ? (i) => timeNY(pts[i][0] / 1000) : (i) => dayNY(pts[i][0] / 1000))
@@ -1367,6 +1424,9 @@
   }
   function openNotify() {
     renderNotifyPanel();
+    // Open just under the bell, which sits on a second header row on phones.
+    const top = Math.round($("bell").getBoundingClientRect().bottom + 8);
+    Object.assign($("npanel").style, { top: top + "px", maxHeight: `calc(100vh - ${top + 16}px)` });
     $("npanel").hidden = false;
     $("bell").setAttribute("aria-expanded", "true");
     $("np-close").focus();
@@ -1393,7 +1453,10 @@
         const fresh = await (await fetch("data/dashboard.json?t=" + Date.now(), { cache: "no-store" })).json();
         const added = (fresh.feed || []).filter((x) => !known.has(x.accession));
         const e = added[0];
+        // Company pages opened from data/co/ are not in the main file: keep them across the reload.
+        for (const [c, sec0] of Object.entries(D.securities)) if (sec0.lite && !fresh.securities[c]) fresh.securities[c] = sec0;
         D = fresh;
+        emSO = null;
         render();
         toast(e ? `New SEC filing: ${feedTitle(e)[0]}. Data updated.` : "Updated with the latest SEC data.");
         browserNotify(added);
