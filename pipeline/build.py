@@ -224,11 +224,12 @@ def main() -> None:
         meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
     for c, meta in lite.items():
         if meta.get("cik"):
-            report, stakes = feed.company_filings(meta["cik"], ttl_hours=6)
+            report, stakes, filings = feed.company_filings(meta["cik"], meta["ticker"], ttl_hours=6)
             meta["stakes13g"] = stakes
+            meta["filings"] = filings
             add_fundamentals(meta, latest, report)
         else:
-            meta["stakes13g"] = []
+            meta["stakes13g"], meta["filings"] = [], []
         meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
 
     out_views = {}

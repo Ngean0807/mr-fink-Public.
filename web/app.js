@@ -152,7 +152,7 @@
       case "pill": return pill(dayChg(t), { sm: true });
       case "pillLg": return pill(dayChg(t));
       case "chgabs": { const q = Q[t]; if (!q || !q.prevClose || !p) return "—"; const d = p - q.prevClose; return `<span class="${d >= 0 ? "txt-up" : "txt-down"}">${d >= 0 ? "+" : "-"}${price(Math.abs(d)).slice(1)}</span>`; }
-      case "mcap": return p && f.sharesOutstanding ? usd(p * f.sharesOutstanding) : "n/a";
+      case "mcap": { const so = f.sharesOutstanding || emShares(t); return p && so ? usd(p * so) : "n/a"; }
       case "pe": return p && f.epsTTM > 0 ? mult(p / f.epsTTM) : "—";
       case "val": return p ? usd(p * n) : "—";
       case "stamp": return esc(stamp(t));
@@ -160,6 +160,12 @@
       default: return "";
     }
   }
+  /** Shares outstanding the Emerging screen measured (balance sheet at the quarter end), by ticker. */
+  let emSO = null;
+  const emShares = (t) => {
+    if (!emSO) emSO = Object.fromEntries((D.emerging ? D.emerging.rows : []).map((r) => [r.ticker, r.sharesOutstanding]));
+    return emSO[t] || null;
+  };
   const live = (kind, t, n = "", tag = "span") => `<${tag} data-live="${kind}" data-t="${esc(t)}"${n !== "" ? ` data-n="${n}"` : ""}>${liveVal(kind, t, n)}</${tag}>`;
   function mtm() {
     const v = view();
@@ -564,7 +570,14 @@
   }
   function feedCard(ticker = null) {
     let items = D.feed || [];
-    if (ticker) items = items.filter((e) => (e.tickers || []).includes(ticker));
+    if (ticker) {
+      // Names outside the feed carry their own recent filings (data/co/); merged without duplicates.
+      const own = (bySlug(slugOf(ticker)) || {}).filings || [];
+      const seen = new Set();
+      items = items.filter((e) => (e.tickers || []).includes(ticker)).concat(own)
+        .filter((e) => !seen.has(e.accession) && seen.add(e.accession))
+        .sort((a, b) => (a.accepted < b.accepted ? 1 : -1));
+    }
     else if (state.feedTab !== "all") items = items.filter((e) => e.kind === state.feedTab);
     const shown = items.slice(0, state.feedMore ? 30 : 7);
     const badge = (e) => `<span class="badge ${e.kind === "13f" || e.kind === "nport" ? "f13f" : e.kind === "13g" || (e.kind === "8k" && e.key) ? "f13g" : "frep"}">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", "").replace("NPORT-P", "N-PORT"))}</span>`;
@@ -1059,7 +1072,8 @@
         $("app").innerHTML = `<div class="main"><p class="empty-state">Loading ${esc(row.ticker)}…</p></div>`;
         loadCompany(slug).then((ok) => {
           if (state.page !== "company" || state.slug !== slug) return;
-          if (ok) { render(); return; }
+          if (ok && bySlug(slug)) { render(); return; }
+          delete coLoads[slug];
           $("app").innerHTML = `<div class="main"><p class="empty-state">The page for ${esc(niceName(row.name))} could not be loaded. <a href="${edgarLink(row.cik)}" target="_blank" rel="noopener">Open it on SEC EDGAR</a> or <a href="#emerging">go back to Emerging</a>.</p></div>`;
         });
         return;
@@ -1436,7 +1450,10 @@
         const fresh = await (await fetch("data/dashboard.json?t=" + Date.now(), { cache: "no-store" })).json();
         const added = (fresh.feed || []).filter((x) => !known.has(x.accession));
         const e = added[0];
+        // Company pages opened from data/co/ are not in the main file: keep them across the reload.
+        for (const [c, sec0] of Object.entries(D.securities)) if (sec0.lite && !fresh.securities[c]) fresh.securities[c] = sec0;
         D = fresh;
+        emSO = null;
         render();
         toast(e ? `New SEC filing: ${feedTitle(e)[0]}. Data updated.` : "Updated with the latest SEC data.");
         browserNotify(added);

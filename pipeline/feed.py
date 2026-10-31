@@ -96,13 +96,36 @@ def _stake(cik: str, r: dict, agents: dict) -> dict | None:
     return {"manager": mgr, "form": r["form"], "filed": r["filed"], "accepted": r["accepted"], "accession": r["accession"], **g}
 
 
-def company_filings(cik: str, ttl_hours: float) -> tuple[str | None, list[dict]]:
-    """(latest 10-Q/10-K accession, Big Three 13G/13D stakes newest first) for a company outside the feed."""
-    _, rows = _recent(cik, ttl_hours)
+def company_filings(cik: str, ticker: str, ttl_hours: float) -> tuple[str | None, list[dict], list[dict]]:
+    """For a company outside the feed: (latest 10-Q/10-K accession, Big Three 13G/13D stakes,
+    its recent filings in feed form), all newest first. Shown on its page, never pushed."""
+    sub, rows = _recent(cik, ttl_hours)
     agents = _agent_map()
-    report = next((r["accession"] for r in rows if r["form"] in REPORT_FORMS), None)
-    stakes = [x for x in (_stake(cik, r, agents) for r in rows if r["form"] in G_FORMS) if x]
-    return report, sorted(stakes, key=lambda g: g["accepted"], reverse=True)
+    names = {m["id"]: m["name"] for m in config.MANAGERS}
+    since = (date.today() - timedelta(days=400)).isoformat()
+    since_8k = (date.today() - timedelta(days=120)).isoformat()
+    folder = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}"
+    report, stakes, events = None, [], []
+    for r in rows:
+        base = {"tickers": [ticker], "entity": sub["name"], "form": r["form"], "filed": r["filed"], "accepted": r["accepted"],
+                "period": r["period"], "accession": r["accession"], "url": f"{folder}/{r['accession'].replace('-', '')}/{r['doc']}"}
+        if r["form"] in REPORT_FORMS:
+            report = report or r["accession"]
+            if r["filed"] >= since:
+                events.append({"kind": "report", **base})
+        elif r["form"] in EVENT_FORMS and r["filed"] >= since_8k:
+            items = [x.strip() for x in (r["items"] or "").split(",") if x.strip() and x.strip() != "9.01"]
+            events.append({"kind": "8k", **base, "items": items, "labels": [ITEM_LABELS.get(x, "item " + x) for x in items],
+                           "key": bool(set(items) & KEY_8K_ITEMS_SMALL)})
+        elif r["form"] in G_FORMS:
+            g = _stake(cik, r, agents)
+            if g:
+                stakes.append(g)
+                events.append({"kind": "13g", "manager": g["manager"], "tickers": [ticker], "entity": g["reporter"] or names[g["manager"]],
+                               "form": r["form"], "filed": r["filed"], "accepted": r["accepted"], "accession": r["accession"],
+                               "percent": g["percent"], "eventDate": g["eventDate"], "url": g["url"]})
+    by_time = lambda e: e["accepted"]
+    return report, sorted(stakes, key=by_time, reverse=True), sorted(events, key=by_time, reverse=True)[:30]
 
 
 def build_feed(securities: dict[str, dict], ttl_hours: float, log=print) -> tuple[list[dict], dict[str, list], dict[str, str]]:
