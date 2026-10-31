@@ -298,7 +298,7 @@ def main() -> None:
             "periodLabels": [periods.label(p) for p in period_list],
             "managers": [{"id": m["id"], "name": m["name"], "ciks": m["ciks"]} for m in config.MANAGERS],
             "topN": config.TOP_N,
-            "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics()},
+            "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics(), "companyPrefix": (config.ticker_topic("x") or "")[:-1] or None},
         },
         "views": out_views,
         "securities": sec_meta,
@@ -312,7 +312,7 @@ def main() -> None:
     }
     # Market prices: a delayed quote, five sessions intraday and ten years of daily closes.
     print(f"[{time.time() - t0:,.0f}s] views")
-    tickers = sorted({m["ticker"] for m in sec_meta.values()})
+    tickers = sorted({m["ticker"] for m in sec_meta.values()} | {"SPY"})  # SPY: the chart's S&P 500 comparison
     quote_data, price_history = quotes.build(tickers)
     # Emerging names without a full company page still need a price on first paint.
     light = sorted({r["ticker"] for r in emerging_rows} - set(quote_data["quotes"]))
@@ -330,6 +330,10 @@ def main() -> None:
     notify.sync_from_site()
     notify.notify_new(feed_events)
     notify.export_state(OUT.with_name("notified.json"))
+    # Each company's own channel: tracked companies' feed filings plus the Emerging pages' filings.
+    notify.sync_tickers_from_site()
+    notify.notify_tickers(feed_events + [e for m in lite.values() for e in m.get("filings", [])])
+    notify.export_ticker_state(OUT.with_name("notified_tickers.json"))
     if os.environ.get("NTFY_TEST") == "true":
         notify.send_test()
     STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))

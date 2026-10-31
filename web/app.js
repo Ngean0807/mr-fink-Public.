@@ -19,6 +19,7 @@
   let D = null;
   let status = null;
   const state = {
+    cmp: (() => { try { return localStorage.getItem("mrfink.cmp") === "1"; } catch (e) { return false; } })(),
     view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
     em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
@@ -167,6 +168,8 @@
       case "val": return p ? usd(p * n) : "—";
       case "stamp": return esc(stamp(t));
       case "mtm": return mtm();
+      case "dayr": { const q = Q[t] || {}; return rangeMeter(q.dayLow, q.dayHigh, p); }
+      case "yearr": { const [lo, hi] = yearRange(t); return rangeMeter(lo, hi, p); }
       default: return "";
     }
   }
@@ -176,6 +179,22 @@
     if (!emSO) emSO = Object.fromEntries((D.emerging ? D.emerging.rows : []).map((r) => [r.ticker, r.sharesOutstanding]));
     return emSO[t] || null;
   };
+  /** 52-week low and high: the quote's own figures, else the last year of daily closes. */
+  function yearRange(t) {
+    const q = Q[t] || {};
+    if (q.low52 && q.high52) return [q.low52, q.high52];
+    const h = histOf(t);
+    if (!h) return [null, null];
+    const from = Date.now() - 365 * 86400000;
+    const c = h.c.filter((_, i) => h.ms[i] >= from);
+    return c.length ? [Math.min(...c), Math.max(...c)] : [null, null];
+  }
+  /** Low – high with a marker at today's price, as in a quote page's range row. */
+  function rangeMeter(lo, hi, p) {
+    if (!lo || !hi || hi <= lo) return lo && hi ? `${price(lo)} – ${price(hi)}` : "—";
+    const at = p ? Math.max(0, Math.min(1, (p - lo) / (hi - lo))) : null;
+    return `<span class="rmeter" title="${at == null ? "" : Math.round(at * 100) + "% of the way from low to high"}"><span>${price(lo)}</span><i>${at == null ? "" : `<b style="left:${(at * 100).toFixed(1)}%"></b>`}</i><span>${price(hi)}</span></span>`;
+  }
   const live = (kind, t, n = "", tag = "span") => `<${tag} data-live="${kind}" data-t="${esc(t)}"${n !== "" ? ` data-n="${n}"` : ""}>${liveVal(kind, t, n)}</${tag}>`;
   function mtm() {
     const v = view();
@@ -379,7 +398,7 @@
    * Line chart with crosshair. series: [{name, color, values}]. With one series it draws the
    * Google-style area and a dotted reference line at the first value of the range.
    */
-  function lineChart(host, { series, dates, height = 280, fmt = usd, axisFmt = axisUsd, ref,
+  function lineChart(host, { series, dates, height = 280, fmt = usd, axisFmt = axisUsd, ref, signedAxis = false,
     xLabel = (i) => qshort(dates[i]), tipTitle = (i) => `<strong>${qlabel(dates[i])}</strong> <span class="muted">${dateL(dates[i])}</span>` }) {
     host.innerHTML = "";
     const W = Math.max(280, host.clientWidth || 640);
@@ -390,7 +409,7 @@
     if (ref != null) all.push(ref);
     let lo = Math.min(...all), hi = Math.max(...all);
     const pad = (hi - lo) * 0.08 || hi * 0.05 || 1;
-    lo = Math.max(0, lo - pad); hi += pad;
+    lo = signedAxis ? lo - pad : Math.max(0, lo - pad); hi += pad;
     const tk = ticks(lo, hi);
     lo = tk[0]; hi = tk[tk.length - 1];
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": series.map((s) => s.name).join(", ") + " chart" }, host);
@@ -408,7 +427,7 @@
     for (let i = n - 1; i >= 0; i -= every) {
       el("text", { x: x(i), y: H - 8, "text-anchor": i === n - 1 ? "end" : "middle" }, ax).textContent = xLabel(i);
     }
-    if (series.length === 1) {
+    if (series.length === 1 || (signedAxis && ref != null)) {
       const first = ref != null ? ref : series[0].values.find((v) => v != null);
       el("line", { x1: m.l, x2: plotR, y1: y(first), y2: y(first), class: "refline" }, svg);
     }
@@ -669,7 +688,7 @@
         <section class="section" aria-labelledby="hold-h">
           <div class="section-head">
             <div><h2 id="hold-h">Top ${D.meta.topN} company holdings</h2><p class="note">Operating companies only (ETFs and funds excluded), ranked by market value on ${dateL(D.meta.latest)}</p></div>
-            <div class="tools"><label class="filter"><span class="sr">Filter holdings</span><input id="filter" type="search" placeholder="Filter by ticker, name, sector" value="${esc(state.filter)}"></label><span class="count" id="count"></span></div>
+            <div class="tools"><label class="filter"><span class="sr">Filter holdings</span><input id="filter" type="search" placeholder="Filter by ticker, name, sector" value="${esc(state.filter)}"></label><span class="count" id="count"></span>${exportBtn("export-home")}</div>
           </div>
           <div class="tabs" role="group" aria-label="Table view">${[["overview", "Overview"], ["analytics", "Analytics"], ["fundamentals", "Fundamentals"]].map(([k, l]) => `<button type="button" class="tab" data-tab="${k}" aria-pressed="${state.tab === k}">${l}</button>`).join("")}</div>
           <div class="table-scroll"><table class="tbl" id="tbl"></table></div>
@@ -722,6 +741,7 @@
       renderTable();
     }));
     $("filter").addEventListener("input", (e) => { state.filter = e.target.value; renderTable(); });
+    $("export-home").addEventListener("click", exportHome);
   }
 
   function heatClass(values, v) {
@@ -1024,6 +1044,7 @@
           <label class="chk"><input id="em-three" type="checkbox" ${f.allThree ? "checked" : ""}> All three buying</label>
         </div>
         <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${unpatterned.length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
+        <div class="tools em-tools">${exportBtn("export-em")}</div>
         <div class="table-scroll"><table class="tbl em-tbl">
           <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
           <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
@@ -1070,6 +1091,7 @@
     $("em-three").addEventListener("change", (e) => { f.allThree = e.target.checked; render(); });
     app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; f.limit = 100; render(); }));
     $("em-more")?.addEventListener("click", () => { f.limit = Infinity; render(); });
+    $("export-em").addEventListener("click", exportEmerging);
     app.querySelectorAll("[data-emsort]").forEach((b) => b.addEventListener("click", () => {
       const k = b.dataset.emsort;
       f.dir = f.sort === k ? -f.dir : k === "ticker" ? 1 : -1;
@@ -1131,13 +1153,14 @@
         <div class="hero">
           ${coNav(s)}
           <nav class="crumbs" aria-label="Breadcrumb"><span>${esc(s.ticker)}${s.exchange ? " • " + esc(s.exchange.toUpperCase()) : ""}</span></nav>
-          <h1>${esc(niceName(s.name))} ${tkChip(s)}<button type="button" class="follow" data-follow="${esc(s.ticker)}" aria-pressed="${isWatched(s.ticker)}">${isWatched(s.ticker) ? "★ Following" : "☆ Follow"}</button></h1>
+          <h1>${esc(niceName(s.name))} ${tkChip(s)}<span class="co-acts"><button type="button" class="follow" data-follow="${esc(s.ticker)}" aria-pressed="${isWatched(s.ticker)}">${isWatched(s.ticker) ? "★ Following" : "☆ Follow"}</button><button type="button" class="follow" id="co-alerts" aria-expanded="false" aria-controls="alert-panel">🔔 Alerts</button></span></h1>
+          <div class="alert-panel" id="alert-panel" hidden>${alertPanel(s)}</div>
           <p class="hero-sub">${esc(s.sector || "")}${s.industry ? " · " + esc(s.industry) : ""}</p>
           <div class="figure" id="co-figure">${coFigure(s)}</div>
           <p class="figure-note">${live("stamp", s.ticker)} · 13F quarter-end price ${price(s.price)} on ${dateL(D.meta.latest)}</p>
         </div>
         <div class="chart-block">
-          ${(state.coMode === "price" ? pxRangeBar : rangeBar)(`<div class="toggles" role="group" aria-label="Chart metric">${[["price", "Price"], ["shares", "Shares held"], ["value", "Value held"]].map(([k, l]) => `<button type="button" class="chip" data-co-mode="${k}" aria-pressed="${state.coMode === k}">${l}</button>`).join("")}</div>`)}
+          ${(state.coMode === "price" ? pxRangeBar : rangeBar)(`<div class="toggles" role="group" aria-label="Chart metric">${[["price", "Price"], ["shares", "Shares held"], ["value", "Value held"]].map(([k, l]) => `<button type="button" class="chip" data-co-mode="${k}" aria-pressed="${state.coMode === k}">${l}</button>`).join("")}${state.coMode === "price" && s.ticker !== "SPY" ? `<button type="button" class="chip cmp" data-cmp aria-pressed="${state.cmp}">vs S&amp;P 500</button>` : ""}</div>`)}
           ${state.coMode !== "price" ? `<div class="legend">${MGRS.filter((id) => holder(c, id)).map((id) => `<span><i style="background:${mColor(id)}"></i>${MGR_NAME[id]}</span>`).join("")}</div>` : ""}
           <div class="chart" id="co-chart"></div>
           ${state.coMode !== "price" && (s.splits || []).length ? `<p class="figure-note">Share counts split-adjusted for ${(s.splits || []).map((sp) => (sp.ratio >= 1 ? `${sp.ratio}:1` : `1:${Math.round(1 / sp.ratio)}`) + " in " + qlabel(sp.period)).join(" and ")}.</p>` : ""}
@@ -1190,8 +1213,8 @@
           <div class="card-head"><h2 id="cks-h">Key stats</h2></div>
           <dl class="kv">
             <div><dt>Previous close</dt><dd>${price(Q[s.ticker]?.prevClose)}</dd></div>
-            <div><dt>Day range</dt><dd>${Q[s.ticker]?.dayLow ? `${price(Q[s.ticker].dayLow)} – ${price(Q[s.ticker].dayHigh)}` : "—"}</dd></div>
-            <div><dt>Year range</dt><dd>${Q[s.ticker]?.low52 ? `${price(Q[s.ticker].low52)} – ${price(Q[s.ticker].high52)}` : "—"}</dd></div>
+            <div class="kv-range"><dt>Day range</dt><dd>${live("dayr", s.ticker)}</dd></div>
+            <div class="kv-range"><dt>52-week range</dt><dd>${live("yearr", s.ticker)}</dd></div>
             <div><dt>Volume</dt><dd>${Q[s.ticker]?.volume ? num(Q[s.ticker].volume) : "—"}</dd></div>
             <div><dt>Market cap</dt><dd>${live("mcap", s.ticker)}</dd></div>
             <div><dt>P/E ratio</dt><dd>${live("pe", s.ticker)}</dd></div>
@@ -1218,6 +1241,17 @@
     const app = $("app");
     wireCommon(app);
     app.querySelectorAll("[data-co-mode]").forEach((b) => b.addEventListener("click", () => { state.coMode = b.dataset.coMode; render(); }));
+    $("co-alerts").addEventListener("click", (e) => {
+      const p = $("alert-panel");
+      p.hidden = !p.hidden;
+      e.currentTarget.setAttribute("aria-expanded", String(!p.hidden));
+    });
+    wireCopy($("alert-panel"));
+    app.querySelector("[data-cmp]")?.addEventListener("click", () => {
+      state.cmp = !state.cmp;
+      try { localStorage.setItem("mrfink.cmp", state.cmp ? "1" : "0"); } catch (e) { /* storage unavailable */ }
+      render();
+    });
     app.querySelectorAll("[data-pxrange]").forEach((b) => b.addEventListener("click", () => { state.pxRange = b.dataset.pxrange; render(); }));
     if (!H && !s.lite) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
   }
@@ -1304,6 +1338,16 @@
       }
       const { pts, base, intraday } = pricePoints(s.ticker);
       if (pts.length < 2) { host.innerHTML = `<p class="empty-state">${H || histOf(s.ticker) ? "No price history for this range." : "Loading price history…"}</p>`; return; }
+      if (state.cmp && s.ticker !== "SPY") {
+        // The S&P 500 series lives in history.json / quotes.json; fetch them the first time.
+        const need = intraday ? !(Q.SPY && Q.SPY.intraday && Q.SPY.intraday.length) : !(H && H.SPY);
+        if (need) {
+          (intraday ? loadIntraday() : loadHistory()).then(() => { if (bySlug(state.slug) === s && state.cmp) drawCoChart(s); });
+          if (!(intraday ? Q.SPY && Q.SPY.intraday : H)) { host.innerHTML = '<p class="empty-state">Loading the S&amp;P 500…</p>'; return; }
+        }
+        drawCompare(host, s, pts, intraday);
+        return;
+      }
       const last = pts[pts.length - 1][1];
       const fmtX = intraday
         ? (state.pxRange === "1D" ? (i) => timeNY(pts[i][0] / 1000) : (i) => dayNY(pts[i][0] / 1000))
@@ -1322,6 +1366,98 @@
     const series = MGRS.filter((id) => holder(c, id)).map((id) => ({ name: MGR_NAME[id], color: mColor(id), values: holder(c, id).series.slice(i0).map((x) => (x[0] ? x[k] : null)) }));
     lineChart(host, { series, dates: per.slice(i0), height: 280, fmt: k ? usd : (v) => num(v) + " shares", axisFmt: k ? axisUsd : axisNum });
   }
+
+  // ---------- alerts for one company ----------
+  const companyTopic = (t) => (D.meta.notify && D.meta.notify.companyPrefix ? D.meta.notify.companyPrefix + slugOf(t).replace(/^-+|-+$/g, "") : null);
+  function alertPanel(s) {
+    const topic = companyTopic(s.ticker);
+    const server = ((D.meta.notify && D.meta.notify.server) || "https://ntfy.sh").replace(/\/$/, "");
+    const on = isWatched(s.ticker);
+    return `<div class="ap-row"><div><b>On your phone, even when the site is closed</b>
+        <p>Every SEC filing by ${esc(s.ticker)} (8-K, 10-Q/10-K, Big Three 13G/13D) is pushed to its own channel. In the free ntfy app (<a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a>) tap +, then paste the channel name.</p></div>
+        ${topic ? `<div class="np-sub"><code>${esc(topic)}</code><button type="button" class="btn" data-copy="${esc(topic)}">Copy</button><a class="btn" href="${esc(server)}/${esc(topic)}" target="_blank" rel="noopener">Open</a></div>` : '<p class="muted">Phone channels are not set up for this site.</p>'}</div>
+      <div class="ap-row"><div><b>In this browser</b>
+        <p>${on ? `${esc(s.ticker)} is in your watchlist, so its new filings show as browser notifications while Mr. Fink is open${nprefs.browser ? "" : " once browser notifications are on (bell, top right)"}.` : `Follow ${esc(s.ticker)} to get a browser notification for each of its filings while Mr. Fink is open.`}</p></div>
+        ${on ? "" : `<button type="button" class="btn primary" data-follow="${esc(s.ticker)}" aria-pressed="false">☆ Follow ${esc(s.ticker)}</button>`}</div>`;
+  }
+  /** Watched companies outside the main feed: check their own file for new filings every 5 minutes. */
+  let watchCheckAt = 0;
+  async function checkWatchFilings() {
+    if (Date.now() - watchCheckAt < 5 * 60000 || !watch.length) return;
+    watchCheckAt = Date.now();
+    let seen = {};
+    try { seen = JSON.parse(localStorage.getItem("mrfink.watchSeen") || "{}"); } catch (e) { seen = {}; }
+    const tracked = new Set(Object.values(D.securities).filter((x) => !x.lite).map((x) => x.ticker));
+    const fresh = [];
+    for (const t of watch.filter((x) => !tracked.has(x) && emergingAll().some((r) => r.ticker === x))) {
+      try {
+        const r = await fetch(`data/co/${slugOf(t)}.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!r.ok) continue;
+        const { security } = await r.json();
+        const acc = (security.filings || []).map((e) => e.accession);
+        if (seen[t]) fresh.push(...(security.filings || []).filter((e) => !seen[t].includes(e.accession)));
+        seen[t] = acc;
+        if (D.securities[security.cusip]) D.securities[security.cusip].filings = security.filings;
+      } catch (e) { /* try again next time */ }
+    }
+    try { localStorage.setItem("mrfink.watchSeen", JSON.stringify(seen)); } catch (e) { /* storage unavailable */ }
+    if (fresh.length) { browserNotify(fresh, true); toast(`New filing: ${feedTitle(fresh[0])[0]}`); }
+  }
+
+  // ---------- export ----------
+  /** Download rows as a CSV file that opens in Excel. cols: [header, value(row)]; numbers stay numbers. */
+  function downloadCSV(name, cols, rows) {
+    const cell = (v) => {
+      if (v == null || (typeof v === "number" && !isFinite(v))) return "";
+      if (typeof v === "number") return String(Math.round(v * 1e6) / 1e6);
+      const t = String(v);
+      return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+    const lines = [cols.map((c) => cell(c[0])).join(",")].concat(rows.map((r) => cols.map((c) => cell(c[1](r))).join(",")));
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `mr-fink-${name}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast(`Downloaded ${rows.length} rows`);
+  }
+  const pc = (x) => (x == null ? null : x * 100);  // fractions as percent numbers
+  const mcapOf = (t, so) => { const p = pxOf(t); return p && so ? p * so : null; };
+  function exportHome() {
+    const v = view();
+    const total = v.totals[D.meta.periods.length - 1];
+    const S = (r) => sec(r.cusip), F = (r) => S(r).fundamentals || {};
+    downloadCSV(`${state.view}-top-${v.rows.length}`, [
+      ["Rank", (r) => r.rank], ["Ticker", (r) => S(r).ticker], ["Company", (r) => niceName(S(r).name)], ["Sector", (r) => S(r).sector], ["Industry", (r) => S(r).industry],
+      ["Price ($)", (r) => pxOf(S(r).ticker)], ["Today (%)", (r) => pc(dayChg(S(r).ticker))], ["Market cap ($)", (r) => mcapOf(S(r).ticker, F(r).sharesOutstanding)],
+      [`13F value ${D.meta.latest} ($)`, (r) => r.value], ["Shares held", (r) => r.shares], ["% of book", (r) => pc(r.value / total)], ["Stake (%)", (r) => pc(r.ownership)],
+      ["QoQ shares (%)", (r) => pc(r.qoq && r.qoq.dSharesPct)], ["QoQ net flow ($)", (r) => r.qoq && r.qoq.trade],
+      ["YoY shares (%)", (r) => pc(r.yoy && r.yoy.dSharesPct)], ["YoY net flow ($)", (r) => r.yoy && r.yoy.trade],
+      ["Since first held, shares (%)", (r) => pc(r.inception && r.inception.dSharesPct)], ["First held", (r) => r.inception && r.inception.period],
+      ["Revenue TTM ($)", (r) => F(r).revenueTTM], ["Revenue growth (%)", (r) => pc(F(r).revenueGrowth)], ["Net margin (%)", (r) => pc(F(r).netMargin)],
+      ["P/E", (r) => { const p = pxOf(S(r).ticker), e = F(r).epsTTM; return p && e > 0 ? p / e : null; }],
+    ], homeSorted());
+  }
+  function exportEmerging() {
+    const S = (r) => emSec(r);
+    downloadCSV("emerging", [
+      ["Ticker", (r) => r.ticker], ["Company", (r) => niceName(S(r).name)], ["Sector", (r) => S(r).sector], ["Industry", (r) => S(r).industry],
+      ["Price ($)", (r) => pxOf(r.ticker) || r.price], ["Today (%)", (r) => pc(dayChg(r.ticker))], ["Market cap ($)", (r) => mcapOf(r.ticker, r.sharesOutstanding) || r.marketCap],
+      ["Big Three stake (%)", (r) => pc(r.stake)], ["Stake change QoQ (pp)", (r) => pc(r.stakeChangeQoQ)], ["Stake change YoY (pp)", (r) => pc(r.stakeChangeYoY)],
+      ["Managers buying", (r) => r.breadth], ["Net buying YoY ($)", (r) => r.flowYoY], ["Pattern", (r) => PATTERNS[r.pattern][0]],
+      ["Revenue growth (%)", (r) => pc((S(r).fundamentals || {}).revenueGrowth)], ["Flags", (r) => liveFlags(r).map((k) => FLAGS[k][0]).join("; ")],
+    ], emergingSorted());
+  }
+  function exportWatch() {
+    downloadCSV("watchlist", [
+      ["Ticker", (s) => s.ticker], ["Company", (s) => niceName(s.name)], ["Price ($)", (s) => pxOf(s.ticker)], ["Today (%)", (s) => pc(dayChg(s.ticker))],
+      ["Market cap ($)", (s) => mcapOf(s.ticker, ((s.fundamentals || {}).sharesOutstanding) || emShares(s.ticker))],
+      ["Since 13F (%)", (s) => { const p = pxOf(s.ticker); return p && s.price ? pc(p / s.price - 1) : null; }],
+    ], watchItems().map((r) => anySec(r.cusip)));
+  }
+  const exportBtn = (id) => `<button type="button" class="btn export" id="${id}"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zm7-18-5.5 5.5 1.42 1.42L11 5.83V16h2V5.83l3.08 3.09 1.42-1.42L12 2z" transform="rotate(180 12 11)"/></svg>Export to Excel</button>`;
 
   // ---------- watchlist page ----------
   /** Followed companies, as rows with a cusip (full record when loaded, else the Emerging row). */
@@ -1348,13 +1484,28 @@
           <h1>Watchlist</h1>
           <p class="hero-sub">Companies you follow, with live prices. Kept in this browser.</p>
         </div>
+        ${items.length ? `<div class="tools em-tools">${exportBtn("export-watch")}</div>` : ""}
         ${items.length ? `<div class="table-scroll"><table class="tbl">
           <thead><tr><th class="l fz fz-em" scope="col">Company</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Market cap</th><th scope="col" class="sep">Big Three stake</th><th scope="col">Since 13F</th><th scope="col"><span class="sr">Remove</span></th></tr></thead>
           <tbody>${body}</tbody></table></div>
-          <p class="foot">Since 13F is the price change from the quarter-end price in the latest 13F (${dateL(D.meta.latest)}).</p>`
+          <p class="foot">Since 13F is the price change from the quarter-end price in the latest 13F (${dateL(D.meta.latest)}). Each company page has a 🔔 Alerts button for its phone channel.</p>
+          ${watchFilings(items)}`
         : `<p class="empty-state">No companies yet. Open any company and tap <b>☆ Follow</b> to keep it here with a live price.</p>`}
       </div>`;
     $("app").querySelectorAll("tbody tr[data-slug]").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest("a, button")) location.hash = "t-" + tr.dataset.slug; }));
+    $("export-watch")?.addEventListener("click", exportWatch);
+  }
+  /** Latest filings by followed companies: the feed, plus the own filings of pages opened from data/co/. */
+  function watchFilings(items) {
+    const set = new Set(items.map((s) => s.ticker));
+    const seen = new Set();
+    const ev = (D.feed || []).filter((e) => (e.tickers || []).some((t) => set.has(t)))
+      .concat(items.flatMap((s) => s.filings || []))
+      .filter((e) => !seen.has(e.accession) && seen.add(e.accession))
+      .sort((a, b) => (a.accepted < b.accepted ? 1 : -1)).slice(0, 12);
+    if (!ev.length) return "";
+    return `<section class="section" aria-labelledby="wf-h"><div class="section-head"><h2 id="wf-h">Latest filings from your watchlist</h2></div>
+      <div class="list wrap">${ev.map((e) => { const [a, b] = feedTitle(e); return `<a href="${e.url}" target="_blank" rel="noopener"><span class="badge frep">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", ""))}</span><span class="nm"><b>${esc(a)}</b><small>${esc(b)}</small></span><span class="rt muted">${ago(e.accepted)}</span></a>`; }).join("")}</div></section>`;
   }
 
   // ---------- company navigation: back to the list, previous / next in it ----------
@@ -1375,6 +1526,41 @@
   // Back returns to the list where it was left (scroll position), not to its top.
   const scrollMem = {};
   let arrivedFromList = false;
+
+  /** Price change of the company against the S&P 500 (SPY) over the selected range, both from 0%. */
+  function drawCompare(host, s, pts, intraday) {
+    const ref = pricePoints("SPY").pts;
+    const key = (ms) => (intraday ? ms : Math.floor(ms / 86400000));
+    const spy = [];
+    let j = 0, last = null;
+    for (const [ms] of pts) {
+      while (j < ref.length && key(ref[j][0]) <= key(ms)) last = ref[j++][1];
+      spy.push(last);
+    }
+    // 1D measures from the previous close, like the price figure; longer ranges from the first point.
+    const oneDay = state.pxRange === "1D";
+    const b0 = (oneDay && Q[s.ticker] && Q[s.ticker].prevClose) || pts[0][1];
+    const s0 = (oneDay && Q.SPY && Q.SPY.prevClose) || spy.find((v) => v != null);
+    if (!s0) { host.innerHTML = '<p class="empty-state">No S&amp;P 500 prices for this range.</p>'; return; }
+    const mine = pts.map((p) => p[1] / b0 - 1);
+    const idx = spy.map((v) => (v == null ? null : v / s0 - 1));
+    const fmtX = intraday
+      ? (state.pxRange === "1D" ? (i) => timeNY(pts[i][0] / 1000) : (i) => dayNY(pts[i][0] / 1000))
+      : (i) => new Date(pts[i][0]).toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" }).replace(" ", " ’");
+    const tip = intraday
+      ? (i) => `<strong>${dayNY(pts[i][0] / 1000)}, ${timeNY(pts[i][0] / 1000)} ET</strong>`
+      : (i) => `<strong>${dateL(new Date(pts[i][0]).toISOString().slice(0, 10))}</strong>`;
+    const pctFmt = (v) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(Math.abs(v) < 0.1 ? 2 : 1) + "%");
+    lineChart(host, {
+      series: [{ name: s.ticker, color: "var(--accent)", values: mine }, { name: "S&P 500", color: "var(--muted)", values: idx }],
+      dates: pts.map((p) => p[0]), height: 280, fmt: pctFmt, axisFmt: (v) => Math.round(v * 100) + "%", ref: 0, signedAxis: true, xLabel: fmtX, tipTitle: tip,
+    });
+    const a = mine[mine.length - 1], b = idx[idx.length - 1];
+    const note = document.createElement("p");
+    note.className = "cmp-note";
+    note.innerHTML = `<span><i style="background:var(--accent)"></i>${esc(s.ticker)} <b class="${a >= 0 ? "txt-up" : "txt-down"}">${pctFmt(a)}</b></span><span><i style="background:var(--muted)"></i>S&amp;P 500 <b class="${b >= 0 ? "txt-up" : "txt-down"}">${pctFmt(b)}</b></span><span class="muted">${a - b >= 0 ? "Ahead of" : "Behind"} the index by ${(Math.abs(a - b) * 100).toFixed(1)} points</span>`;
+    host.appendChild(note);
+  }
 
   // ---------- routing ----------
   function render() {
@@ -1432,9 +1618,10 @@
   })() || { kinds: ["13f", "13g", "8k"], browser: false };
   const saveN = () => { try { localStorage.setItem("mrfink.notify", JSON.stringify(nprefs)); } catch (e) { /* storage unavailable */ } };
   const canNotify = () => "Notification" in window;
-  function browserNotify(events) {
+  function browserNotify(events, watchedOnly = false) {
     if (!nprefs.browser || !canNotify() || Notification.permission !== "granted") return;
-    events.filter((e) => nprefs.kinds.includes(e.kind) && (e.kind !== "8k" || e.key)).slice(0, 5).forEach((e) => {
+    const watched = (e) => (e.tickers || []).some(isWatched);
+    events.filter((e) => watched(e) || (!watchedOnly && nprefs.kinds.includes(e.kind) && (e.kind !== "8k" || e.key))).slice(0, 5).forEach((e) => {
       const [title, body] = feedTitle(e);
       try {
         const n = new Notification(title, { body, tag: e.accession });
@@ -1446,6 +1633,16 @@
         };
       } catch (err) { /* some mobile browsers only notify from a service worker */ }
     });
+  }
+  function wireCopy(root) {
+    root.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
+      const v = b.dataset.copy;
+      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(`Copied ${v}`), () => {
+        const code = b.parentElement.querySelector("code");
+        const r = document.createRange(); r.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        toast("Press copy to copy the selected channel name.");
+      });
+    }));
   }
   function renderNotifyPanel() {
     const topics = (D.meta.notify && D.meta.notify.topics) || {};
@@ -1493,14 +1690,7 @@
       try { new Notification("Mr. Fink notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
       catch (e) { toast("This browser shows notifications only from installed apps."); }
     });
-    $("npanel").querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
-      const v = b.dataset.copy;
-      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(`Copied ${v}`), () => {
-        const code = b.parentElement.querySelector("code");
-        const r = document.createRange(); r.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-        toast("Press copy to copy the selected channel name.");
-      });
-    }));
+    wireCopy($("npanel"));
     $("bell-dot").hidden = !(nprefs.browser && perm === "granted");
   }
   function openNotify() {
@@ -1544,6 +1734,7 @@
       } else {
         renderLive();
       }
+      checkWatchFilings();
     } catch (e) { /* offline or opened from disk: keep the snapshot */ }
   }
 
@@ -1568,8 +1759,12 @@
         e.preventDefault();
         const t = a.dataset.follow || a.dataset.unwatch;
         toggleWatch(t);
-        if (a.matches("[data-follow]")) { a.setAttribute("aria-pressed", isWatched(t)); a.textContent = isWatched(t) ? "★ Following" : "☆ Follow"; renderChips(); }
-        else render();
+        if (a.matches("[data-follow]")) {
+          document.querySelectorAll(".co-acts [data-follow]").forEach((b) => { b.setAttribute("aria-pressed", isWatched(t)); b.textContent = isWatched(t) ? "★ Following" : "☆ Follow"; });
+          const panel = $("alert-panel"), s0 = bySlug(state.slug);
+          if (panel && s0) { panel.innerHTML = alertPanel(s0); wireCopy(panel); }
+          renderChips();
+        } else render();
       }
     });
     let rt, lastW = innerWidth;

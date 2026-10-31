@@ -83,3 +83,36 @@ class NotifyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TickerChannelTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        patcher = mock.patch.object(notify, "TICKER_STATE", Path(self.tmp.name) / "notified_tickers.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.tmp.cleanup)
+
+    def run_t(self, events, day="2026-11-02"):
+        sent = []
+        notify.notify_tickers(events, send=lambda t, e: sent.append((t, e["accession"])), today=day, log=lambda *_: None)
+        return sent
+
+    def test_first_run_seeds_then_each_company_gets_its_own_channel(self):
+        self.assertEqual(self.run_t(EVENTS), [])
+        new = dict(EVENTS[2], accession="A4", accepted="2026-11-03T00:00:00.000Z", tickers=["BRK.B", "BRK.A"])
+        sent = self.run_t(EVENTS + [new])
+        self.assertEqual(sent, [("mrfink-ngean0807-t-brk-b", "A4"), ("mrfink-ngean0807-t-brk-a", "A4")])
+        self.assertEqual(self.run_t(EVENTS + [new]), [])
+
+    def test_manager_13f_has_no_company_channel(self):
+        self.run_t([])
+        self.assertEqual(self.run_t([dict(EVENTS[0], accession="F1")]), [])
+
+    def test_daily_cap_holds_the_rest_for_tomorrow(self):
+        self.run_t([])
+        many = [dict(EVENTS[2], accession=f"R{i}", accepted=f"2026-11-02T00:{i:02d}:00.000Z") for i in range(10)]
+        with mock.patch.object(notify, "TICKER_MAX_PER_DAY", 4), mock.patch.object(notify, "TICKER_MAX_PER_RUN", 3):
+            self.assertEqual(len(self.run_t(many)), 3)
+            self.assertEqual(len(self.run_t(many)), 1)            # day cap reached at 4
+            self.assertEqual(len(self.run_t(many, day="2026-11-03")), 3)  # new day

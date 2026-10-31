@@ -217,6 +217,26 @@ button { font: inherit; color: inherit; }
   color: var(--accent-ink); font: 500 14px var(--font-ui); cursor: pointer; margin-left: auto;
 }
 .follow[aria-pressed="true"] { background: var(--accent-soft); border-color: transparent; }
+.co-acts { display: inline-flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.co-acts .follow { margin-left: 0; }
+.alert-panel { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 14px 16px; display: grid; gap: 14px; max-width: 760px; }
+.ap-row { display: grid; gap: 8px; font-size: 14px; }
+.ap-row p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
+.ap-row b { font-weight: 500; }
+.rmeter { display: inline-grid; grid-template-columns: auto minmax(60px, 120px) auto; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rmeter i { position: relative; height: 4px; border-radius: 2px; background: var(--line-strong); }
+.rmeter b { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+.kv div.kv-range { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.kv div.kv-range dd { text-align: left; }
+.kv-range [data-live] { display: block; }
+.kv-range .rmeter { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; }
+.chip.cmp[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.cmp-note { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+.cmp-note i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.cmp-note b { font-weight: 500; }
+.btn.export { gap: 6px; }
+.btn.export svg { fill: currentColor; }
+.em-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .chip-watch .star { color: #f9ab00; font-size: 15px; line-height: 1; }
 details.callout > summary { cursor: pointer; list-style: none; color: var(--ink); }
 details.callout > summary::-webkit-details-marker { display: none; }
@@ -446,6 +466,7 @@ sup { font-size: 10px; color: var(--muted); }
   .co-nav { margin-bottom: 10px; }
   .pns small { display: none; }
   .follow { margin-left: 0; }
+  .co-acts { margin-left: 0; }
   .search input { height: 40px; font-size: 15px; }
   .search svg { top: 10px; }
   .figure-value { font-size: 30px; }
