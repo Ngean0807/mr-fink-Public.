@@ -89,3 +89,47 @@ class SplitFalsePositiveTest(unittest.TestCase):
             "c": {p[0]: {"X": [6_999_670, 6_999_670 * 19.37]}, p[1]: {"X": [13_192_493, 13_192_493 * 13.30]}},
         }
         self.assertEqual(analytics.detect_splits("X", books, p), [])
+
+
+class QuarterStatusTest(unittest.TestCase):
+    """13F season: a manager moves to a new quarter only when it has fully reported it."""
+
+    def setUp(self):
+        from pipeline import build
+        self.qs = build.quarter_status
+
+    def test_partial_complex_keeps_previous_quarter(self):
+        rep = {"VPM": {"2026-03-31": "13F-HR", "2026-06-30": "13F-HR", "2026-09-30": "13F-HR"},
+               "VCM": {"2026-03-31": "13F-HR", "2026-06-30": "13F-HR"},
+               "Vanguard Group": {"2026-03-31": "13F-NT", "2026-06-30": "13F-NT"}}
+        latest, prog = self.qs(rep, "2026-11-05")
+        self.assertEqual(latest, "2026-06-30")
+        self.assertEqual(prog, {"period": "2026-09-30", "filed": ["VPM"], "pending": ["VCM"]})
+
+    def test_complete_when_every_entity_reported(self):
+        rep = {"VPM": {"2026-06-30": "13F-HR", "2026-09-30": "13F-HR"}, "VCM": {"2026-06-30": "13F-HR", "2026-09-30": "13F-HR"}}
+        self.assertEqual(self.qs(rep, "2026-11-05")[0], "2026-09-30")
+
+    def test_entity_that_stopped_filing_does_not_block_after_the_deadline(self):
+        rep = {"BlackRock Finance": {"2024-06-30": "13F-HR"}, "BlackRock Inc": {"2024-06-30": "13F-HR", "2024-09-30": "13F-HR"}}
+        self.assertEqual(self.qs(rep, "2024-11-10")[0], "2024-06-30")   # before the deadline: wait
+        self.assertEqual(self.qs(rep, "2024-11-20")[0], "2024-09-30")   # after Nov 14: move on
+
+    def test_split_between_quarters(self):
+        from pipeline import movers
+        self.assertEqual(movers.split_ratio([100, 10_000], [1000, 10_500]), 10)   # 10-for-1, price /10
+        self.assertEqual(movers.split_ratio([100, 10_000], [200, 20_000]), 1.0)   # bought more, same price
+        self.assertEqual(movers.split_ratio([1000, 10_000], [100, 9_800]), 0.1)   # 1-for-10 reverse split
+
+    def test_quarter_moves_link_cusip_changes_and_skip_funds(self):
+        from pipeline import movers
+        per = ["2026-03-31", "2026-06-30"]
+        book = {"2026-03-31": {"OLD000001": [100, 1000, "ACME CORP", "COM"], "FUND00001": [10, 5000, "SPDR S&P 500", "ETF"],
+                               "SOLD00001": [50, 2000, "GONE INC", "COM"], "BUY000001": [10, 100, "UP INC", "COM"]},
+                "2026-06-30": {"NEW000001": [100, 1100, "ACME CORP", "COM"], "FUND00001": [20, 10000, "SPDR S&P 500", "ETF"],
+                               "BUY000001": [110, 1100, "UP INC", "COM"]}}
+        co = {"type": "Common Stock", "ticker": "X"}
+        figi = {"OLD000001": co, "NEW000001": co, "SOLD00001": co, "BUY000001": co, "FUND00001": {"type": "ETP", "ticker": "SPY"}}
+        m = movers.quarter_moves(book, "2026-06-30", "2026-03-31", per, figi)
+        self.assertEqual([r["cusip"] for r in m["bought"]], ["BUY000001"])   # ACME's CUSIP change is not a buy; the ETF is skipped
+        self.assertEqual([(r["cusip"], r["status"]) for r in m["sold"]], [("SOLD00001", "exited")])

@@ -21,3 +21,17 @@ def quarter_ends(latest: str, count: int) -> list[str]:
 def label(period: str) -> str:
     y, m, _ = period.split("-")
     return f"Q{(int(m) - 1) // 3 + 1} {y}"
+
+
+def next_quarter(period: str) -> str:
+    y, m, _ = map(int, period.split("-"))
+    q = (m - 1) // 3 + 1
+    if q == 4:
+        y, q = y + 1, 0
+    mm, dd = QUARTER_ENDS[q]
+    return date(y, mm, dd).isoformat()
+
+
+def filing_deadline(period: str) -> str:
+    """13F reports are due 45 days after the quarter end."""
+    return date.fromordinal(date.fromisoformat(period).toordinal() + 45).isoformat()

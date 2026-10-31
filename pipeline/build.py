@@ -13,19 +13,56 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, config, edgar, emerging, feed, fundamentals, notify, nport, periods, quotes, securities, thirteenf
+from . import analytics, config, edgar, emerging, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
 
 
-def latest_common_period() -> str:
-    """Most recent quarter end for which every manager complex has filed a 13F-HR."""
-    latest = []
+def quarter_status(reported: dict[str, dict[str, str]], today: str) -> tuple[str, dict | None]:
+    """(latest complete quarter, progress on the next one) for one manager complex.
+
+    reported: {entity: {period: form}}. A quarter is complete once every entity that reported the
+    quarter before has reported it too (13F-HR, or 13F-NT when affiliates report), once the filing
+    deadline has passed, or once a later quarter has been reported. Until then the complex keeps
+    showing its previous quarter: a partly filed quarter would read as a collapse in holdings.
+    """
+    periods_all = sorted({p for r in reported.values() for p in r})
+
+    def complete(p: str) -> bool:
+        prev = periods.quarter_ends(p, 2)[0]
+        need = [e for e, r in reported.items() if prev in r]
+        return (all(p in reported[e] for e in need) or today > periods.filing_deadline(p)
+                or any(q > p for q in periods_all))
+
+    latest = max(p for p in periods_all if complete(p))
+    nxt = periods.next_quarter(latest)
+    need = sorted(e for e, r in reported.items() if latest in r and r[latest] != "13F-NT")
+    filed = [e for e in need if nxt in reported[e]]
+    progress = {"period": nxt, "filed": filed, "pending": [e for e in need if e not in filed]} if filed else None
+    return latest, progress
+
+
+def manager_quarters(today: str | None = None) -> dict[str, tuple[str, dict | None]]:
+    # Dry run of a 13F season (local testing only): MRFINK_DRYRUN_TODAY=2026-07-25 and
+    # MRFINK_DRYRUN_HOLD=vanguard:3,statestreet:0 pretend those managers' newest quarter was
+    # reported by only the first N entities so far.
+    today = os.environ.get("MRFINK_DRYRUN_TODAY") or today or datetime.now(timezone.utc).date().isoformat()
+    hold = dict(x.split(":") for x in os.environ.get("MRFINK_DRYRUN_HOLD", "").split(",") if ":" in x)
+    out = {}
     for m in config.MANAGERS:
-        ps = [f.period for cik in m["ciks"] for f in thirteenf.list_filings(cik)]
-        latest.append(max(ps))
-    return min(latest)
+        reported = {}
+        for cik in m["ciks"]:
+            name, ps = thirteenf.reported_periods(cik)
+            if ps:
+                reported[name] = ps
+        if m["id"] in hold:
+            newest = max(p for r in reported.values() for p in r)
+            for i, r in enumerate(sorted(reported, key=lambda e: -len(reported[e]))):
+                if i >= int(hold[m["id"]]):
+                    reported[r].pop(newest, None)
+        out[m["id"]] = quarter_status(reported, today)
+    return out
 
 
 def rank_companies(book: dict, figi: dict) -> list[str]:
@@ -104,6 +141,31 @@ def add_fundamentals(meta: dict, latest: str, version: str | None) -> None:
         meta["fundamentalsCik"] = pred_cik
 
 
+def early_view(cx: dict, period: str, prev: str, figi: dict, sec_meta: dict) -> dict:
+    """One manager's newly completed quarter, before the other managers file: its top holdings
+    with the change from its own previous quarter (same CUSIP, split-adjusted)."""
+    book, before = cx[period]["book"], cx[prev]["book"]
+    ranked = rank_companies(book, figi)
+    prev_rank = {c: i + 1 for i, c in enumerate(rank_companies(before, figi))}
+    rows = []
+    for i, c in enumerate(ranked[: config.TOP_N]):
+        now, old = book[c], before.get(c)
+        ratio = movers.split_ratio(old, now) if old else 1.0
+        old_shares = old[0] * ratio if old else 0
+        meta = sec_meta.get(c)
+        rows.append({
+            "cusip": c, "rank": i + 1, "prevRank": prev_rank.get(c),
+            "ticker": meta["ticker"] if meta else securities.display_ticker(figi[c]["ticker"]),
+            "name": meta["name"] if meta else now[2].title(),
+            "shares": now[0], "value": now[1], "prevShares": old_shares or None, "prevValue": old[1] if old else None,
+            "dSharesPct": now[0] / old_shares - 1 if old_shares else None, "split": ratio if ratio != 1 else None,
+        })
+    return {
+        "period": period, "label": periods.label(period), "total": cx[period]["total"], "positions": len(book),
+        "filed": max(src["filed"] for src in cx[period]["sources"]), "sources": cx[period]["sources"], "rows": rows,
+    }
+
+
 def prune_legacy_cache() -> None:
     """Raw company-facts and N-PORT files from earlier versions; slim parsed copies replace them."""
     for pattern in ("data.sec.gov_api_xbrl_companyfacts_*", "www.sec.gov_Archives_edgar_data_*_primary_doc.xml"):
@@ -143,7 +205,10 @@ def write_company_pages(lite: dict[str, dict], quotes_now: dict) -> None:
 def main() -> None:
     t0 = time.time()
     prune_legacy_cache()
-    latest = latest_common_period()
+    quarters = manager_quarters()
+    latest = min(q for q, _ in quarters.values())  # every view compares the same quarter
+    for mid, (q, prog) in quarters.items():
+        print(f"  {mid}: complete through {q}" + (f"; {periods.label(prog['period'])} filed by {len(prog['filed'])} of {len(prog['filed']) + len(prog['pending'])} entities" if prog else ""))
     count = 0
     while periods.quarter_ends(latest, count + 1)[0] >= config.HISTORY_START:
         count += 1
@@ -153,10 +218,13 @@ def main() -> None:
     complexes = {}
     for m in config.MANAGERS:
         print(f"Loading {m['name']} 13F filings")
-        complexes[m["id"]] = thirteenf.build_complex(m, period_list)
+        early = [quarters[m["id"]][0]] if quarters[m["id"]][0] > latest else []
+        complexes[m["id"]] = thirteenf.build_complex(m, period_list + early)
     books = {mid: {p: q["book"] for p, q in qs.items()} for mid, qs in complexes.items()}
     books_with_big3 = {**books, "big3": combine(books, period_list)}
     prev = period_list[-2]
+    # Managers that have completed a newer quarter than the others: shown early, on their own tab.
+    early = {mid: q for mid, (q, _) in quarters.items() if q > latest and q in books[mid]}
 
     # Screen the largest positions (this quarter and last) through OpenFIGI to drop funds and ETFs.
     candidates = []
@@ -164,6 +232,10 @@ def main() -> None:
         for p in (latest, prev):
             b = book.get(p, {})
             candidates += sorted(b, key=lambda c: b[c][1], reverse=True)[: config.CANDIDATES]
+    for mid, q in early.items():
+        candidates += sorted(books[mid][q], key=lambda c: books[mid][q][c][1], reverse=True)[: config.CANDIDATES]
+    for book in books_with_big3.values():  # the quarter's largest buys and sells, whole book
+        candidates += movers.candidates(book[latest], book.get(prev, {}), k=50)
     print(f"Mapping {len(set(candidates))} CUSIPs via OpenFIGI")
     figi = securities.map_cusips(candidates)
     for c in sorted({c for c in candidates if not figi.get(c)}):
@@ -239,6 +311,18 @@ def main() -> None:
         meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
 
     print(f"[{time.time() - t0:,.0f}s] emerging pages filings/fundamentals")
+
+    # Insider trades (Form 4) for every company with a page. New filings are downloaded within a
+    # per-run budget; a first run fills in over several refreshes.
+    for meta in list(sec_meta.values()) + list(lite.values()):
+        if meta.get("cik"):
+            meta["insiders"] = insiders.company(meta["cik"], ttl_hours=6, budget=1500)
+    insiders.prune()
+    insiders.save()
+    for r in emerging_rows:
+        ins = (sec_meta.get(r["cusip"]) or lite.get(r["cusip"]) or {}).get("insiders")
+        r["insiders"] = {"bought": ins["bought"], "sold": ins["sold"], "buyers": ins["buyers"]} if ins else None
+    print(f"[{time.time() - t0:,.0f}s] insiders: {insiders._fetched} Form 4 filings downloaded this run")
     out_views = {}
     names = {m["id"]: m["name"] for m in config.MANAGERS}
     names["big3"] = "Big Three"
@@ -281,10 +365,21 @@ def main() -> None:
             "sources": sources,
             "prevSources": prev_sources,
         }
+        if vid in early:
+            out_views[vid]["early"] = early_view(complexes[vid], early[vid], latest, figi, sec_meta)
+        moves = movers.quarter_moves(book, latest, prev, period_list, figi, n=25)
+        for side in moves.values():
+            for r in side:
+                meta = sec_meta.get(r["cusip"])
+                r["ticker"] = meta["ticker"] if meta else securities.display_ticker(r["ticker"])
+                if meta:
+                    r["name"] = meta["name"]
+        out_views[vid]["moves"] = moves
 
     # The fingerprint changes whenever any filing behind the page changes; the browser polls
     # status.json and reloads the data only when it differs.
-    accessions = sorted({s["accession"] for v in out_views.values() for s in v["sources"]} | {e["accession"] for e in feed_events})
+    accessions = sorted({s["accession"] for v in out_views.values() for s in v["sources"] + (v.get("early") or {}).get("sources", [])}
+                        | {e["accession"] for e in feed_events})
     fingerprint = hashlib.sha1("|".join(accessions).encode()).hexdigest()[:16]
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     data = {
@@ -297,6 +392,8 @@ def main() -> None:
             "periods": period_list,
             "periodLabels": [periods.label(p) for p in period_list],
             "managers": [{"id": m["id"], "name": m["name"], "ciks": m["ciks"]} for m in config.MANAGERS],
+            # 13F season: each manager's latest complete quarter and progress on the next one.
+            "quarters": {mid: {"complete": q, "progress": prog} for mid, (q, prog) in quarters.items()},
             "topN": config.TOP_N,
             "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics(), "companyPrefix": (config.ticker_topic("x") or "")[:-1] or None},
         },
