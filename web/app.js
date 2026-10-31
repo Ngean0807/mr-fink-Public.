@@ -298,6 +298,7 @@
   function wantedSymbols() {
     const list = [];
     if (state.page === "company") { const s = bySlug(state.slug); if (s) list.push(s.ticker); }
+    if (state.page === "etfs") return etfVisible().map((r) => r.ticker).slice(0, WS_LIMIT);
     const tableRows = state.page === "emerging" ? emergingSorted() : state.page === "watch" ? watchItems() : view().rows;
     const tk = (r) => emSec(r).ticker;
     list.push(...tableRows.slice(0, 12).map(tk));  // the price strip
@@ -526,7 +527,7 @@
 
   // ---------- header ----------
   function renderTape() {
-    const rows = (state.page === "emerging" ? emergingSorted() : state.page === "watch" && watch.length ? watchItems() : view().rows).slice(0, 12);
+    const rows = (state.page === "emerging" ? emergingSorted() : state.page === "watch" && watch.length ? watchItems() : state.page === "etfs" && ETF ? etfVisible() : view().rows).slice(0, 12);
     $("tape").innerHTML = rows.map((r) => {
       const s = emSec(r);
       return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
@@ -539,7 +540,8 @@
       const sw = id === "big3" ? "background:conic-gradient(var(--blk) 0 33%, var(--vg) 0 66%, var(--ss) 0)" : `background:${mColor(id)}`;
       const cur = state.view === id;
       return `<a class="chip" href="#${id}" ${cur && state.page === "home" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
-    }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "");
+    }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "")
+      + `<a class="chip" href="#etfs" ${state.page === "etfs" ? 'aria-current="page"' : ""}><span class="sw" style="background:linear-gradient(90deg,var(--blk) 0 33%,var(--vg) 0 66%,var(--ss) 0)"></span>ETFs <small>iShares · Vanguard · SPDR</small></a>`;
   }
 
   function renderLive() {
@@ -1185,6 +1187,7 @@
           <label>Sector <select id="em-sector"><option value="">All sectors</option>${[...new Set(emergingAll().map((r) => emSec(r).sector || r.sector).filter(Boolean))].sort().map((x) => `<option ${f.sector === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
           ${emIsDefault() ? "" : '<button type="button" class="linkbtn" id="em-reset">Reset filters</button>'}
         </div>
+        ${sectorEtfCard(f.sector)}
         <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${unpatterned.length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
         <div class="tools em-tools">
           <label class="sortby">Sort by <select id="em-sortby">${EM_SORT_LABELS.map(([k, l]) => `<option value="${k}" ${f.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -1696,6 +1699,85 @@
       <div class="list wrap">${ev.map((e) => { const [a, b] = feedTitle(e); return `<a href="${e.url}" target="_blank" rel="noopener"><span class="badge frep">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", ""))}</span><span class="nm"><b>${esc(a)}</b><small>${esc(b)}</small></span><span class="rt muted">${ago(e.accepted)}</span></a>`; }).join("")}</div></section>`;
   }
 
+  // ---------- ETFs from the three issuers (pipeline/etfs.py, data/etfs.json) ----------
+  let ETF = null, etfLoad = null;
+  const ISSUER = { blackrock: "iShares", vanguard: "Vanguard", statestreet: "SPDR" };
+  function loadEtfs() {
+    if (!etfLoad) {
+      etfLoad = fetch("data/etfs.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => {
+        ETF = d;
+        // Seed prices so the page is complete before the live feed ticks.
+        for (const f of (d && d.funds) || []) if (f.price && !(Q[f.ticker] && Q[f.ticker].price)) Q[f.ticker] = { ...(Q[f.ticker] || {}), price: f.price, prevClose: f.prevClose, time: f.time };
+        return d;
+      }).catch(() => null);
+    }
+    return etfLoad;
+  }
+  state.etf = { issuer: "all", cat: "", open: null };
+  const etfCore = () => ((ETF && ETF.funds) || []).filter((f) => !f.category.startsWith("Sector:"));
+  const etfVisible = () => etfCore().filter((f) => (state.etf.issuer === "all" || f.manager === state.etf.issuer) && (!state.etf.cat || f.category === state.etf.cat));
+  const etfByTicker = (t) => ((ETF && ETF.funds) || []).find((f) => f.ticker === t);
+  const etfChip = (f) => `<span class="tk" style="background:${mColor(f.manager)}">${esc(f.ticker)}</span>`;
+  /** Top holdings of one fund, linked to company pages where they exist. */
+  function etfTop(f) {
+    if (!f.top || !f.top.length) return `<p class="foot">${f.series ? "No N-PORT report found for this fund yet." : "A unit or grantor trust: it does not file N-PORT, so holdings are not published on EDGAR."}</p>`;
+    const page = (c) => Object.values(D.securities).find((x) => x.cusip === c) || emergingAll().find((x) => x.cusip === c);
+    return `<div class="etf-top"><b>Largest holdings</b> <span class="muted">as of ${dateL(f.period)} · ${num(f.holdings)} positions · <a href="${f.filing}" target="_blank" rel="noopener">N-PORT</a></span>
+      <ol>${f.top.map((h) => { const s0 = page(h.cusip); return `<li>${s0 ? `<a href="#t-${slugOf(s0.ticker)}">${esc(niceName(h.name))}</a>` : esc(niceName(h.name))} <span class="muted">${pct(h.pct, 2, false)}</span></li>`; }).join("")}</ol></div>`;
+  }
+  function renderEtfs() {
+    if (!ETF) {
+      $("app").innerHTML = '<div class="main"><p class="empty-state">Loading ETFs…</p></div>';
+      loadEtfs().then(() => { if (state.page === "etfs") { render(); syncSubscriptions(); } });
+      return;
+    }
+    const e = state.etf;
+    const cats = [...new Set(etfCore().map((f) => f.category))];
+    const rows = etfVisible();
+    const ret = (x) => (x == null ? '<span class="na">—</span>' : pill(x, { sm: true }));
+    const body = rows.map((f) => `<tr data-etf="${f.ticker}" class="${e.open === f.ticker ? "open" : ""}">
+        <td class="l fz fz-em"><span class="co">${etfChip(f)}<span class="co-nm"><b>${esc(f.name)}</b><small>${esc(ISSUER[f.manager])} · ${esc(f.category)}</small></span></span></td>
+        <td>${live("px", f.ticker)}</td><td>${live("pill", f.ticker)}</td><td>${ret(f.ytd)}</td><td>${ret(f.ret1y)}</td>
+        <td>${spark(f.spark || [], f.ret1y >= 0 ? "var(--pos-line)" : "var(--neg-line)")}</td>
+        <td>${f.netAssets ? usd(f.netAssets) : '<span class="na">—</span>'}</td>
+      </tr>${e.open === f.ticker ? `<tr class="etf-detail"><td colspan="7" class="l">${etfTop(f)}</td></tr>` : ""}`).join("");
+    const sectorRows = Object.entries(ETF.sectors).map(([sec, by]) => `<tr><td class="l"><b>${esc(sec)}</b></td>${["statestreet", "vanguard", "blackrock"].map((m) => {
+      const f = etfByTicker(by[m]);
+      return `<td class="l"><span class="etf-cell">${etfChip(f)} ${live("pill", f.ticker)} <small class="muted">1Y</small> ${ret(f.ret1y)}</span></td>`;
+    }).join("")}</tr>`).join("");
+    $("app").innerHTML = `<div class="main">
+        <div class="hero">
+          <h1>ETFs from the Big Three</h1>
+          <p class="hero-sub">iShares (BlackRock), Vanguard and SPDR (State Street): the core funds, and each issuer’s fund for every sector</p>
+        </div>
+        <div class="tabs" role="group" aria-label="Issuer">${[["all", "All"], ["blackrock", "iShares"], ["vanguard", "Vanguard"], ["statestreet", "SPDR"]].map(([k, l]) => `<button type="button" class="tab" data-etf-issuer="${k}" aria-pressed="${e.issuer === k}">${l}</button>`).join("")}</div>
+        <div class="filters"><label>Category <select id="etf-cat"><option value="">All categories</option>${cats.map((c) => `<option ${e.cat === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label><span class="muted">Tap a fund for its largest holdings</span></div>
+        <div class="table-scroll"><table class="tbl etf-tbl">
+          <thead><tr><th class="l fz fz-em" scope="col">Fund</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">YTD</th><th scope="col">1 year</th><th scope="col">1-year chart</th><th scope="col" title="Fund net assets, all share classes, from the latest N-PORT">Fund size</th></tr></thead>
+          <tbody>${body}</tbody></table></div>
+        <section class="section" aria-labelledby="sec-h">
+          <div class="section-head"><h2 id="sec-h">Sector ETFs, side by side</h2><span class="note">Select Sector SPDR · Vanguard sector · iShares U.S. sector</span></div>
+          <div class="table-scroll flat"><table class="own-table etf-sectors"><thead><tr><th class="l" scope="col">Sector</th><th class="l" scope="col">SPDR</th><th class="l" scope="col">Vanguard</th><th class="l" scope="col">iShares</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
+        </section>
+        <p class="foot">Fund size and holdings: each fund’s latest Form N-PORT on SEC EDGAR (the whole fund, all share classes; published quarterly with a delay of about 60 days). Prices and returns: Yahoo Finance, price only (dividends not included). SPY, MDY and GLD are trusts that do not file N-PORT. The iShares communication fund (IYZ) covers telecom only. Not investment advice.</p>
+      </div>`;
+    const app = $("app");
+    app.querySelectorAll("[data-etf-issuer]").forEach((b) => b.addEventListener("click", () => { e.issuer = b.dataset.etfIssuer; render(); }));
+    $("etf-cat").addEventListener("change", (ev) => { e.cat = ev.target.value; render(); });
+    app.querySelectorAll("tr[data-etf]").forEach((tr) => tr.addEventListener("click", () => { e.open = e.open === tr.dataset.etf ? null : tr.dataset.etf; render(); }));
+  }
+  /** On Emerging, the three issuers' ETFs for the sector being filtered. */
+  function sectorEtfCard(sector) {
+    if (!sector) return "";
+    if (!ETF) { loadEtfs().then(() => { if (state.page === "emerging") render(); }); return ""; }
+    const by = ETF.sectors[sector];
+    if (!by) return "";
+    return `<div class="sector-etfs"><b>${esc(sector)} ETFs from the Big Three:</b> ${["statestreet", "vanguard", "blackrock"].map((m) => {
+      const f = etfByTicker(by[m]);
+      return `<a href="#etfs" class="etf-cell">${etfChip(f)} ${live("px", f.ticker)} ${live("pill", f.ticker)}<small class="muted">1Y ${f.ret1y == null ? "—" : signed(f.ret1y)}</small></a>`;
+    }).join("")}</div>`;
+  }
+
   // ---------- company navigation: back to the list, previous / next in it ----------
   function originList() {
     if (state.from === "emerging") return { hash: "emerging", label: "Emerging", tickers: emergingSorted().slice(0, state.em.limit).map((r) => r.ticker) };
@@ -1758,6 +1840,7 @@
     if (state.page === "company") renderCompany();
     else if (state.page === "emerging") renderEmerging();
     else if (state.page === "watch") renderWatch();
+    else if (state.page === "etfs") renderEtfs();
     else renderHome();
     syncSubscriptions();
     renderLive();
@@ -1777,6 +1860,9 @@
       state.slug = null;
     } else if (h === "watchlist") {
       state.page = "watch";
+      state.slug = null;
+    } else if (h === "etfs") {
+      state.page = "etfs";
       state.slug = null;
     } else {
       state.page = "home";

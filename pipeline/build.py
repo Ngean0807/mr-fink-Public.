@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, backtest, config, edgar, emerging, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -436,6 +436,10 @@ def main() -> None:
     if os.environ.get("NTFY_TEST") == "true":
         notify.send_test()
     audit.notify_new(warnings)
+    try:  # the Big Three's ETFs (prices every run; N-PORT summaries cached per filing)
+        etfs.write()
+    except Exception as e:
+        print(f"ETFs skipped: {e}")
     # The Emerging backtest is re-run once per new quarter (it reads every 13F since 2017).
     try:
         bt = json.loads(backtest.OUT.read_text()) if backtest.OUT.exists() else {}
