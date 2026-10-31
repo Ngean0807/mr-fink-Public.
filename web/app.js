@@ -21,7 +21,7 @@
   const state = {
     view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
-    em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1 },
+    em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
   };
 
   // ---------- formatting ----------
@@ -203,6 +203,18 @@
     });
     const s = state.page === "company" && bySlug(state.slug);
     if (s && changed.has(s.ticker) && state.coMode === "price" && ["1D", "5D"].includes(state.pxRange) && Date.now() - lastChartDraw > 15000) drawCoChart(s);
+  }
+  // Intraday series live in quotes.json, fetched the first time a 1D or 5D chart needs them.
+  let intradayLoad = null;
+  function loadIntraday() {
+    if (!intradayLoad) {
+      intradayLoad = fetch("data/quotes.json", { cache: "no-store" }).then((r) => r.json()).then((data) => {
+        for (const [t, q] of Object.entries(data.quotes || {})) {
+          if (q.intraday) (Q[t] || (Q[t] = {})).intraday = Q[t] && Q[t].intraday && Q[t].intraday.length > q.intraday.length ? Q[t].intraday : q.intraday;
+        }
+      }).catch(() => {});
+    }
+    return intradayLoad;
   }
   function loadHistory() {
     if (H) return Promise.resolve(H);
@@ -911,7 +923,7 @@
       const up = m && m.stake - (m.stakeYearAgo || 0) > 0.001;
       return `<span class="mdot ${up ? "" : "off"}" style="background:${mColor(id)}" title="${MGR_NAME[id]}: ${m ? pct(m.stake, 2, false) + " now, " + (m.stakeYearAgo == null ? "not held" : pct(m.stakeYearAgo, 2, false)) + " a year ago" : "not held"}"></span>`;
     }).join("");
-    const body = sorted.map((r) => {
+    const body = sorted.slice(0, f.limit).map((r) => {
       const s = emSec(r);
       const fund = s.fundamentals || {};
       const flags = liveFlags(r);
@@ -960,6 +972,7 @@
           <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
           <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
         </table></div>
+        ${sorted.length > f.limit ? `<button type="button" class="more" id="em-more" style="border:1px solid var(--line);border-radius:var(--radius)">Show all ${sorted.length} companies</button>` : ""}
         <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. Names without a full company page open on SEC EDGAR (↗). pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
       </div>
       <aside class="rail" aria-label="About the screen">
@@ -999,7 +1012,8 @@
     $("em-deals").addEventListener("change", (e) => { f.hideDeals = e.target.checked; render(); });
     $("em-thin").addEventListener("change", (e) => { f.hideThin = e.target.checked; render(); });
     $("em-three").addEventListener("change", (e) => { f.allThree = e.target.checked; render(); });
-    app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; render(); }));
+    app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; f.limit = 100; render(); }));
+    $("em-more")?.addEventListener("click", () => { f.limit = Infinity; render(); });
     app.querySelectorAll("[data-emsort]").forEach((b) => b.addEventListener("click", () => {
       const k = b.dataset.emsort;
       f.dir = f.sort === k ? -f.dir : k === "ticker" ? 1 : -1;
@@ -1207,6 +1221,12 @@
     const c = s.cusip;
     const per = D.meta.periods;
     if (state.coMode === "price") {
+      const intradayRange = ["1D", "5D"].includes(state.pxRange);
+      if (intradayRange && !(Q[s.ticker] && Q[s.ticker].intraday)) {
+        host.innerHTML = '<p class="empty-state">Loading today’s prices…</p>';
+        loadIntraday().then(() => { if (bySlug(state.slug) === s && Q[s.ticker] && Q[s.ticker].intraday) drawCoChart(s); });
+        return;
+      }
       const { pts, base, intraday } = pricePoints(s.ticker);
       if (pts.length < 2) { host.innerHTML = `<p class="empty-state">${H ? "No price history for this range." : "Loading price history…"}</p>`; return; }
       const last = pts[pts.length - 1][1];
