@@ -220,6 +220,14 @@ button { font: inherit; color: inherit; }
 .ins-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; margin: 4px 0 10px; }
 .ins-sum b { font-weight: 500; }
 .mv-gone { padding: 0 16px; margin: 6px 0 0; }
+.bt-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+.bt-legend .item { padding: 6px 0; }
+.bt-legend .sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.bt-verdict { font-size: 14px; color: var(--ink-2); max-width: 90ch; }
+.bt-verdict b { color: var(--ink); font-weight: 500; }
+.bt-method summary { cursor: pointer; font-size: 13px; color: var(--accent-ink); }
+.bt-method p { font-size: 13px; color: var(--ink-2); max-width: 90ch; }
+@media (max-width: 760px) { .bt-grid { grid-template-columns: minmax(0, 1fr); } }
 .season { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--radius); background: var(--surface-2); padding: 12px 16px; font-size: 13px; color: var(--ink-2); }
 .season b { color: var(--ink); font-weight: 500; }
 .season a { color: inherit; }

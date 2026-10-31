@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, config, edgar, emerging, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, backtest, config, edgar, emerging, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -436,6 +436,13 @@ def main() -> None:
     if os.environ.get("NTFY_TEST") == "true":
         notify.send_test()
     audit.notify_new(warnings)
+    # The Emerging backtest is re-run once per new quarter (it reads every 13F since 2017).
+    try:
+        bt = json.loads(backtest.OUT.read_text()) if backtest.OUT.exists() else {}
+        if bt.get("latest", "") < latest:
+            backtest.main()
+    except Exception as e:
+        print(f"Backtest skipped: {e}")
     STATUS.write_text(json.dumps({"warnings": len(warnings), "checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))
     print(f"Wrote {OUT} ({OUT.stat().st_size/1024:,.0f} KB) in {time.time()-t0:,.0f}s")
 
