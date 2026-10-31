@@ -229,6 +229,12 @@ button { font: inherit; color: inherit; }
 .bt-method summary { cursor: pointer; font-size: 13px; color: var(--accent-ink); }
 .bt-method p { font-size: 13px; color: var(--ink-2); max-width: 90ch; }
 @media (max-width: 760px) { .bt-grid { grid-template-columns: minmax(0, 1fr); } }
+.mc-presets { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.mc-presets .chip { height: 30px; font-size: 13px; padding: 0 12px; }
+.mc-presets .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.em-tools { gap: 8px; align-items: center; flex-wrap: wrap; }
+.sortby { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-right: auto; }
+.sortby select { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 0 8px; font: inherit; }
 .season { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--radius); background: var(--surface-2); padding: 12px 16px; font-size: 13px; color: var(--ink-2); }
 .season b { color: var(--ink); font-weight: 500; }
 .season a { color: inherit; }
