@@ -243,6 +243,8 @@ button { font: inherit; color: inherit; }
 .etf-tbl tbody tr[data-etf] { cursor: pointer; }
 .etf-tbl tr.open td { background: var(--surface-2); }
 .etf-detail td { white-space: normal; background: var(--surface-2); height: auto; padding: 10px 16px 14px; }
+.tbl td.fz { height: auto; padding-block: 8px; }
+.etf-top { position: sticky; left: 0; max-width: min(860px, calc(100vw - 48px)); }
 .etf-top ol { margin: 8px 0 0; padding-inline-start: 20px; columns: 2; column-gap: 28px; font-size: 13px; }
 .etf-top li { break-inside: avoid; padding: 2px 0; }
 .etf-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--ink); text-decoration: none !important; }
@@ -365,7 +367,7 @@ details.callout[open] > summary::after { content: "▴"; }
 .tbl .fz { position: sticky; z-index: 2; }
 .tbl thead .fz { z-index: 4; }
 .tbl .fz-0 { left: 0; width: 44px; min-width: 44px; padding-right: 4px; color: var(--muted); }
-.tbl .fz-1 { left: 44px; min-width: 210px; max-width: 250px; box-shadow: inset -1px 0 0 var(--line); }
+.tbl .fz-1 { left: 44px; min-width: 240px; max-width: 300px; white-space: normal; box-shadow: inset -1px 0 0 var(--line); }
 .tbl tbody tr { cursor: pointer; }
 .tbl .v { font-weight: 500; }
 .tbl tbody tr:hover td { background: var(--surface-2); }
@@ -378,7 +380,8 @@ details.callout[open] > summary::after { content: "▴"; }
   font: 500 12px var(--font-ui); letter-spacing: .02em; color: #fff; background: var(--tk, #5f6368);
 }
 .co-nm { display: grid; min-width: 0; line-height: 1.3; text-align: left; }
-.co-nm b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Full names, wrapped onto a second or third line rather than cut off: you need the exact name to buy it. */
+.co-nm b { font-weight: 500; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
 .co-nm small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wbar { display: inline-block; width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin-left: 8px; vertical-align: middle; position: relative; overflow: hidden; }
 .wbar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 2px; }
@@ -438,7 +441,7 @@ sup { font-size: 10px; color: var(--muted); }
 .filters select { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 0 8px; font: inherit; }
 .filters .chk input { width: 16px; height: 16px; accent-color: var(--accent); }
 .tab small { color: var(--muted); font-weight: 400; margin-left: 2px; }
-.tbl .fz-em { left: 0; min-width: 230px; max-width: 270px; box-shadow: inset -1px 0 0 var(--line); }
+.tbl .fz-em { left: 0; min-width: 260px; max-width: 320px; white-space: normal; box-shadow: inset -1px 0 0 var(--line); }
 .em-tbl { min-width: 1380px; }
 .mdot.off { opacity: .2; }
 .tbl .mdot { margin: 0 2px; }
@@ -494,7 +497,7 @@ sup { font-size: 10px; color: var(--muted); }
 @media (max-width: 640px) {
   .fund-name { display: none; }
   .fund-cell { min-width: 0; }
-  .tbl .fz-em { min-width: 150px; max-width: 170px; }
+  .tbl .fz-em { min-width: 200px; max-width: 230px; white-space: normal; }
   .tbl .fz-em .co-nm small { display: none; }
   /* One header row on phones: logo mark, search, status dot, bell */
   .topbar-inner { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding-block: 6px; }
@@ -511,7 +514,7 @@ sup { font-size: 10px; color: var(--muted); }
   .figure-value { font-size: 30px; }
   .hero h1 { font-size: 24px; }
   .range { padding: 8px 9px; }
-  .tbl .fz-1 { min-width: 170px; max-width: 190px; }
+  .tbl .fz-1 { min-width: 200px; max-width: 230px; white-space: normal; }
   .tbl .fz-1 .co-nm small { display: none; }
   .filter, .filter input { width: 100%; }
 }
