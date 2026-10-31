@@ -508,7 +508,9 @@
   // ---------- rail cards ----------
   function feedTitle(e) {
     if (e.kind === "13f") return [`${MGR_NAME[e.manager]} ${e.form.startsWith("13F-NT") ? "notice: reported by affiliates" : "holdings for " + qlabel(e.period)}`, e.entity];
-    if (e.kind === "13g") return [`${MGR_NAME[e.manager]} owns ${pct(e.percent, 2, false)} of ${e.tickers[0]}`, `${e.entity} · as of ${dateL(e.eventDate)}`];
+    if (e.kind === "13g") return [`${MGR_NAME[e.manager]} owns ${pct(e.percent, 2, false)} of ${e.tickers[0]}`, `${e.entity} · ${e.form.includes("13D") ? "13D, active stake" : "as of " + dateL(e.eventDate)}`];
+    if (e.kind === "8k") return [`${e.tickers.join(" / ")}: ${(e.labels || []).join(", ") || "current report"}`, `${niceName(e.entity)} · ${e.form}`];
+    if (e.kind === "nport") return [`${e.fund} portfolio as of ${dateL(e.period)}`, `${e.entity}${e.netAssets ? " · " + usd(e.netAssets) + " net assets" : ""}`];
     return [`${e.tickers.join(" / ")} ${e.form.startsWith("10-K") ? "annual report" : "quarterly report"}`, `${niceName(e.entity)} · period ended ${dateL(e.period)}`];
   }
   function feedCard(ticker = null) {
@@ -516,12 +518,12 @@
     if (ticker) items = items.filter((e) => (e.tickers || []).includes(ticker));
     else if (state.feedTab !== "all") items = items.filter((e) => e.kind === state.feedTab);
     const shown = items.slice(0, state.feedMore ? 30 : 7);
-    const badge = (e) => `<span class="badge ${e.kind === "13f" ? "f13f" : e.kind === "13g" ? "f13g" : "frep"}">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", ""))}</span>`;
+    const badge = (e) => `<span class="badge ${e.kind === "13f" || e.kind === "nport" ? "f13f" : e.kind === "13g" || (e.kind === "8k" && e.key) ? "f13g" : "frep"}">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", "").replace("NPORT-P", "N-PORT"))}</span>`;
     const rows = shown.map((e) => {
       const [a, b] = feedTitle(e);
       return `<a href="${e.url}" target="_blank" rel="noopener">${badge(e)}<span class="nm"><b>${esc(a)}</b><small>${esc(b)}</small></span><span class="rt muted">${ago(e.accepted)}</span></a>`;
     }).join("") || `<div class="item"><span></span><span class="nm"><small>No filings in the past year.</small></span><span></span></div>`;
-    const tabs = ticker ? "" : `<div class="tabs" role="group" aria-label="Filing type">${[["all", "All"], ["13f", "13F"], ["13g", "13G stakes"], ["report", "10-Q / 10-K"]].map(([k, l]) => `<button type="button" class="tab" data-feed="${k}" aria-pressed="${state.feedTab === k}">${l}</button>`).join("")}</div>`;
+    const tabs = ticker ? "" : `<div class="tabs" role="group" aria-label="Filing type">${[["all", "All"], ["13f", "13F"], ["13g", "13G/D"], ["nport", "N-PORT"], ["8k", "8-K"], ["report", "10-Q/K"]].map(([k, l]) => `<button type="button" class="tab" data-feed="${k}" aria-pressed="${state.feedTab === k}">${l}</button>`).join("")}</div>`;
     return `<section class="card" aria-labelledby="feed-h">
       <div class="card-head"><h2 id="feed-h">${ticker ? "Recent filings" : "Latest SEC filings"}</h2><span class="feed-meta" data-checked></span></div>
       ${tabs}<div class="list">${rows}</div>
@@ -1006,6 +1008,7 @@
           ${state.coMode !== "price" && (s.splits || []).length ? `<p class="figure-note">Share counts split-adjusted for ${(s.splits || []).map((sp) => (sp.ratio >= 1 ? `${sp.ratio}:1` : `1:${Math.round(1 / sp.ratio)}`) + " in " + qlabel(sp.period)).join(" and ")}.</p>` : ""}
         </div>
         ${emergingSection(s)}
+        ${fundsSection(s)}
         <section class="section" aria-labelledby="own-h">
           <div class="section-head"><h2 id="own-h">Big Three ownership</h2><span class="note">${qlabel(D.meta.latest)} 13F filings</span></div>
           <div class="table-scroll flat"><table class="own-table">
@@ -1082,6 +1085,23 @@
     app.querySelectorAll("[data-co-mode]").forEach((b) => b.addEventListener("click", () => { state.coMode = b.dataset.coMode; render(); }));
     app.querySelectorAll("[data-pxrange]").forEach((b) => b.addEventListener("click", () => { state.pxRange = b.dataset.pxrange; render(); }));
     if (!H) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
+  }
+
+  function fundsSection(s) {
+    const funds = s.funds || [];
+    if (!funds.length) return "";
+    const rows = funds.map((f) => {
+      const chg = f.prevShares ? f.shares / f.prevShares - 1 : null;
+      return `<tr><td class="l">${dot(f.manager)}<b>${esc(f.fund)}</b> <span class="muted">${esc(f.name)}</span></td><td>${dateL(f.period)}</td><td>${num(f.shares)}</td><td>${usd(f.value)}</td><td>${pct(f.weight, 2, false)}</td><td>${f.prevShares ? pill(chg, { sm: true }) : '<span class="act new">New</span>'}</td><td>${live("val", s.ticker, f.shares)}</td></tr>`;
+    }).join("");
+    return `<section class="section" aria-labelledby="funds-h">
+      <div class="section-head"><h2 id="funds-h">Held in these index funds</h2><span class="note">Form N-PORT, fund by fund</span></div>
+      <div class="table-scroll flat"><table class="own-table">
+        <thead><tr><th class="l" scope="col">Fund</th><th scope="col">As of</th><th scope="col">Shares</th><th scope="col">Value</th><th scope="col">% of fund</th><th scope="col">vs prior report</th><th scope="col">Value today</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <p class="foot">Flagship index funds of each manager (S&amp;P 500, total market, mid and small cap, Russell 2000). Funds report each quarter-end month about 60 days later; dates differ by fiscal calendar. “vs prior report” compares shares with the fund’s previous public N-PORT.</p>
+    </section>`;
   }
 
   function emergingSection(s) {

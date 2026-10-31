@@ -77,3 +77,15 @@ class PeriodsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SplitFalsePositiveTest(unittest.TestCase):
+    def test_buying_by_two_managers_is_not_a_split(self):
+        # Lyft, Q4 2025 -> Q1 2026: two managers doubled, one did not, price fell 31%.
+        p = ["2025-12-31", "2026-03-31"]
+        books = {
+            "a": {p[0]: {"X": [22_448_075, 22_448_075 * 19.37]}, p[1]: {"X": [49_000_870, 49_000_870 * 13.30]}},
+            "b": {p[0]: {"X": [37_009_463, 37_009_463 * 19.37]}, p[1]: {"X": [41_601_797, 41_601_797 * 13.30]}},
+            "c": {p[0]: {"X": [6_999_670, 6_999_670 * 19.37]}, p[1]: {"X": [13_192_493, 13_192_493 * 13.30]}},
+        }
+        self.assertEqual(analytics.detect_splits("X", books, p), [])

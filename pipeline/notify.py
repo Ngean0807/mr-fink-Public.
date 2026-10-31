@@ -45,6 +45,12 @@ def describe(e: dict) -> tuple[str, str, str, list[str]]:
         who = MANAGER.get(e["manager"], e["entity"])
         pct = f"{e['percent'] * 100:.2f}%"
         return f"{who} owns {pct} of {e['tickers'][0]}", f"{e['entity']} filed {e['form'].replace('SCHEDULE ', '')}, as of {e.get('eventDate') or e['filed']}", "default", ["chart_with_upwards_trend"]
+    if e["kind"] == "8k":
+        what = ", ".join(e.get("labels") or []) or "current report"
+        return f"{' / '.join(e['tickers'])} 8-K: {what}", f"{e['entity']} filed {e['form']}.", "high" if "1.03" in e.get("items", []) or "4.02" in e.get("items", []) else "default", ["rotating_light"]
+    if e["kind"] == "nport":
+        who = MANAGER.get(e["manager"], "")
+        return f"{e['fund']} holdings as of {e['period']}", f"{e['entity']} ({who}) published its fund portfolio (N-PORT).", "low", ["file_folder"]
     report = "annual report (10-K)" if e["form"].startswith("10-K") else "quarterly report (10-Q)"
     return f"{' / '.join(e['tickers'])} filed its {report}", f"Period ended {e['period']}. Fundamentals on the dashboard are updated.", "low", ["memo"]
 
@@ -89,7 +95,7 @@ def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
         return []
     server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
     site = site_url()
-    kinds = set(os.environ.get("NTFY_KINDS", "13f,13g,report").split(","))
+    kinds = set(os.environ.get("NTFY_KINDS", "13f,13g,report,8k,nport").split(","))
     send = send or (lambda e: _send(server, topic, e, site))
 
     current = [e["accession"] for e in events]
@@ -99,7 +105,8 @@ def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
         return []
     seen = json.loads(STATE.read_text())
     seen_set = set(seen)
-    fresh = [e for e in events if e["accession"] not in seen_set and e["kind"] in kinds]
+    # 8-Ks only push for the items that change the investment case (see feed.KEY_8K_ITEMS).
+    fresh = [e for e in events if e["accession"] not in seen_set and e["kind"] in kinds and (e["kind"] != "8k" or e.get("key"))]
     fresh.sort(key=lambda e: e["accepted"])
     sent = []
     for e in fresh[-MAX_PER_RUN:]:

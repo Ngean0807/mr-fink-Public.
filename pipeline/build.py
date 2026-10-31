@@ -12,7 +12,7 @@ from pathlib import Path
 
 import hashlib
 
-from . import analytics, config, emerging, feed, fundamentals, notify, periods, quotes, securities, thirteenf
+from . import analytics, config, emerging, feed, fundamentals, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -126,6 +126,12 @@ def main() -> None:
         sec_meta[c]["emerging"] = True
 
     feed_events, stakes_13g, latest_report = feed.build_feed(sec_meta, config.SUBMISSIONS_TTL_HOURS)
+    # Fund-level positions (N-PORT) for every tracked security, and the funds' filings in the feed.
+    chains = {c: [c] + [p["cusip"] for p in m["predecessors"]] for c, m in sec_meta.items()}
+    fund_positions, nport_events = nport.build(chains, ttl_hours=6)
+    for c, m in sec_meta.items():
+        m["funds"] = sorted(fund_positions.get(c, []), key=lambda f: -f["value"])
+    feed_events = sorted(feed_events + nport_events, key=lambda e: e["accepted"], reverse=True)
     for c, meta in sec_meta.items():
         meta["stakes13g"] = sorted(stakes_13g.get(c, []), key=lambda g: g["accepted"], reverse=True)
         if meta.get("cik"):

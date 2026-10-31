@@ -14,6 +14,7 @@ def detect_splits(cusip: str, books: dict[str, dict], periods: list[str]) -> lis
     (value / shares) moves the opposite way. Requirements, to keep stock-financed mergers and index
     additions out: at least two managers agree on the share jump, and the price itself must move
     against it (a forward split needs the price to fall by 30%+, a reverse split to rise by 40%+).
+    All managers holding the stock must agree.
     """
     splits = []
     for prev, cur in zip(periods, periods[1:]):
@@ -31,8 +32,10 @@ def detect_splits(cusip: str, books: dict[str, dict], periods: list[str]) -> lis
         for k in SPLIT_RATIOS + REVERSE_SPLIT_RATIOS:
             if not (0.4 < price * k < 2.5) or (k > 1 and price > 0.7) or (k < 1 and price < 1.4):
                 continue
+            # Every manager must show the jump: a split hits all holders alike, while real buying
+            # (an index addition, say) shows up in some books and not others (Lyft, Q1 2026).
             votes = sum(1 for s in share_ratios if abs(s / k - 1) < 0.12)
-            if votes >= max(2, -(-2 * len(share_ratios) // 3)):
+            if votes == len(share_ratios):
                 splits.append({"period": cur, "ratio": k})
                 break
     return splits
