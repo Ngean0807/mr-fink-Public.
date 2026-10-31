@@ -143,5 +143,8 @@ def build_feed(securities: dict[str, dict], ttl_hours: float, log=print) -> tupl
                                "percent": g["percent"], "eventDate": g["eventDate"], "url": g["url"]})
     events.sort(key=lambda e: e["accepted"], reverse=True)
     log(f"Feed: {len(events)} events, {sum(len(v) for v in stakes.values())} manager 13G stakes")
-    return events[:300], stakes, latest_report
+    # 8-Ks are numerous; keep the latest 150 so they never crowd 13F, 13G and 10-Q/K out of the feed.
+    eights = [e for e in events if e["kind"] == "8k"][:150]
+    events = sorted([e for e in events if e["kind"] != "8k"][:300] + eights, key=lambda e: e["accepted"], reverse=True)
+    return events, stakes, latest_report
 

@@ -34,13 +34,20 @@ class NotifyTest(unittest.TestCase):
 
     def test_first_run_records_without_sending(self):
         self.assertEqual(self.run_notify(EVENTS[:1]), [])
-        self.assertEqual(json.loads(self.state.read_text()), ["A1"])
+        self.assertEqual(json.loads(self.state.read_text())["seen"], ["A1"])
 
     def test_only_new_filings_are_sent_oldest_first(self):
         self.run_notify(EVENTS[:1])
         sent = self.run_notify(EVENTS)
         self.assertEqual([e["accession"] for e in sent], ["A3", "A2"])
         self.assertEqual(self.run_notify(EVENTS), [])
+
+    def test_new_filing_type_is_recorded_silently(self):
+        self.state.write_text(json.dumps(["A1"]))  # state written before 8-Ks were tracked
+        later = EVENTS[:1] + [dict(EVENTS[2], kind="8k", key=True, items=["1.01"], labels=["material agreement"], accession="A9")]
+        self.assertEqual(self.run_notify(later), [])
+        fresh = later + [dict(EVENTS[2], kind="8k", key=True, items=["5.02"], labels=["executive change"], accession="A10", accepted="2026-11-20T00:00:00.000Z")]
+        self.assertEqual([e["accession"] for e in self.run_notify(fresh)], ["A10"])
 
     def test_messages_and_links(self):
         title, _, priority, _ = notify.describe(EVENTS[0])

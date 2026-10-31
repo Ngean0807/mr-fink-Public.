@@ -14,6 +14,9 @@ from . import edgar
 
 STATE = edgar.CACHE_DIR / "notified.json"
 MAX_PER_RUN = 8
+# Every kind of event the feed produces today. A fresh install treats them all as known; a kind
+# added after an install was seeded is recorded silently on its first run.
+ALL_KINDS = {"13f", "13g", "report", "8k", "nport"}
 
 
 def site_url() -> str:
@@ -100,11 +103,21 @@ def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
 
     current = [e["accession"] for e in events]
     if not STATE.exists():
-        _save(current)
+        _save(current, ALL_KINDS)
         log(f"Notifications: first run, {len(current)} existing filings recorded, nothing sent")
         return []
-    seen = json.loads(STATE.read_text())
+    state = json.loads(STATE.read_text())
+    if isinstance(state, list):  # first format: a bare list of accessions
+        state = {"seen": state, "kinds": ["13f", "13g", "report"]}
+    seen, known_kinds = state["seen"], set(state["kinds"])
     seen_set = set(seen)
+    # A filing type added to the feed later is recorded silently on its first run, so turning it
+    # on does not replay months of old filings.
+    new_kinds = {e["kind"] for e in events} - known_kinds
+    if new_kinds:
+        seen_set |= {e["accession"] for e in events if e["kind"] in new_kinds}
+        seen = seen + [e["accession"] for e in events if e["kind"] in new_kinds]
+        log(f"Notifications: new filing types {sorted(new_kinds)} recorded without sending")
     # 8-Ks only push for the items that change the investment case (see feed.KEY_8K_ITEMS).
     fresh = [e for e in events if e["accession"] not in seen_set and e["kind"] in kinds and (e["kind"] != "8k" or e.get("key"))]
     fresh.sort(key=lambda e: e["accepted"])
@@ -115,11 +128,11 @@ def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
             sent.append(e)
         except Exception as err:  # a failed push must never fail the data refresh
             log(f"Notification failed for {e['accession']}: {err}")
-    _save(seen + [a for a in current if a not in seen_set])
+    _save(seen + [a for a in current if a not in seen_set], known_kinds | {e["kind"] for e in events})
     log(f"Notifications: {len(sent)} sent, {len(fresh) - len(sent)} skipped")
     return sent
 
 
-def _save(accessions: list[str]) -> None:
+def _save(accessions: list[str], kinds: set[str]) -> None:
     STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(accessions[-5000:]))
+    STATE.write_text(json.dumps({"seen": accessions[-8000:], "kinds": sorted(kinds)}))

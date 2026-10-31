@@ -122,8 +122,19 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         series = analytics.position_series(chain, big3, period_list, splits)
         idx = {p: i for i, p in enumerate(period_list)}
 
+        def outstanding(p):
+            """Cover-page count for the quarter, else the neighbouring quarter's (some filers
+            skip a frame); never zero-filled."""
+            if so[p].get(cik):
+                return so[p][cik]
+            i = hist_periods.index(p)
+            for j in (i - 1, i + 1):
+                if 0 <= j < len(hist_periods) and so[hist_periods[j]].get(cik):
+                    return so[hist_periods[j]][cik]
+            return None
+
         def stake(p, ser=series):
-            out_raw = so[p].get(cik)
+            out_raw = outstanding(p)
             if not out_raw:
                 return None
             return ser[idx[p]]["s"] / (out_raw * analytics.split_factor(splits, p))
@@ -135,6 +146,10 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         px = series[-1]["v"] / series[-1]["s"]
         mcap = px * so[L][cik]
         first_idx = next((i for i, x in enumerate(series[-HISTORY:]) if x["s"] > 0), HISTORY - 1)
+        held_year_ago = series[-5]["s"] > 0
+        if y_ago is None and held_year_ago:
+            skipped_no_shares += 1
+            continue  # held a year ago but no share count to measure the stake: unknown, not zero
         d_y = now - (y_ago or 0)
         if not (E["price_min"] <= px <= E["price_max"] and E["mcap_min"] <= mcap <= E["mcap_max"] and d_y >= E["min_stake_change"]):
             continue
@@ -143,7 +158,7 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         for mid, b in books.items():
             ms = analytics.position_series(chain, b, period_list, splits)
             m_now = ms[-1]["s"] / (so[L][cik] * analytics.split_factor(splits, L))
-            m_y = ms[-5]["s"] / (so[Y][cik] * analytics.split_factor(splits, Y)) if so[Y].get(cik) else None
+            m_y = ms[-5]["s"] / (outstanding(Y) * analytics.split_factor(splits, Y)) if outstanding(Y) else None
             per_mgr[mid] = {"stake": m_now, "stakeYearAgo": m_y, "shares": ms[-1]["s"], "value": ms[-1]["v"]}
         breadth = sum(1 for m in per_mgr.values() if m["stake"] - (m["stakeYearAgo"] or 0) > 0.001)
 
@@ -157,7 +172,7 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
             flags.append("pending-deal")
         if any(sp["ratio"] < 1 and sp["period"] >= Y for sp in splits):
             flags.append("reverse-split")
-        if so[Y].get(cik) and so[L][cik] / (so[Y][cik] * analytics.split_factor(splits, Y)) > 1.3:
+        if outstanding(Y) and so[L][cik] / (outstanding(Y) * analytics.split_factor(splits, Y)) > 1.3:
             flags.append("dilution")
         if foreign:
             flags.append("foreign-filer")
