@@ -233,6 +233,7 @@ def main() -> None:
             "periodLabels": [periods.label(p) for p in period_list],
             "managers": [{"id": m["id"], "name": m["name"], "ciks": m["ciks"]} for m in config.MANAGERS],
             "topN": config.TOP_N,
+            "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics()},
         },
         "views": out_views,
         "securities": sec_meta,

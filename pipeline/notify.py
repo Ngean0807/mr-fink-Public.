@@ -10,7 +10,7 @@ import json
 import os
 import urllib.request
 
-from . import edgar
+from . import config, edgar
 
 STATE = edgar.CACHE_DIR / "notified.json"
 MAX_PER_RUN = 8
@@ -124,12 +124,20 @@ def describe_unit(unit: list[dict]) -> tuple[str, str, str, list[str]]:
 def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
     """Announce feed events not seen before. Returns the events that were sent (or grouped)."""
     topic = os.environ.get("NTFY_TOPIC")
-    if not topic and send is None:
+    public = config.public_topics()
+    if not topic and not public and send is None:
         return []
-    server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+    server = config.NTFY_SERVER
     site = site_url()
     kinds = set(os.environ.get("NTFY_KINDS", "13f,13g,report,8k,nport").split(","))
-    send = send or (lambda unit: _send(server, topic, unit, site))
+
+    def deliver(unit):
+        # The owner's private channel gets everything; each public channel gets its filing type.
+        targets = ([topic] if topic else []) + ([public[unit[0]["kind"]]] if unit[0]["kind"] in public else [])
+        for t in targets:
+            _send(server, t, unit, site)
+
+    send = send or deliver
 
     current = [e["accession"] for e in events]
     if not STATE.exists():

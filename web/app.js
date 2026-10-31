@@ -1259,6 +1259,110 @@
   }
 
   // ---------- live updates ----------
+  // ---------- notifications ----------
+  // Two ways to be told about new filings: browser notifications while the site is open in a tab,
+  // or the free ntfy app, subscribed to the public channel of each filing type (works when closed).
+  const NKINDS = [
+    ["13f", "13F holdings", "BlackRock, Vanguard or State Street files its quarterly holdings"],
+    ["13g", "13G / 13D stakes", "A manager reports owning more than 5% of a tracked company"],
+    ["8k", "Material 8-K events", "Deals, bankruptcy, delisting, financings or executive changes at tracked companies"],
+    ["report", "10-Q / 10-K", "A tracked company files its quarterly or annual report"],
+    ["nport", "Fund holdings (N-PORT)", "A flagship index fund (IWM, VTI, SPSM…) publishes its portfolio"],
+  ];
+  const nprefs = (() => {
+    try { return JSON.parse(localStorage.getItem("mrfink.notify") || "null"); } catch (e) { return null; }
+  })() || { kinds: ["13f", "13g", "8k"], browser: false };
+  const saveN = () => { try { localStorage.setItem("mrfink.notify", JSON.stringify(nprefs)); } catch (e) { /* storage unavailable */ } };
+  const canNotify = () => "Notification" in window;
+  function browserNotify(events) {
+    if (!nprefs.browser || !canNotify() || Notification.permission !== "granted") return;
+    events.filter((e) => nprefs.kinds.includes(e.kind) && (e.kind !== "8k" || e.key)).slice(0, 5).forEach((e) => {
+      const [title, body] = feedTitle(e);
+      try {
+        const n = new Notification(title, { body, tag: e.accession });
+        n.onclick = () => {
+          window.focus();
+          const t = (e.tickers || [])[0];
+          if (t && bySlug(slugOf(t))) location.hash = "t-" + slugOf(t);
+          else location.hash = e.manager || "big3";
+        };
+      } catch (err) { /* some mobile browsers only notify from a service worker */ }
+    });
+  }
+  function renderNotifyPanel() {
+    const topics = (D.meta.notify && D.meta.notify.topics) || {};
+    const server = (D.meta.notify && D.meta.notify.server) || "https://ntfy.sh";
+    const perm = canNotify() ? Notification.permission : "unsupported";
+    const browserState = perm === "unsupported" ? "This browser cannot show notifications."
+      : perm === "denied" ? "Notifications are blocked for this site in your browser settings."
+      : nprefs.browser && perm === "granted" ? "On. You will be notified while Mr. Fink is open in a tab." : "Off.";
+    const chosen = NKINDS.filter(([k]) => nprefs.kinds.includes(k) && topics[k]);
+    $("npanel").innerHTML = `
+      <div class="np-head"><h2 id="np-h">Notifications</h2><button type="button" class="btn" id="np-close">Close</button></div>
+      <section class="np-sec">
+        <h3>Notify me about</h3>
+        ${NKINDS.map(([k, l, d]) => `<label class="np-kind"><input type="checkbox" data-nkind="${k}" ${nprefs.kinds.includes(k) ? "checked" : ""}><span>${l}</span><small>${d}</small></label>`).join("")}
+      </section>
+      <section class="np-sec">
+        <h3>In this browser</h3>
+        <p>No install. Works while the site is open in a tab, on desktop and Android.</p>
+        <div><button type="button" class="btn ${nprefs.browser && perm === "granted" ? "" : "primary"}" id="np-browser" ${perm === "unsupported" || perm === "denied" ? "disabled" : ""}>${nprefs.browser && perm === "granted" ? "Turn off" : "Turn on browser notifications"}</button>
+        ${nprefs.browser && perm === "granted" ? '<button type="button" class="btn" id="np-test">Send a test</button>' : ""}</div>
+        <p class="np-status">${esc(browserState)}</p>
+      </section>
+      <section class="np-sec">
+        <h3>On your phone, even when the site is closed</h3>
+        <p>1. Install the free ntfy app, no account needed: <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a></p>
+        <p>2. Subscribe to the channels you want. In the app tap +, then paste the channel name, or open the link on your phone.</p>
+        ${chosen.length ? chosen.map(([k, l]) => `<div class="np-sub"><span><b>${l}</b><br><code>${esc(topics[k])}</code></span><button type="button" class="btn" data-copy="${esc(topics[k])}">Copy</button><a class="btn" href="${esc(server.replace(/\/$/, ""))}/${esc(topics[k])}" target="_blank" rel="noopener">Open</a></div>`).join("") : '<p class="np-status">Pick at least one filing type above.</p>'}
+        <p class="np-status">Channels carry public SEC filings only. Anyone can subscribe to them.</p>
+      </section>`;
+    $("np-close").addEventListener("click", closeNotify);
+    $("npanel").querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
+      nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => $("npanel").querySelector(`[data-nkind="${k}"]`).checked);
+      saveN();
+      renderNotifyPanel();
+    }));
+    $("np-browser")?.addEventListener("click", async () => {
+      if (nprefs.browser && Notification.permission === "granted") { nprefs.browser = false; saveN(); renderNotifyPanel(); return; }
+      const res = await Notification.requestPermission();
+      nprefs.browser = res === "granted";
+      saveN();
+      renderNotifyPanel();
+      if (nprefs.browser) toast("Browser notifications are on.");
+    });
+    $("np-test")?.addEventListener("click", () => {
+      try { new Notification("Mr. Fink notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
+      catch (e) { toast("This browser shows notifications only from installed apps."); }
+    });
+    $("npanel").querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
+      const v = b.dataset.copy;
+      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(`Copied ${v}`), () => {
+        const code = b.parentElement.querySelector("code");
+        const r = document.createRange(); r.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        toast("Press copy to copy the selected channel name.");
+      });
+    }));
+    $("bell-dot").hidden = !(nprefs.browser && perm === "granted");
+  }
+  function openNotify() {
+    renderNotifyPanel();
+    $("npanel").hidden = false;
+    $("bell").setAttribute("aria-expanded", "true");
+    $("np-close").focus();
+  }
+  function closeNotify() {
+    $("npanel").hidden = true;
+    $("bell").setAttribute("aria-expanded", "false");
+    $("bell").focus();
+  }
+  function setupNotify() {
+    $("bell").addEventListener("click", () => ($("npanel").hidden ? openNotify() : closeNotify()));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("npanel").hidden) closeNotify(); });
+    document.addEventListener("click", (e) => { if (!$("npanel").hidden && !e.target.closest("#npanel, #bell")) closeNotify(); });
+    $("bell-dot").hidden = !(nprefs.browser && canNotify() && Notification.permission === "granted");
+  }
+
   async function poll() {
     try {
       const r = await fetch("data/status.json?t=" + Date.now(), { cache: "no-store" });
@@ -1267,10 +1371,12 @@
       if (status.fingerprint && status.fingerprint !== D.meta.fingerprint) {
         const known = new Set((D.feed || []).map((e) => e.accession));
         const fresh = await (await fetch("data/dashboard.json?t=" + Date.now(), { cache: "no-store" })).json();
-        const e = (fresh.feed || []).find((x) => !known.has(x.accession));
+        const added = (fresh.feed || []).filter((x) => !known.has(x.accession));
+        const e = added[0];
         D = fresh;
         render();
         toast(e ? `New SEC filing: ${feedTitle(e)[0]}. Data updated.` : "Updated with the latest SEC data.");
+        browserNotify(added);
       } else {
         renderLive();
       }
@@ -1282,6 +1388,7 @@
     Q = JSON.parse(JSON.stringify((D.quotes && D.quotes.quotes) || {}));
     try { const t = localStorage.getItem("mrfink.tab"); if (["overview", "analytics", "fundamentals"].includes(t)) state.tab = t; } catch (e) { /* storage unavailable */ }
     setupSearch();
+    setupNotify();
     window.addEventListener("hashchange", route);
     let rt, lastW = innerWidth;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 150); });
