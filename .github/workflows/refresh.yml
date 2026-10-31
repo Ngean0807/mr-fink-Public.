@@ -29,7 +29,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -59,12 +59,15 @@ jobs:
         run: |
           python -c "import json, os; json.dump({'finnhubKey': os.environ.get('FINNHUB_KEY') or None}, open('web/data/config.json', 'w'))"
       - name: Decide whether to save the cache
+        if: always()
         # Saving ~hundreds of MB every 5 minutes churns the 10 GB cache limit; once an hour is enough
         # (the notification state is published with the site, not kept only here).
         id: hourly
         run: echo "save=$([ "$(date -u +%M)" -lt 5 ] || [ "${{ github.event_name }}" != "schedule" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Save EDGAR cache
-        if: steps.hourly.outputs.save == 'true'
+        # Also after a failed or timed-out build, so a slow first run (OpenFIGI mapping thousands of
+        # new CUSIPs) is not repeated from scratch by every later run.
+        if: always() && steps.hourly.outputs.save == 'true'
         uses: actions/cache/save@v4
         with:
           path: .cache
