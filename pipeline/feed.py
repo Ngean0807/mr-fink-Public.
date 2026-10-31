@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import urllib.error
 from datetime import date, timedelta
 
 from . import config, edgar
@@ -59,13 +60,28 @@ def _recent(cik: str, ttl_hours: float) -> tuple[dict, list[dict]]:
     return sub, rows
 
 
+_NO_XML_KEY = "13g_without_xml.json.gz"
+_no_xml: set[str] | None = None
+
+
 def _parse_13g(cik: str, accession: str) -> dict | None:
-    """Schedule 13G is structured XML since December 2024; older paper-style filings are skipped."""
+    """Schedule 13G is structured XML since December 2024; older paper-style filings are skipped.
+    Filings with no XML are remembered, so they are not requested again on every refresh."""
+    global _no_xml
+    if _no_xml is None:
+        _no_xml = set(edgar.load_artifact(_NO_XML_KEY) or [])
+    if accession in _no_xml:
+        return None
     folder = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}"
     try:
         xml = edgar.cached_bytes(f"{folder}/primary_doc.xml").decode("utf-8", "replace")
-    except Exception:
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            _no_xml.add(accession)
+            edgar.save_artifact(_NO_XML_KEY, sorted(_no_xml))
         return None
+    except Exception:
+        return None  # a network error: try again next run
     pct = re.search(r"<(?:classPercent|percentOfClass)>\s*([\d.]+)", xml)
     person = re.search(r"<reportingPersonName>\s*([^<]+)", xml)
     event = re.search(r"<eventDateRequiresFilingThisStatement>\s*([^<]+)", xml)
