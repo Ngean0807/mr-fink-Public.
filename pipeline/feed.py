@@ -85,6 +85,26 @@ def _parse_13g(cik: str, accession: str) -> dict | None:
     }
 
 
+def _stake(cik: str, r: dict, agents: dict) -> dict | None:
+    """A Big Three 13G/13D on this company, or None when another filer or an unparseable form."""
+    mgr = agents.get(r["accession"][:10])
+    if not mgr:
+        return None
+    g = _parse_13g(cik, r["accession"])
+    if not g:
+        return None
+    return {"manager": mgr, "form": r["form"], "filed": r["filed"], "accepted": r["accepted"], "accession": r["accession"], **g}
+
+
+def company_filings(cik: str, ttl_hours: float) -> tuple[str | None, list[dict]]:
+    """(latest 10-Q/10-K accession, Big Three 13G/13D stakes newest first) for a company outside the feed."""
+    _, rows = _recent(cik, ttl_hours)
+    agents = _agent_map()
+    report = next((r["accession"] for r in rows if r["form"] in REPORT_FORMS), None)
+    stakes = [x for x in (_stake(cik, r, agents) for r in rows if r["form"] in G_FORMS) if x]
+    return report, sorted(stakes, key=lambda g: g["accepted"], reverse=True)
+
+
 def build_feed(securities: dict[str, dict], ttl_hours: float, log=print) -> tuple[list[dict], dict[str, list], dict[str, str]]:
     """Returns (events newest first, 13G stakes per CUSIP, latest 10-Q/10-K accession per CIK)."""
     events: list[dict] = []
@@ -132,13 +152,10 @@ def build_feed(securities: dict[str, dict], ttl_hours: float, log=print) -> tupl
                     "url": f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{r['accession'].replace('-', '')}/{r['doc']}",
                 })
             elif r["form"] in G_FORMS:
-                mgr = agents.get(r["accession"][:10])
-                if not mgr:
+                item = _stake(cik, r, agents)
+                if not item:
                     continue
-                g = _parse_13g(cik, r["accession"])
-                if not g:
-                    continue
-                item = {"manager": mgr, "form": r["form"], "filed": r["filed"], "accepted": r["accepted"], "accession": r["accession"], **g}
+                mgr, g = item["manager"], item
                 for c in cusips:
                     stakes.setdefault(c, []).append(item)
                 events.append({"kind": "13g", "manager": mgr, "tickers": tickers, "entity": g["reporter"] or names[mgr],

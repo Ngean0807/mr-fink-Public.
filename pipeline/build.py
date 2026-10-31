@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import hashlib
+import re
 
 from . import analytics, config, edgar, emerging, feed, fundamentals, notify, nport, periods, quotes, securities, thirteenf
 
@@ -48,7 +49,7 @@ def combine(books: dict[str, dict], period_list: list[str]) -> dict:
     return out
 
 
-def describe_security(c: str, info: dict, books: dict, row: list, period_list: list[str]) -> dict:
+def describe_security(c: str, info: dict, books: dict, row: list, period_list: list[str], quiet: bool = False) -> dict:
     """Identity, splits, CUSIP history and SEC profile for one security."""
     ticker = securities.display_ticker(info["ticker"])
     preds = analytics.find_predecessors(c, row[2], books, period_list)
@@ -70,8 +71,37 @@ def describe_security(c: str, info: dict, books: dict, row: list, period_list: l
         prof = securities.profile(company["cik"])
         meta.update(prof)
         meta["sector"] = securities.SECTOR_OVERRIDES.get(ticker, prof["sector"])
-    print(f"  {ticker:<7} {meta['name'][:34]:<34} splits={[(s['period'], s['ratio']) for s in splits]} preds={[p['cusip'] for p in preds]}")
+    if not quiet:
+        print(f"  {ticker:<7} {meta['name'][:34]:<34} splits={[(s['period'], s['ratio']) for s in splits]} preds={[p['cusip'] for p in preds]}")
     return meta
+
+
+def holders_of(c: str, meta: dict, books_with_big3: dict, views: dict, period_list: list[str]) -> dict:
+    chain = [c] + [p["cusip"] for p in meta["predecessors"]]
+    so = (meta.get("fundamentals") or {}).get("sharesOutstanding")
+    holders = {}
+    for vid, book in books_with_big3.items():
+        series = analytics.position_series(chain, book, period_list, meta["splits"])
+        if not any(x["s"] for x in series):
+            continue
+        holders[vid] = {
+            "series": [[x["s"], x["v"]] for x in series],
+            "rank": views[vid]["rank"].get(c),
+            "ownership": series[-1]["s"] / so if so else None,
+            **analytics.position_metrics(series),
+        }
+    return holders
+
+
+def add_fundamentals(meta: dict, latest: str, version: str | None) -> None:
+    if not meta.get("cik"):
+        return
+    meta["fundamentals"] = fundamentals.analyze(meta["cik"], meta["ticker"], meta["price"], latest, meta.get("sic", 0), version)
+    pred_cik = securities.PREDECESSOR_REGISTRANTS.get(meta["cik"])
+    if pred_cik and not (meta["fundamentals"] or {}).get("available"):
+        # New holding-company registrant with no reporting history yet: use the predecessor's filings.
+        meta["fundamentals"] = fundamentals.analyze(pred_cik, meta["ticker"], meta["price"], latest, meta.get("sic", 0), "pred")
+        meta["fundamentalsCik"] = pred_cik
 
 
 def prune_legacy_cache() -> None:
@@ -81,6 +111,33 @@ def prune_legacy_cache() -> None:
             if pattern.endswith(".xml") and f.stat().st_size < 1_000_000:
                 continue  # small primary docs (13F cover pages, 13G) stay cached
             f.unlink(missing_ok=True)
+
+
+def write_company_pages(lite: dict[str, dict], quotes_now: dict) -> None:
+    """One file per Emerging company outside the main data: profile, price history, intraday."""
+    folder = OUT.with_name("co")
+    folder.mkdir(parents=True, exist_ok=True)
+    tickers = sorted({m["ticker"] for m in lite.values()})
+    hist = {}
+    for t in tickers:
+        try:
+            hist[t] = quotes.history(t)
+        except Exception as e:
+            print(f"  price history unavailable for {t}: {e}")
+    day = quotes.intraday_cached(tickers, budget=90)
+    written = set()
+    for meta in lite.values():
+        t = meta["ticker"]
+        slug = re.sub(r"[^a-z0-9]+", "-", t.lower())
+        q = {**(day.get(t) or {}), **(quotes_now.get(t) or {})}  # the batch quote is the fresher price
+        if day.get(t, {}).get("intraday"):
+            q["intraday"] = day[t]["intraday"]
+        (folder / f"{slug}.json").write_text(json.dumps({"security": meta, "history": hist.get(t), "quote": q or None}, separators=(",", ":")))
+        written.add(f"{slug}.json")
+    for f in folder.glob("*.json"):
+        if f.name not in written:
+            f.unlink()
+    print(f"Company pages: {len(written)} files, {len(hist)} with price history, {sum(1 for v in day.values() if v.get('intraday'))} with intraday")
 
 
 def main() -> None:
@@ -136,43 +193,43 @@ def main() -> None:
         if c not in sec_meta:
             sec_meta[c] = describe_security(c, r["figi"], books, books_with_big3["big3"][latest][c], period_list)
         sec_meta[c]["emerging"] = True
+    # The other Emerging names get the same company page, written to its own file (data/co/) and
+    # loaded when opened, so the main data file stays small. They are not in the filing feed.
+    lite: dict[str, dict] = {}
+    for r in emerging_rows:
+        c = r["cusip"]
+        if c in sec_meta:
+            continue
+        try:
+            lite[c] = describe_security(c, r["figi"], books, books_with_big3["big3"][latest][c], period_list, quiet=True)
+            lite[c]["emerging"] = True
+        except Exception as e:
+            print(f"  company page skipped for {r['ticker']}: {e}")
+    print(f"Emerging: {len(lite)} company pages outside the main data file")
 
     feed_events, stakes_13g, latest_report = feed.build_feed(sec_meta, config.SUBMISSIONS_TTL_HOURS)
     # Fund-level positions (N-PORT) for every tracked security, and the funds' filings in the feed.
-    chains = {c: [c] + [p["cusip"] for p in m["predecessors"]] for c, m in sec_meta.items()}
+    chains = {c: [c] + [p["cusip"] for p in m["predecessors"]] for c, m in {**sec_meta, **lite}.items()}
     fund_positions, nport_events = nport.build(chains, ttl_hours=6)
-    for c, m in sec_meta.items():
+    for c, m in {**sec_meta, **lite}.items():
         m["funds"] = sorted(fund_positions.get(c, []), key=lambda f: -f["value"])
     feed_events = sorted(feed_events + nport_events, key=lambda e: e["accepted"], reverse=True)
     for c, meta in sec_meta.items():
         meta["stakes13g"] = sorted(stakes_13g.get(c, []), key=lambda g: g["accepted"], reverse=True)
-        if meta.get("cik"):
-            meta["fundamentals"] = fundamentals.analyze(
-                meta["cik"], meta["ticker"], meta["price"], latest, meta.get("sic", 0), latest_report.get(meta["cik"])
-            )
-            pred_cik = securities.PREDECESSOR_REGISTRANTS.get(meta["cik"])
-            if pred_cik and not (meta["fundamentals"] or {}).get("available"):
-                # New holding-company registrant with no reporting history yet: use the predecessor's filings.
-                meta["fundamentals"] = fundamentals.analyze(pred_cik, meta["ticker"], meta["price"], latest, meta.get("sic", 0), "pred")
-                meta["fundamentalsCik"] = pred_cik
+        add_fundamentals(meta, latest, latest_report.get(meta.get("cik")))
 
     # Every selected security gets each manager's full history, so the detail view can compare
     # all three houses even where a name is outside one manager's top 30.
     for c, meta in sec_meta.items():
-        chain = [c] + [p["cusip"] for p in meta["predecessors"]]
-        so = (meta.get("fundamentals") or {}).get("sharesOutstanding")
-        holders = {}
-        for vid, book in books_with_big3.items():
-            series = analytics.position_series(chain, book, period_list, meta["splits"])
-            if not any(x["s"] for x in series):
-                continue
-            holders[vid] = {
-                "series": [[x["s"], x["v"]] for x in series],
-                "rank": views[vid]["rank"].get(c),
-                "ownership": series[-1]["s"] / so if so else None,
-                **analytics.position_metrics(series),
-            }
-        meta["holders"] = holders
+        meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
+    for c, meta in lite.items():
+        if meta.get("cik"):
+            report, stakes = feed.company_filings(meta["cik"], ttl_hours=6)
+            meta["stakes13g"] = stakes
+            add_fundamentals(meta, latest, report)
+        else:
+            meta["stakes13g"] = []
+        meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
 
     out_views = {}
     names = {m["id"]: m["name"] for m in config.MANAGERS}
@@ -257,6 +314,7 @@ def main() -> None:
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))
     OUT.with_name("history.json").write_text(json.dumps(price_history, separators=(",", ":")))
+    write_company_pages(lite, data["quotes"]["quotes"])
     # Phone pushes go out only after the new data is written, so the link opens fresh numbers.
     notify.sync_from_site()
     notify.notify_new(feed_events)

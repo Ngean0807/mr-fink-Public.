@@ -10,6 +10,7 @@ import json
 import time
 import urllib.request
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from . import edgar
 
@@ -78,6 +79,39 @@ def history(ticker: str) -> dict:
     out = {"d0": days[0] if days else 0, "dd": [b - a for a, b in zip(days, days[1:])], "c": [round(c * 100) for _, c in pts]}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out))
+    return out
+
+
+def market_open(now: datetime | None = None) -> bool:
+    ny = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    minutes = ny.hour * 60 + ny.minute
+    return ny.weekday() < 5 and 9 * 60 + 30 <= minutes < 16 * 60 + 15
+
+
+def intraday_cached(tickers: list[str], budget: int, max_age: float = 1800, log=print) -> dict:
+    """Five-day intraday series for many tickers without fetching them all every run: cached
+    copies older than `max_age` seconds are refreshed, at most `budget` per run, oldest first."""
+    folder = edgar.CACHE_DIR / "prices"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = {t: folder / f"{yahoo_symbol(t)}_5d.json" for t in tickers}
+    age = {t: time.time() - path[t].stat().st_mtime if path[t].exists() else float("inf") for t in tickers}
+    if not market_open():
+        max_age = max(max_age, 6 * 3600)  # nothing trades: a closing copy stays current
+    missing = [t for t in tickers if age[t] == float("inf")]
+    stale = missing + sorted((t for t in tickers if max_age < age[t] < float("inf")), key=lambda t: -age[t])[:budget]
+    for t in stale:
+        try:
+            path[t].write_text(json.dumps(intraday(t)))
+        except Exception as e:
+            log(f"  intraday unavailable for {t}: {e}")
+        time.sleep(0.25)
+    out = {}
+    for t in tickers:
+        try:
+            out[t] = json.loads(path[t].read_text())
+        except Exception:
+            pass
+    log(f"Intraday (cached): refreshed {len(stale)}, {len(out)}/{len(tickers)} available")
     return out
 
 
