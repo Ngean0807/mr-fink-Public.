@@ -222,12 +222,28 @@
   // subscribed; navigating swaps the set. Opening quotes come over REST (60 calls a minute).
   const WS_LIMIT = 50;
   let rt = null;
+  /** Symbols with a live price on screen, most visible first: page subject, price strip, table. */
   function wantedSymbols() {
     const list = [];
     if (state.page === "company") { const s = bySlug(state.slug); if (s) list.push(s.ticker); }
-    if (state.page === "emerging") list.push(...emergingRows().map((r) => sec(r.cusip).ticker));
-    if (state.page !== "emerging") list.push(...view().rows.map((r) => sec(r.cusip).ticker));
+    const tableRows = state.page === "emerging" ? emergingSorted() : view().rows;
+    list.push(...tableRows.slice(0, 12).map((r) => sec(r.cusip).ticker));  // the price strip
+    if (state.page !== "company") list.push(...tableRows.map((r) => sec(r.cusip).ticker));
     return [...new Set(list)].slice(0, WS_LIMIT);
+  }
+  // One queue for opening quotes, one call every 1.1 s (Finnhub free tier: 60 a minute). Symbols that
+  // leave the screen before their turn are dropped.
+  const restQueue = [];
+  let restTimer = null;
+  function pumpRest() {
+    restTimer = null;
+    while (restQueue.length && !rt.subs.has(restQueue[0])) rt.quoted.delete(restQueue.shift());
+    const t = restQueue.shift();
+    if (!t) return;
+    fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t)}&token=${encodeURIComponent(rt.key)}`)
+      .then((r) => r.json()).then((q) => { if (q && q.c) setQuote(t, { price: q.c, prevClose: q.pc, dayHigh: q.h, dayLow: q.l, time: q.t }); })
+      .catch(() => rt.quoted.delete(t));
+    if (restQueue.length) restTimer = setTimeout(pumpRest, 1100);
   }
   function syncSubscriptions() {
     if (!rt || !rt.ws || rt.ws.readyState !== 1) return;
@@ -235,14 +251,8 @@
     for (const t of [...rt.subs]) if (!want.has(t)) { rt.ws.send(JSON.stringify({ type: "unsubscribe", symbol: t })); rt.subs.delete(t); }
     const fresh = [];
     for (const t of want) if (!rt.subs.has(t)) { rt.ws.send(JSON.stringify({ type: "subscribe", symbol: t })); rt.subs.add(t); if (!rt.quoted.has(t)) fresh.push(t); }
-    fresh.forEach((t, i) => {
-      rt.quoted.add(t);
-      setTimeout(() => {
-        fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t)}&token=${encodeURIComponent(rt.key)}`)
-          .then((r) => r.json()).then((q) => { if (q && q.c) setQuote(t, { price: q.c, prevClose: q.pc, dayHigh: q.h, dayLow: q.l, time: q.t }); })
-          .catch(() => rt.quoted.delete(t));
-      }, i * 1100);
-    });
+    for (const t of fresh) { rt.quoted.add(t); restQueue.push(t); }
+    if (fresh.length && !restTimer) restTimer = setTimeout(pumpRest, 0);
   }
   function startRealtime(key) {
     priceMode = "realtime";
@@ -443,7 +453,7 @@
 
   // ---------- header ----------
   function renderTape() {
-    const rows = (state.page === "emerging" ? emergingRows() : view().rows).slice(0, 12);
+    const rows = (state.page === "emerging" ? emergingSorted() : view().rows).slice(0, 12);
     $("tape").innerHTML = rows.map((r) => {
       const s = sec(r.cusip);
       return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
@@ -526,7 +536,7 @@
     const tabs = ticker ? "" : `<div class="tabs" role="group" aria-label="Filing type">${[["all", "All"], ["13f", "13F"], ["13g", "13G/D"], ["nport", "N-PORT"], ["8k", "8-K"], ["report", "10-Q/K"]].map(([k, l]) => `<button type="button" class="tab" data-feed="${k}" aria-pressed="${state.feedTab === k}">${l}</button>`).join("")}</div>`;
     return `<section class="card" aria-labelledby="feed-h">
       <div class="card-head"><h2 id="feed-h">${ticker ? "Recent filings" : "Latest SEC filings"}</h2><span class="feed-meta" data-checked></span></div>
-      ${tabs}<div class="list">${rows}</div>
+      ${tabs}<div class="list wrap">${rows}</div>
       ${items.length > 7 ? `<button type="button" class="more" data-more>${state.feedMore ? "Show fewer" : `Show ${Math.min(30, items.length) - 7} more`}</button>` : ""}
     </section>`;
   }
@@ -763,7 +773,7 @@
       const inner = c.sortable === false ? c.label : `<button type="button" data-sort="${c.key}">${c.label}${sorted ? (state.sort.dir > 0 ? " ↑" : " ↓") : ""}</button>`;
       return `<th scope="col" class="${c.cls || ""}${c.sep ? " sep" : ""}"${aria}>${inner}</th>`;
     }).join("")}</tr></thead>`;
-    const tbody = `<tbody>${rows.map((r) => `<tr data-slug="${slugOf(sec(r.cusip).ticker)}">${cols.map((c) => `<td class="${c.cls || ""}${c.sep ? " sep" : ""}">${c.render(r)}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    const tbody = !rows.length ? `<tbody><tr><td colspan="${cols.length}" class="l na" style="height:64px">No holding matches “${esc(state.filter)}”.</td></tr></tbody>` : `<tbody>${rows.map((r) => `<tr data-slug="${slugOf(sec(r.cusip).ticker)}">${cols.map((c) => `<td class="${c.cls || ""}${c.sep ? " sep" : ""}">${c.render(r)}</td>`).join("")}</tr>`).join("")}</tbody>`;
     const t = $("tbl");
     t.classList.toggle("grouped", !!grp);
     t.innerHTML = thead + tbody;
@@ -840,32 +850,37 @@
   }
   const pp = (x, signed = true) => (x == null ? "—" : (signed && x > 0 ? "+" : "") + (x * 100).toFixed(x * 100 >= 10 || x * 100 <= -10 ? 1 : 2) + " pp");
 
-  function renderEmerging() {
-    const E = D.emerging;
+  const EM_SORT = {
+    ticker: (r) => sec(r.cusip).ticker,
+    px: (r) => pxOf(sec(r.cusip).ticker) || r.price,
+    day: (r) => dayChg(sec(r.cusip).ticker),
+    mcap: (r) => r.sharesOutstanding * (pxOf(sec(r.cusip).ticker) || r.price),
+    stake: (r) => r.stake,
+    stakeChangeQoQ: (r) => r.stakeChangeQoQ,
+    stakeChangeYoY: (r) => r.stakeChangeYoY,
+    breadth: (r) => r.breadth,
+    flowYoY: (r) => r.flowYoY,
+    pattern: (r) => r.pattern,
+    rev: (r) => (sec(r.cusip).fundamentals || {}).revenueGrowth,
+  };
+  function emergingSorted() {
     const f = state.em;
-    const rows = emergingRows();
-    const diag = E.diagnostics || {};
-    const cols = [
-      ["ticker", "Company", (r) => sec(r.cusip).ticker],
-      ["px", "Price", (r) => pxOf(sec(r.cusip).ticker) || r.price],
-      ["day", "Today", (r) => dayChg(sec(r.cusip).ticker)],
-      ["mcap", "Market cap", (r) => r.sharesOutstanding * (pxOf(sec(r.cusip).ticker) || r.price)],
-      ["stake", "Big Three stake", (r) => r.stake],
-      ["stakeChangeQoQ", "Δ stake QoQ", (r) => r.stakeChangeQoQ],
-      ["stakeChangeYoY", "Δ stake YoY", (r) => r.stakeChangeYoY],
-      ["breadth", "Buying", (r) => r.breadth],
-      ["flowYoY", "Net buying YoY", (r) => r.flowYoY],
-      ["pattern", "Pattern", (r) => r.pattern],
-      ["rev", "Rev. growth", (r) => (sec(r.cusip).fundamentals || {}).revenueGrowth],
-    ];
-    const col = cols.find((c) => c[0] === f.sort) || cols[6];
-    const sorted = rows.slice().sort((a, b) => {
-      const x = col[2](a), y = col[2](b);
+    const get = EM_SORT[f.sort] || EM_SORT.stakeChangeYoY;
+    return emergingRows().slice().sort((a, b) => {
+      const x = get(a), y = get(b);
       if (x == null && y == null) return 0;
       if (x == null) return 1;
       if (y == null) return -1;
       return (x < y ? -1 : x > y ? 1 : 0) * f.dir;
     });
+  }
+
+  function renderEmerging() {
+    const E = D.emerging;
+    const f = state.em;
+    const rows = emergingRows();
+    const diag = E.diagnostics || {};
+    const sorted = emergingSorted();
     const mgrDots = (r) => MGRS.map((id) => {
       const m = r.managers[id];
       const up = m && m.stake - (m.stakeYearAgo || 0) > 0.001;
@@ -891,7 +906,9 @@
       </tr>`;
     }).join("");
     const th = (key, label, cls = "") => `<th scope="col" class="${cls}"${f.sort === key ? ` aria-sort="${f.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-emsort="${key}">${label}${f.sort === key ? (f.dir > 0 ? " ↑" : " ↓") : ""}</button></th>`;
-    const counts = Object.keys(PATTERNS).map((k) => [k, emergingAll().filter((r) => r.pattern === k).length]);
+    // Tab counts reflect every other filter, so they add up to the rows shown under "All".
+    const unpatterned = (() => { const keep = f.pattern; f.pattern = "all"; const r = emergingRows(); f.pattern = keep; return r; })();
+    const counts = Object.keys(PATTERNS).map((k) => [k, unpatterned.filter((r) => r.pattern === k).length]);
 
     $("app").innerHTML = `
       <div class="main">
@@ -911,7 +928,7 @@
           <label class="chk"><input id="em-thin" type="checkbox" ${f.hideThin ? "checked" : ""}> Hide thin trading</label>
           <label class="chk"><input id="em-three" type="checkbox" ${f.allThree ? "checked" : ""}> All three buying</label>
         </div>
-        <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${emergingAll().length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
+        <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${unpatterned.length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
         <div class="table-scroll"><table class="tbl em-tbl">
           <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
           <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
@@ -931,7 +948,7 @@
         </section>
         <section class="card" aria-labelledby="pat-h">
           <div class="card-head"><h2 id="pat-h">Patterns</h2></div>
-          <div class="list">${Object.entries(PATTERNS).map(([k, [l, d]]) => `<div class="item"><span class="pat pat-${k}">${l}</span><span class="nm"><small>${esc(d)}</small></span><span></span></div>`).join("")}</div>
+          <div class="list prose">${Object.entries(PATTERNS).map(([k, [l, d]]) => `<div class="item"><span class="pat pat-${k}">${l}</span><span class="nm"><small>${esc(d)}</small></span><span></span></div>`).join("")}</div>
         </section>
         <section class="card" aria-labelledby="top-em-h">
           <div class="card-head"><h2 id="top-em-h">Largest stake gains</h2></div>
@@ -941,8 +958,14 @@
 
     const app = $("app");
     const num0 = (id) => parseFloat($(id).value);
-    $("em-pmin").addEventListener("change", () => { f.pmin = Math.max(0, num0("em-pmin") || 0); render(); });
-    $("em-pmax").addEventListener("change", () => { f.pmax = Math.max(f.pmin, num0("em-pmax") || 30); render(); });
+    const setRange = () => {
+      const a = Math.max(0, isNaN(num0("em-pmin")) ? 0 : num0("em-pmin"));
+      const b = Math.max(0, isNaN(num0("em-pmax")) ? 30 : num0("em-pmax"));
+      [f.pmin, f.pmax] = a <= b ? [a, b] : [b, a];
+      render();
+    };
+    $("em-pmin").addEventListener("change", setRange);
+    $("em-pmax").addEventListener("change", setRange);
     $("em-mcap").addEventListener("change", (e) => { f.mcap = +e.target.value; render(); });
     $("em-deals").addEventListener("change", (e) => { f.hideDeals = e.target.checked; render(); });
     $("em-thin").addEventListener("change", (e) => { f.hideThin = e.target.checked; render(); });
@@ -995,7 +1018,7 @@
     $("app").innerHTML = `
       <div class="main">
         <div class="hero">
-          <nav class="crumbs" aria-label="Breadcrumb"><a href="#${state.view}">${esc(MGR_NAME[state.view])}</a><span aria-hidden="true">›</span><span>${esc(s.ticker)}${s.exchange ? " • " + esc(s.exchange.toUpperCase()) : ""}</span></nav>
+          <nav class="crumbs" aria-label="Breadcrumb">${state.from === "emerging" ? '<a href="#emerging">Emerging</a>' : `<a href="#${state.view}">${esc(MGR_NAME[state.view])}</a>`}<span aria-hidden="true">›</span><span>${esc(s.ticker)}${s.exchange ? " • " + esc(s.exchange.toUpperCase()) : ""}</span></nav>
           <h1>${esc(niceName(s.name))} ${tkChip(s)}</h1>
           <p class="hero-sub">${esc(s.sector || "")}${s.industry ? " · " + esc(s.industry) : ""}</p>
           <div class="figure" id="co-figure">${coFigure(s)}</div>
@@ -1092,7 +1115,7 @@
     if (!funds.length) return "";
     const rows = funds.map((f) => {
       const chg = f.prevShares ? f.shares / f.prevShares - 1 : null;
-      return `<tr><td class="l">${dot(f.manager)}<b>${esc(f.fund)}</b> <span class="muted">${esc(f.name)}</span></td><td>${dateL(f.period)}</td><td>${num(f.shares)}</td><td>${usd(f.value)}</td><td>${pct(f.weight, 2, false)}</td><td>${f.prevShares ? pill(chg, { sm: true }) : '<span class="act new">New</span>'}</td><td>${live("val", s.ticker, f.shares)}</td></tr>`;
+      return `<tr><td class="l fund-cell">${dot(f.manager)}<b>${esc(f.fund)}</b> <span class="muted fund-name">${esc(f.name)}</span></td><td>${dateL(f.period)}</td><td>${num(f.shares)}</td><td>${usd(f.value)}</td><td>${f.weight < 0.0001 ? "<0.01%" : pct(f.weight, 2, false)}</td><td>${f.prevShares ? pill(chg, { sm: true }) : '<span class="act new">New</span>'}</td><td>${live("val", s.ticker, f.shares)}</td></tr>`;
     }).join("");
     return `<section class="section" aria-labelledby="funds-h">
       <div class="section-head"><h2 id="funds-h">Held in these index funds</h2><span class="note">Form N-PORT, fund by fund</span></div>
@@ -1191,6 +1214,7 @@
     const h = decodeURIComponent(location.hash.replace("#", ""));
     const before = state.page + state.slug;
     if (h.startsWith("t-")) {
+      if (state.page !== "company") state.from = state.page;
       state.page = "company";
       state.slug = h.slice(2);
     } else if (h === "emerging" && D.emerging) {
