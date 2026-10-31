@@ -235,6 +235,11 @@ button { font: inherit; color: inherit; }
 .em-tools { gap: 8px; align-items: center; flex-wrap: wrap; }
 .sortby { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-right: auto; }
 .sortby select { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 0 8px; font: inherit; }
+.sortval { display: none; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sortval b { font-weight: 500; color: var(--ink); }
+.linkbtn { all: unset; cursor: pointer; color: var(--accent-ink); font-size: 13px; }
+.linkbtn:hover { text-decoration: underline; }
+@media (max-width: 640px) { .sortval { display: block; } }
 .season { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--radius); background: var(--surface-2); padding: 12px 16px; font-size: 13px; color: var(--ink-2); }
 .season b { color: var(--ink); font-weight: 500; }
 .season a { color: inherit; }
