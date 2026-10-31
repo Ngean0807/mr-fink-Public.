@@ -22,7 +22,7 @@
     cmp: (() => { try { return localStorage.getItem("mrfink.cmp") === "1"; } catch (e) { return false; } })(),
     view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
-    em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
+    em: { pmin: 2, pmax: 30, mcapMin: 0, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
   };
 
   // ---------- watchlist (kept in this browser) ----------
@@ -1000,7 +1000,7 @@
       const p = pxOf(t) || r.price;
       const mcap = r.sharesOutstanding * p;
       const flags = liveFlags(r);
-      return p >= f.pmin && p <= f.pmax && mcap <= f.mcap
+      return p >= f.pmin && p <= f.pmax && mcap >= f.mcapMin && mcap <= f.mcap
         && (f.pattern === "all" || r.pattern === f.pattern)
         && !(f.hideDeals && flags.includes("pending-deal"))
         && !(f.hideThin && flags.includes("thin"))
@@ -1023,6 +1023,10 @@
     rev: (r) => (emSec(r).fundamentals || {}).revenueGrowth,
     ins: (r) => (r.insiders ? r.insiders.bought - r.insiders.sold : null),
   };
+  const MC_STEPS = [[0, "$0"], [5e7, "$50M"], [1e8, "$100M"], [3e8, "$300M"], [5e8, "$500M"], [1e9, "$1B"], [2e9, "$2B"], [3e9, "$3B"], [5e9, "$5B"], [1e10, "$10B"]];
+  const MC_PRESETS = [["all", 0, 1e10, "All sizes"], ["micro", 0, 3e8, "Micro · under $300M"], ["small", 3e8, 2e9, "Small · $300M–$2B"], ["mid", 2e9, 1e10, "Mid · $2B–$10B"]];
+  const EM_SORT_LABELS = [["stakeChangeYoY", "Δ Big Three stake, 1 year"], ["stakeChangeQoQ", "Δ Big Three stake, 1 quarter"], ["stake", "Big Three stake"], ["mcap", "Market cap"],
+    ["px", "Price"], ["day", "Today’s change"], ["flowYoY", "Net buying, 1 year"], ["ins", "Insider buying, 90 days"], ["rev", "Revenue growth"], ["breadth", "Managers buying"], ["ticker", "Ticker"]];
   function emergingSorted() {
     const f = state.em;
     const get = EM_SORT[f.sort] || EM_SORT.stakeChangeYoY;
@@ -1150,13 +1154,19 @@
         </details>
         <div class="filters" role="group" aria-label="Screen filters">
           <label>Price <input id="em-pmin" type="number" min="0" step="1" value="${f.pmin}"> – <input id="em-pmax" type="number" min="1" step="1" value="${f.pmax}"></label>
-          <label>Market cap <select id="em-mcap">${[[5e8, "under $500M"], [1e9, "under $1B"], [3e9, "under $3B"], [5e9, "under $5B"], [1e10, "under $10B"]].map(([v, l]) => `<option value="${v}" ${f.mcap === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <span class="mc-presets" role="group" aria-label="Company size">${MC_PRESETS.map(([k, lo, hi, l]) => `<button type="button" class="chip" data-mc="${k}" aria-pressed="${f.mcapMin === lo && f.mcap === hi}">${l}</button>`).join("")}</span>
+          <label>Market cap <select id="em-mcmin" aria-label="Minimum market cap">${MC_STEPS.filter(([v]) => v < 1e10).map(([v, l]) => `<option value="${v}" ${f.mcapMin === v ? "selected" : ""}>${v ? "from " + l : "no minimum"}</option>`).join("")}</select>
+            – <select id="em-mcmax" aria-label="Maximum market cap">${MC_STEPS.filter(([v]) => v > 0).map(([v, l]) => `<option value="${v}" ${f.mcap === v ? "selected" : ""}>${v === 1e10 ? "up to $10B (all)" : "up to " + l}</option>`).join("")}</select></label>
           <label class="chk"><input id="em-deals" type="checkbox" ${f.hideDeals ? "checked" : ""}> Hide pending deals</label>
           <label class="chk"><input id="em-thin" type="checkbox" ${f.hideThin ? "checked" : ""}> Hide thin trading</label>
           <label class="chk"><input id="em-three" type="checkbox" ${f.allThree ? "checked" : ""}> All three buying</label>
         </div>
         <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${unpatterned.length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
-        <div class="tools em-tools">${exportBtn("export-em")}</div>
+        <div class="tools em-tools">
+          <label class="sortby">Sort by <select id="em-sortby">${EM_SORT_LABELS.map(([k, l]) => `<option value="${k}" ${f.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <button type="button" class="btn" id="em-sortdir" aria-label="Reverse the order">${f.sort === "ticker" ? (f.dir > 0 ? "A → Z" : "Z → A") : f.dir < 0 ? "High → low" : "Low → high"}</button>
+          ${exportBtn("export-em")}
+        </div>
         <div class="table-scroll"><table class="tbl em-tbl">
           <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}${th("ins", "Insiders 90d")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
           <tbody>${body || `<tr><td colspan="14" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
@@ -1198,7 +1208,12 @@
     };
     $("em-pmin").addEventListener("change", setRange);
     $("em-pmax").addEventListener("change", setRange);
-    $("em-mcap").addEventListener("change", (e) => { f.mcap = +e.target.value; render(); });
+    const setMc = (lo, hi) => { [f.mcapMin, f.mcap] = lo <= hi ? [lo, hi] : [hi, lo]; f.limit = 100; render(); };
+    $("em-mcmin").addEventListener("change", (e) => setMc(+e.target.value, f.mcap));
+    $("em-mcmax").addEventListener("change", (e) => setMc(f.mcapMin, +e.target.value));
+    app.querySelectorAll("[data-mc]").forEach((b) => b.addEventListener("click", () => { const [, lo, hi] = MC_PRESETS.find((x) => x[0] === b.dataset.mc); setMc(lo, hi); }));
+    $("em-sortby").addEventListener("change", (e) => { f.sort = e.target.value; f.dir = f.sort === "ticker" ? 1 : -1; render(); });
+    $("em-sortdir").addEventListener("click", () => { f.dir = -f.dir; render(); });
     $("em-deals").addEventListener("change", (e) => { f.hideDeals = e.target.checked; render(); });
     $("em-thin").addEventListener("change", (e) => { f.hideThin = e.target.checked; render(); });
     $("em-three").addEventListener("change", (e) => { f.allThree = e.target.checked; render(); });
