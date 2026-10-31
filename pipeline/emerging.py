@@ -20,7 +20,8 @@ FRAMES = [
 ]
 SPAC = re.compile(r"\b(ACQUISITION|ACQUISITIONS|SPAC|BLANK CHECK|MERGER CORP)\b")
 FUND_SIC = {6221, 6722, 6726, 6770}  # commodity pools, open/closed-end funds, blank checks
-DEAL_FORMS = {"DEFM14A", "PREM14A", "DEFM14C", "PREM14C", "SC TO-T", "SC TO-T/A", "SC 14D9", "SC 14D9/A", "425", "SC 13E3"}
+# Filings a company makes as the target of a deal (425s are filed by acquirers too, so they are not used).
+DEAL_FORMS = {"DEFM14A", "PREM14A", "DEFM14C", "PREM14C", "SC TO-T", "SC TO-T/A", "SC 14D9", "SC 14D9/A", "SC 13E3"}
 HISTORY = 9  # quarters of stake history (two years plus the current quarter)
 
 
@@ -56,11 +57,46 @@ def deal_and_listing(cik: str) -> tuple[list[str], str | None, bool]:
     sub = _filings(cik)
     r = sub["filings"]["recent"]
     since = (date.today() - timedelta(days=270)).isoformat()
-    deals = sorted({r["form"][i] for i in range(len(r["form"])) if r["form"][i] in DEAL_FORMS and r["filingDate"][i] >= since})
+    deal_dates = [(r["filingDate"][i], r["form"][i]) for i in range(len(r["form"])) if r["form"][i] in DEAL_FORMS and r["filingDate"][i] >= since]
+    items = r.get("items") or [""] * len(r["form"])
+    closed = [r["filingDate"][i] for i in range(len(r["form"])) if r["form"][i] == "8-K" and "2.01" in (items[i] or "")]
+    last_deal = max((d for d, _ in deal_dates), default=None)
+    # A completed-acquisition 8-K after the deal filings means the deal is done, not pending.
+    deals = [] if last_deal and any(c >= last_deal for c in closed) else sorted({f for _, f in deal_dates})
     # Older filers have paginated history ("files"); for them the first filing is long ago.
     first = None if sub["filings"].get("files") else (min(r["filingDate"]) if r["filingDate"] else None)
     foreign = any(f in ("20-F", "40-F", "6-K") for f in r["form"][:200])
     return deals, first, foreign
+
+
+def known_names(cik: str) -> set[str]:
+    """Current and former SEC names of the company, as issuer keys (Bitfarms became Keel)."""
+    sub = _filings(cik)
+    names = [sub.get("name") or ""] + [f.get("name") or "" for f in sub.get("formerNames") or []]
+    return {analytics._issuer_key(n) for n in names if n}
+
+
+def facts_shares(cik: str, period: str) -> float | None:
+    """Fallback share count from the company's own XBRL (e.g. June fiscal years missing from the
+    quarter's frame): the balance-sheet or cover-page count dated closest to the quarter end."""
+    key = f"shares_{cik}_{date.today():%Y-%m}.json.gz"  # refreshed monthly
+    pts = edgar.load_artifact(key)
+    if pts is None:
+        try:
+            raw = edgar.cached_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", ttl_hours=0.01)
+        except Exception:
+            return None
+        pts = []
+        for tx, concept in (("us-gaap", "CommonStockSharesOutstanding"), ("dei", "EntityCommonStockSharesOutstanding")):
+            for it in raw.get("facts", {}).get(tx, {}).get(concept, {}).get("units", {}).get("shares", []):
+                pts.append([it["end"], it["val"]])
+        for f in edgar.CACHE_DIR.glob(f"data.sec.gov_api_xbrl_companyfacts_CIK{cik}.json*"):
+            f.unlink(missing_ok=True)  # keep only the slim extract
+        edgar.save_artifact(key, pts)
+    target = date.fromisoformat(period)
+    near = [(abs((date.fromisoformat(e) - target).days), v) for e, v in pts if v]
+    near = [x for x in near if x[0] <= 75]
+    return float(min(near)[1]) if near else None
 
 
 def classify(stakes: list[float | None], first_idx: int) -> str:
@@ -100,8 +136,8 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
             continue
         sy = big3.get(Y, {}).get(c, [0])[0]
         sq = big3.get(Q, {}).get(c, [0])[0]
-        if sy and s <= sy and (not sq or s <= sq):
-            continue  # not growing at all (the stake test below decides what counts as growth)
+        if sy and s < 0.85 * sy and (not sq or s < 0.85 * sq):
+            continue  # clearly selling; a stake can still rise on flat holdings when the company buys back shares
         pre.append(c)
     diag["prefilter"] = len(pre)
 
@@ -125,6 +161,11 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
     skipped_no_shares = 0
     unlinked = 0
     for c, info, cik in comp:
+        for p in hist_periods:
+            if cik not in so[p]:
+                fallback = facts_shares(cik, p) if p in (L, Q, Y) else None
+                if fallback:
+                    so[p][cik] = (fallback, "company-facts")
         if cik not in so[L] and cik not in so[Q]:
             skipped_no_shares += 1
             continue
@@ -176,7 +217,11 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         if y_ago is None and held_year_ago:
             skipped_no_shares += 1
             continue  # held a year ago but no share count to measure the stake: unknown, not zero
-        if not held_year_ago and outstanding(Y) and outstanding(Y) * px > 3e8:
+        prior_line = False
+        if not held_year_ago:
+            names = known_names(cik)
+            prior_line = any(x != c and analytics._issuer_key(row[2]) in names for x, row in big3.get(Y, {}).items())
+        if not held_year_ago and (prior_line or (outstanding(Y) and outstanding(Y) * px > 3e8)):
             # Already a sizeable public company a year ago, yet not held under any linked CUSIP:
             # a merger, redomicile or CUSIP change the history could not be joined across.
             # The gain is unknown, so the row is left out rather than shown as a new position.
@@ -202,8 +247,9 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         deals, first_filing, foreign = deal_and_listing(cik)
         if deals:
             flags.append("pending-deal")
-        if any(sp["ratio"] < 1 and sp["period"] >= Y for sp in splits):
-            flags.append("reverse-split")
+        raw_ratio = outstanding(L) / outstanding(Y) if outstanding(Y) else None
+        if any(sp["ratio"] < 1 and sp["period"] >= Y for sp in splits) or (raw_ratio is not None and raw_ratio < 0.5):
+            flags.append("reverse-split")  # from the filings, or the company's share count halving
         if bad:
             flags.append("price-mismatch")
         if approx:
