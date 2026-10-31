@@ -13,6 +13,7 @@ import urllib.request
 from . import config, edgar
 
 STATE = edgar.CACHE_DIR / "notified.json"
+TICKER_STATE = edgar.CACHE_DIR / "notified_tickers.json"
 MAX_PER_RUN = 8
 # Every kind of event the feed produces today. A fresh install treats them all as known; a kind
 # added after an install was seeded is recorded silently on its first run.
@@ -200,3 +201,79 @@ def export_state(path) -> None:
 def _save(accessions: list[str], kinds: set[str]) -> None:
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({"seen": accessions[-8000:], "kinds": sorted(kinds)}))
+
+
+# ---------- per-company channels ----------
+# Every filing by a tracked company (8-K, 10-Q/10-K, Big Three 13G/13D) also goes to that company's
+# own channel, so anyone can follow one stock from the ntfy app. Capped per run and per day so the
+# category channels above never lose deliveries to the shared ntfy.sh quota.
+TICKER_MAX_PER_RUN = 12
+TICKER_MAX_PER_DAY = 120
+TICKER_BACKLOG = 150
+
+
+def notify_tickers(events: list[dict], *, send=None, today: str | None = None, log=print) -> list[tuple[str, dict]]:
+    """Push unseen company filings to each company's channel. Returns the (topic, event) pairs sent."""
+    if not config.NTFY_PUBLIC_PREFIX and send is None:
+        return []
+    from datetime import date
+    today = today or date.today().isoformat()
+    site = site_url()
+    send = send or (lambda topic, e: _send(config.NTFY_SERVER, topic, [e], site))
+    events = [e for e in events if e.get("tickers") and e["kind"] in ("8k", "report", "13g")]
+    current = {e["accession"] for e in events}
+    if not TICKER_STATE.exists():
+        _save_tickers(sorted(current), today, 0)
+        log(f"Company channels: first run, {len(current)} filings recorded, nothing sent")
+        return []
+    state = json.loads(TICKER_STATE.read_text())
+    seen = set(state.get("seen", []))
+    sent_today = state.get("sent", 0) if state.get("day") == today else 0
+    unseen = sorted((e for e in events if e["accession"] not in seen), key=lambda e: e["accepted"])
+    done: set[str] = set()
+    out: list[tuple[str, dict]] = []
+    if len(unseen) > TICKER_BACKLOG:
+        done = {e["accession"] for e in unseen}
+        log(f"Company channels: {len(unseen)} unseen filings looks like lost state; recorded without sending")
+    else:
+        for e in unseen:
+            topics = [t for t in (config.ticker_topic(x) for x in e["tickers"]) if t]
+            if len(out) + len(topics) > TICKER_MAX_PER_RUN or sent_today + len(topics) > TICKER_MAX_PER_DAY:
+                break
+            try:
+                for t in topics:
+                    send(t, e)
+                    out.append((t, e))
+                sent_today += len(topics)
+                done.add(e["accession"])
+            except Exception as err:  # never fail the refresh; retried next run
+                log(f"Company channel push failed for {e['accession']}: {err}")
+                break
+    kept = [a for a in state.get("seen", []) if a in current or a in done] + sorted(done - seen)
+    _save_tickers(kept, today, sent_today)
+    log(f"Company channels: {len(out)} pushes, {len(unseen) - len(done)} filings waiting")
+    return out
+
+
+def sync_tickers_from_site(log=print) -> None:
+    site = site_url()
+    if not site:
+        return
+    try:
+        with urllib.request.urlopen(site + "data/notified_tickers.json", timeout=20) as r:
+            body = r.read()
+        json.loads(body)
+        TICKER_STATE.parent.mkdir(parents=True, exist_ok=True)
+        TICKER_STATE.write_bytes(body)
+    except Exception as err:
+        log(f"Company channels: no published state ({err}); using the local cache")
+
+
+def export_ticker_state(path) -> None:
+    if TICKER_STATE.exists():
+        path.write_text(TICKER_STATE.read_text())
+
+
+def _save_tickers(seen: list[str], day: str, sent: int) -> None:
+    TICKER_STATE.parent.mkdir(parents=True, exist_ok=True)
+    TICKER_STATE.write_text(json.dumps({"seen": seen[-20000:], "day": day, "sent": sent}))

@@ -6,6 +6,7 @@ complex for a period never double counts.
 """
 
 import os
+import re
 
 MANAGERS = [
     {
@@ -72,6 +73,13 @@ EMERGING = {
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_PUBLIC_PREFIX = os.environ.get("NTFY_PUBLIC_PREFIX", "mrfink-ngean0807")
 NTFY_CATEGORIES = {"13f": "13f", "13g": "stakes", "8k": "8k", "report": "reports", "nport": "funds"}
+
+
+def ticker_topic(ticker: str) -> str | None:
+    """Public channel with every SEC filing by one company, e.g. mrfink-ngean0807-t-nvda."""
+    if not NTFY_PUBLIC_PREFIX:
+        return None
+    return f"{NTFY_PUBLIC_PREFIX}-t-" + re.sub(r"[^a-z0-9]+", "-", ticker.lower()).strip("-")
 
 
 def public_topics() -> dict[str, str]:
