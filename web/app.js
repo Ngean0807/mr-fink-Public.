@@ -816,8 +816,8 @@
 
   // ---------- emerging ----------
   const PATTERNS = {
-    steady: ["Steady accumulation", "Stake rose in at least three of the last four quarters"],
-    step: ["Step-up", "One quarter added most of the gain, typical of an index addition"],
+    steady: ["Steady accumulation", "At least three of the last four quarters each added 0.75 points or more"],
+    step: ["Step-up", "One quarter added most of the gain (2+ points), typical of an index addition"],
     new: ["New position", "First held within the last year: IPO, spin-off or index entry"],
     rising: ["Rising", "Stake higher than a year ago, without a clear pattern"],
   };
@@ -960,7 +960,7 @@
           <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
           <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
         </table></div>
-        <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding from the company’s latest cover page (SEC XBRL), so offerings and splits do not count as buying. pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
+        <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. Names without a full company page open on SEC EDGAR (↗). pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
       </div>
       <aside class="rail" aria-label="About the screen">
         <section class="card" aria-labelledby="fun-h">
