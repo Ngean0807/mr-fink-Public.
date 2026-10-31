@@ -18,7 +18,10 @@ def split_ratio(prev: list, now: list) -> float:
     px = (now[1] / now[0]) / (prev[1] / prev[0])
     for r in (2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50):
         for ratio in (r, 1 / r):
-            if abs(k / ratio - 1) < 0.25 and abs(px * ratio - 1) < 0.2:
+            # A share count that moves by almost exactly a split ratio while the price moves the
+            # other way is a split, even in a quarter when the stock also doubled (KLAC, Q2 2026).
+            loose = abs(k / ratio - 1) < 0.06 and 1 / 3 < px * ratio < 3 and (px < 0.6 if ratio > 1 else px > 1 / 0.6)
+            if (abs(k / ratio - 1) < 0.25 and abs(px * ratio - 1) < 0.2) or loose:
                 return ratio
     return 1.0
 
@@ -66,7 +69,7 @@ def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], fi
             "flow": round(flow), "value": cur[1] if cur else 0,
             "dShares": (cur[0] if cur else 0) - old_sh,
             "dSharesPct": (cur[0] / old_sh - 1) if cur and old_sh else None,
-            "status": "new" if not old else "exited" if not cur else None,
+            "status": "new" if not old else "exited" if not cur else None, "relinked": c in linked,
         })
     # A listing that replaced another one for the same issuer (ADR to ordinary shares, a new
     # holding company) shows as an exit plus a new position: net the two into one row.
@@ -83,6 +86,21 @@ def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], fi
             for o in outs:
                 keep["flow"] += o["flow"]
                 o["flow"] = 0
+            keep.update(status="converted", dSharesPct=None)
+    # A spin-off or break-up: the old line becomes two or more new ones of the same family name
+    # (Honeywell, Q2 2026). Net every corporate-action row of the family into one.
+    family: dict[str, list[dict]] = {}
+    for r in rows:
+        k = _key(r["name"]).split()
+        if k and r["flow"] and (r["status"] in ("new", "exited") or r["relinked"]):
+            family.setdefault(k[0], []).append(r)
+    for group in family.values():
+        if any(r["flow"] > 0 for r in group) and any(r["flow"] < 0 for r in group):
+            keep = max(group, key=lambda r: abs(r["flow"]))
+            keep["flow"] = sum(r["flow"] for r in group)
+            for r in group:
+                if r is not keep:
+                    r["flow"] = 0
             keep.update(status="converted", dSharesPct=None)
     # A company that left every Big Three book (acquired for cash, delisted) was not sold by choice.
     gone = [r for r in rows if r["status"] == "exited" and r["flow"] and universe_now is not None and not universe_now.get(r["cusip"])]

@@ -149,3 +149,18 @@ class MoversPairingTest(unittest.TestCase):
         self.assertTrue(not azn or azn[0]["flow"] < 1_000)                       # 20.5K bought vs 20K sold: netted
         self.assertEqual([r["cusip"] for r in m["sold"]], ["HOLD00001"])         # the takeover target is not "sold"
         self.assertEqual([r["cusip"] for r in m["gone"]], ["TGT000001"])
+
+
+class MoversRealCasesTest(unittest.TestCase):
+    def test_klac_split_in_a_rising_quarter_and_honeywell_breakup(self):
+        from pipeline import movers
+        self.assertEqual(movers.split_ratio([32_660_780, 48_090_060_451], [327_611_567, 98_843_685_830]), 10)  # KLAC Q1->Q2 2026
+        per = ["2026-03-31", "2026-06-30"]
+        book = {"2026-03-31": {"438516106": [143_974_111, 32_542_468_139, "HONEYWELL INTL INC", "COM"]},
+                "2026-06-30": {"438516205": [73_379_326, 16_429_631_006, "HONEYWELL INTL INC", "COM"],
+                               "43849R105": [68_612_246, 15_168_795_368, "HONEYWELL AEROSPACE INC", "COM"]}}
+        co = {"type": "Common Stock", "ticker": "HON"}
+        figi = {c: co for c in ("438516106", "438516205", "43849R105")}
+        m = movers.quarter_moves(book, "2026-06-30", "2026-03-31", per, figi, universe_now=book["2026-06-30"])
+        flows = [abs(r["flow"]) for r in m["bought"] + m["sold"]]
+        self.assertTrue(all(f < 2e9 for f in flows), m)   # no $15B "sale" and "purchase"
