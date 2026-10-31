@@ -43,11 +43,15 @@ def filings(series: str, ttl_hours: float) -> list[dict]:
         if doc != "primary_doc.xml" or not src.get("period_ending") or not src.get("ciks"):
             continue
         cik = int(src["ciks"][0])
-        out.setdefault(src["period_ending"], {
+        # An amendment (NPORT-P/A) restates the whole report: for each period keep the latest filed.
+        prior = out.get(src["period_ending"])
+        if prior and (prior["filed"] or "") >= (src.get("file_date") or ""):
+            continue
+        out[src["period_ending"]] = {
             "period": src["period_ending"], "filed": src.get("file_date"), "accession": acc,
             "xml": f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc.replace('-', '')}/primary_doc.xml",
             "url": f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc.replace('-', '')}/{acc}-index.htm",
-        })
+        }
     return sorted(out.values(), key=lambda f: f["period"], reverse=True)
 
 
@@ -60,7 +64,7 @@ def holdings(f: dict, wanted: set[str]) -> tuple[dict, dict]:
     key = f"nport_{f['accession']}.json.gz"
     cached = edgar.load_artifact(key)
     if cached is None:
-        xml = edgar.cached_bytes(f["xml"])
+        xml = edgar.fetch(f["xml"])  # parsed result is cached below; the raw XML is not kept
         rows, header = {}, {}
         for _, el in ET.iterparse(io.BytesIO(xml), events=("end",)):
             tag = el.tag.rsplit("}", 1)[-1]
@@ -79,7 +83,7 @@ def holdings(f: dict, wanted: set[str]) -> tuple[dict, dict]:
             if rec.get("units") != "NS" or rec.get("payoffProfile", "Long") != "Long":
                 continue
             cusip = (rec.get("cusip") or "").upper()
-            if not re.fullmatch(r"[0-9A-Z]{9}", cusip):
+            if not re.fullmatch(r"[0-9A-Z]{9}", cusip) or cusip == "000000000":
                 cusip = _cusip_from_isin(rec.get("isin") or "") or ""
             if not cusip:
                 continue
@@ -109,7 +113,7 @@ def build(cusip_chains: dict[str, list[str]], ttl_hours: float, log=print) -> tu
         prev_rows = holdings(prev, wanted)[0] if prev else {}
         events.append({
             "kind": "nport", "manager": manager, "fund": ticker, "entity": header.get("seriesName", name),
-            "form": "NPORT-P", "filed": latest["filed"], "accepted": f"{latest['filed']}T00:00:00.000Z",
+            "form": "NPORT-P", "filed": latest["filed"], "accepted": f"{latest['filed']}T12:00:00.000Z",
             "period": latest["period"], "accession": latest["accession"], "url": latest["url"],
             "netAssets": float(header["netAssets"]) if header.get("netAssets") else None,
         })

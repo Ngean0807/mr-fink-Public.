@@ -227,8 +227,9 @@
     const list = [];
     if (state.page === "company") { const s = bySlug(state.slug); if (s) list.push(s.ticker); }
     const tableRows = state.page === "emerging" ? emergingSorted() : view().rows;
-    list.push(...tableRows.slice(0, 12).map((r) => sec(r.cusip).ticker));  // the price strip
-    if (state.page !== "company") list.push(...tableRows.map((r) => sec(r.cusip).ticker));
+    const tk = (r) => emSec(r).ticker;
+    list.push(...tableRows.slice(0, 12).map(tk));  // the price strip
+    if (state.page !== "company") list.push(...tableRows.map(tk));
     return [...new Set(list)].slice(0, WS_LIMIT);
   }
   // One queue for opening quotes, one call every 1.1 s (Finnhub free tier: 60 a minute). Symbols that
@@ -455,8 +456,8 @@
   function renderTape() {
     const rows = (state.page === "emerging" ? emergingSorted() : view().rows).slice(0, 12);
     $("tape").innerHTML = rows.map((r) => {
-      const s = sec(r.cusip);
-      return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
+      const s = emSec(r);
+      return `<a class="tape-item" href="${state.page === "emerging" ? emLink(s) : "#t-" + slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
     }).join("");
   }
   function renderChips() {
@@ -828,16 +829,20 @@
     "new-listing": ["Listed < 2 yrs", "Short public history"],
     "price-mismatch": ["Check data", "The managers' filings disagree on the quarter-end price"],
     thin: ["Thin trading", "Under $1M traded per day on average"],
+    "approx-shares": ["Approx. shares", "Share count taken from the cover page or a neighbouring quarter, not the balance sheet"],
   };
   const emergingAll = () => (D.emerging ? D.emerging.rows : []);
+  /** Identity for an Emerging row: the full security record when profiled, else the row itself. */
+  const emSec = (r) => D.securities[r.cusip] || r;
+  const emLink = (r) => (D.securities[r.cusip] ? `#t-${slugOf(r.ticker)}` : `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${r.cik}&owner=include&count=40`);
   const liveFlags = (r) => {
-    const q = Q[sec(r.cusip).ticker];
+    const q = Q[r.ticker];
     return r.flags.concat(q && q.avgDollarVolume != null && q.avgDollarVolume < 1e6 ? ["thin"] : []);
   };
   function emergingRows() {
     const f = state.em;
     return emergingAll().filter((r) => {
-      const t = sec(r.cusip).ticker;
+      const t = r.ticker;
       const p = pxOf(t) || r.price;
       const mcap = r.sharesOutstanding * p;
       const flags = liveFlags(r);
@@ -851,17 +856,17 @@
   const pp = (x, signed = true) => (x == null ? "—" : (signed && x > 0 ? "+" : "") + (x * 100).toFixed(x * 100 >= 10 || x * 100 <= -10 ? 1 : 2) + " pp");
 
   const EM_SORT = {
-    ticker: (r) => sec(r.cusip).ticker,
-    px: (r) => pxOf(sec(r.cusip).ticker) || r.price,
-    day: (r) => dayChg(sec(r.cusip).ticker),
-    mcap: (r) => r.sharesOutstanding * (pxOf(sec(r.cusip).ticker) || r.price),
+    ticker: (r) => r.ticker,
+    px: (r) => pxOf(r.ticker) || r.price,
+    day: (r) => dayChg(r.ticker),
+    mcap: (r) => r.sharesOutstanding * (pxOf(r.ticker) || r.price),
     stake: (r) => r.stake,
     stakeChangeQoQ: (r) => r.stakeChangeQoQ,
     stakeChangeYoY: (r) => r.stakeChangeYoY,
     breadth: (r) => r.breadth,
     flowYoY: (r) => r.flowYoY,
     pattern: (r) => r.pattern,
-    rev: (r) => (sec(r.cusip).fundamentals || {}).revenueGrowth,
+    rev: (r) => (emSec(r).fundamentals || {}).revenueGrowth,
   };
   function emergingSorted() {
     const f = state.em;
@@ -875,7 +880,27 @@
     });
   }
 
+  /** Median price change since the 13F filing deadline, this list against the Big Three top 50. */
+  function trackRecord() {
+    if (!H) return '<span class="muted">Loading the track record since the last 13F deadline…</span>';
+    const [y, m, d] = D.emerging.asOf.split("-").map(Number);
+    const deadline = Date.UTC(y, m - 1, d) + 45 * 86400000;
+    const change = (t) => {
+      const h = H[t];
+      const now = pxOf(t);
+      if (!h || !now) return null;
+      const i = h.ms.findIndex((ms) => ms >= deadline);
+      return i < 0 ? null : now / h.c[i] - 1;
+    };
+    const median = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); return v.length ? [v[Math.floor(v.length / 2)], v.length] : [null, 0]; };
+    const [mine, n] = median(emergingRows().map((r) => change(r.ticker)));
+    const [big, nb] = median(D.views.big3.rows.map((r) => change(sec(r.cusip).ticker)));
+    if (!n) return "";
+    return `<b>Track record.</b> Since the last 13F deadline (${dateL(new Date(deadline).toISOString().slice(0, 10))}), the median stock on this list moved ${signed(mine)} (${n} with price history), against ${signed(big)} for the Big Three top ${nb}. One period is not a backtest, but it is the honest test of following these filings.`;
+  }
+
   function renderEmerging() {
+    if (!H) loadHistory().then(() => { const el = $("em-track"); if (el && state.page === "emerging") el.innerHTML = trackRecord(); });
     const E = D.emerging;
     const f = state.em;
     const rows = emergingRows();
@@ -887,11 +912,12 @@
       return `<span class="mdot ${up ? "" : "off"}" style="background:${mColor(id)}" title="${MGR_NAME[id]}: ${m ? pct(m.stake, 2, false) + " now, " + (m.stakeYearAgo == null ? "not held" : pct(m.stakeYearAgo, 2, false)) + " a year ago" : "not held"}"></span>`;
     }).join("");
     const body = sorted.map((r) => {
-      const s = sec(r.cusip);
+      const s = emSec(r);
       const fund = s.fundamentals || {};
       const flags = liveFlags(r);
-      return `<tr data-slug="${slugOf(s.ticker)}">
-        <td class="l fz fz-em"><a class="co" href="#t-${slugOf(s.ticker)}">${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
+      const external = !D.securities[r.cusip];
+      return `<tr ${external ? "" : `data-slug="${slugOf(s.ticker)}"`}>
+        <td class="l fz fz-em"><a class="co" href="${emLink(r)}"${external ? ' target="_blank" rel="noopener" title="Opens the company on SEC EDGAR"' : ""}>${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}${external ? ' <span class="muted">↗</span>' : ""}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
         <td>${live("px", s.ticker)}</td><td>${live("pill", s.ticker)}</td>
         <td>${live("val", s.ticker, r.sharesOutstanding)}</td>
         <td class="sep"><b class="v">${pct(r.stake, 1, false)}</b></td>
@@ -919,7 +945,8 @@
           <div class="figure"><span class="figure-value">${rows.length}</span><span class="muted">companies match · 13F data as of ${dateL(E.asOf)}</span></div>
         </div>
         <div class="callout">
-          <b>How to read this.</b> Most of the Big Three’s money is indexed, so a rising stake usually means the stock joined an index (Russell 2000, S&amp;P SmallCap 600) or its funds took in money. That buying is real and often predictable, but it is not a stock pick. The pattern column separates a one-quarter step-up from steady accumulation, and the flags mark cases where the stake says little.
+          <b>How to read this.</b> An index fund owns about the same share of every company in its index, so differences in the Big Three’s stake come from index membership, share issuance and corporate events, not from a view on the company. Most gains here are one-quarter step-ups at the June Russell reconstitution, and those additions are announced in May, months before the 13F shows them. Treat this as a map of index money flowing into small caps, not as a buy list.
+          <div id="em-track">${trackRecord()}</div>
         </div>
         <div class="filters" role="group" aria-label="Screen filters">
           <label>Price <input id="em-pmin" type="number" min="0" step="1" value="${f.pmin}"> – <input id="em-pmax" type="number" min="1" step="1" value="${f.pmax}"></label>
@@ -942,8 +969,10 @@
             <div><dt>Securities held</dt><dd>${(diag.held || 0).toLocaleString("en-US")}</dd></div>
             <div><dt>Low price, growing position</dt><dd>${(diag.prefilter || 0).toLocaleString("en-US")}</dd></div>
             <div><dt>Operating companies</dt><dd>${(diag.companies || 0).toLocaleString("en-US")}</dd></div>
-            <div><dt>Stake up ≥ ${(D.emerging.params.min_stake_change * 100).toFixed(0)} pp in a year</dt><dd>${(diag.passed || 0).toLocaleString("en-US")}</dd></div>
-            <div><dt>Shown with your filters</dt><dd>${rows.length}</dd></div>
+            <div><dt>No share count (left out)</dt><dd>${(diag.noSharesOutstanding || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>History not linkable (left out)</dt><dd>${(diag.unlinkedHistory || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>Passed: stake up ≥ ${(D.emerging.params.min_stake_change * 100).toFixed(0)} pp in a year</dt><dd>${(diag.passed || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>Matching your filters</dt><dd>${rows.length}</dd></div>
           </dl>
         </section>
         <section class="card" aria-labelledby="pat-h">
@@ -952,7 +981,7 @@
         </section>
         <section class="card" aria-labelledby="top-em-h">
           <div class="card-head"><h2 id="top-em-h">Largest stake gains</h2></div>
-          <div class="list">${rows.slice().sort((a, b) => b.stakeChangeYoY - a.stakeChangeYoY).slice(0, 6).map((r) => { const o = sec(r.cusip); return `<a href="#t-${slugOf(o.ticker)}">${tkChip(o)}<span class="nm"><b>${esc(niceName(o.name))}</b><small>${pct(r.stake, 1, false)} owned by the Big Three</small></span><span class="rt"><b class="txt-up">${pp(r.stakeChangeYoY)}</b><small class="muted">a year</small></span></a>`; }).join("")}</div>
+          <div class="list">${rows.slice().sort((a, b) => b.stakeChangeYoY - a.stakeChangeYoY).slice(0, 6).map((r) => { const o = emSec(r); return `<a href="${emLink(r)}">${tkChip(o)}<span class="nm"><b>${esc(niceName(o.name))}</b><small>${pct(r.stake, 1, false)} owned by the Big Three</small></span><span class="rt"><b class="txt-up">${pp(r.stakeChangeYoY)}</b><small class="muted">a year</small></span></a>`; }).join("")}</div>
         </section>
       </aside>`;
 

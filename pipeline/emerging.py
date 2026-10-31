@@ -12,7 +12,12 @@ from datetime import date, timedelta
 
 from . import analytics, config, edgar, securities
 
-FRAME = "https://data.sec.gov/api/xbrl/frames/dei/EntityCommonStockSharesOutstanding/shares/{}.json"
+# Balance-sheet share count (dated on the period end, so it lines up with the 13F date) first;
+# the cover-page count (dated weeks later) only fills gaps, and such rows are flagged.
+FRAMES = [
+    ("balance-sheet", "https://data.sec.gov/api/xbrl/frames/us-gaap/CommonStockSharesOutstanding/shares/{}.json"),
+    ("cover-page", "https://data.sec.gov/api/xbrl/frames/dei/EntityCommonStockSharesOutstanding/shares/{}.json"),
+]
 SPAC = re.compile(r"\b(ACQUISITION|ACQUISITIONS|SPAC|BLANK CHECK|MERGER CORP)\b")
 FUND_SIC = {6221, 6722, 6726, 6770}  # commodity pools, open/closed-end funds, blank checks
 DEAL_FORMS = {"DEFM14A", "PREM14A", "DEFM14C", "PREM14C", "SC TO-T", "SC TO-T/A", "SC 14D9", "SC 14D9/A", "425", "SC 13E3"}
@@ -24,16 +29,21 @@ def frame_name(period: str) -> str:
     return f"CY{y}Q{(int(m) - 1) // 3 + 1}I"
 
 
-def shares_outstanding(period_list: list[str]) -> dict[str, dict[str, float]]:
-    """{period: {cik: shares outstanding}} from the cover-page frame of each calendar quarter."""
+def shares_outstanding(period_list: list[str]) -> dict[str, dict[str, tuple[float, str]]]:
+    """{period: {cik: (shares outstanding, source)}}, balance-sheet count preferred."""
     out = {}
     for p in period_list:
-        try:
-            data = edgar.cached_json(FRAME.format(frame_name(p)), ttl_hours=24)
-        except Exception:
-            out[p] = {}
-            continue
-        out[p] = {str(r["cik"]).zfill(10): float(r["val"]) for r in data.get("data", []) if r.get("val")}
+        merged: dict[str, tuple[float, str]] = {}
+        for source, url in FRAMES:
+            try:
+                data = edgar.cached_json(url.format(frame_name(p)), ttl_hours=24)
+            except Exception:
+                continue
+            for r in data.get("data", []):
+                cik = str(r["cik"]).zfill(10)
+                if r.get("val") and cik not in merged:
+                    merged[cik] = (float(r["val"]), source)
+        out[p] = merged
     return out
 
 
@@ -54,18 +64,23 @@ def deal_and_listing(cik: str) -> tuple[list[str], str | None, bool]:
 
 
 def classify(stakes: list[float | None], first_idx: int) -> str:
-    """Name the shape of the stake history (oldest to newest)."""
-    s = [x for x in stakes if x is not None]
+    """Name the shape of the stake history (oldest to newest, one value per quarter).
+
+    Passive drift alone moves a stake about 0.3 points a quarter, so "steady" needs real
+    quarter-after-quarter gains, and "step" means one quarter stands far above the others.
+    """
     if first_idx >= len(stakes) - 4:
         return "new"
-    if len(s) < 5:
+    last = list(enumerate(stakes))[-5:]
+    steps = [b - a for (i, a), (j, b) in zip(last, last[1:]) if a is not None and b is not None]
+    if len(steps) < 3:
         return "rising"
-    last5 = s[-5:]
-    steps = [b - a for a, b in zip(last5, last5[1:])]
-    total = last5[-1] - last5[0]
-    if total > 0 and max(steps) >= 0.03 and max(steps) >= 0.7 * total:
+    total = sum(steps)
+    top = max(steps)
+    median = sorted(steps)[len(steps) // 2]
+    if top >= 0.02 and top >= 0.5 * total and top >= 3 * max(median, 0.0025):
         return "step"
-    if sum(1 for d in steps if d > 0.001) >= 3:
+    if sum(1 for d in steps if d >= 0.0075) >= 3 and total - top >= 0.02:
         return "steady"
     return "rising"
 
@@ -85,8 +100,8 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
             continue
         sy = big3.get(Y, {}).get(c, [0])[0]
         sq = big3.get(Q, {}).get(c, [0])[0]
-        if sy and s / sy < 1.10 and (not sq or s / sq < 1.10):
-            continue
+        if sy and s <= sy and (not sq or s <= sq):
+            continue  # not growing at all (the stake test below decides what counts as growth)
         pre.append(c)
     diag["prefilter"] = len(pre)
 
@@ -108,8 +123,9 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
     so = shares_outstanding(hist_periods)
     rows = []
     skipped_no_shares = 0
+    unlinked = 0
     for c, info, cik in comp:
-        if cik not in so[L]:
+        if cik not in so[L] and cik not in so[Q]:
             skipped_no_shares += 1
             continue
         prof = securities.profile(cik)
@@ -122,15 +138,21 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         series = analytics.position_series(chain, big3, period_list, splits)
         idx = {p: i for i, p in enumerate(period_list)}
 
+        approx: set[str] = set()
+
         def outstanding(p):
-            """Cover-page count for the quarter, else the neighbouring quarter's (some filers
-            skip a frame); never zero-filled."""
-            if so[p].get(cik):
-                return so[p][cik]
+            """Shares outstanding at the quarter end. A cover-page count or the neighbouring
+            quarter's count fills a gap and marks the row approximate; never zero-filled."""
+            if p in so and so[p].get(cik):
+                val, source = so[p][cik]
+                if source != "balance-sheet":
+                    approx.add(p)
+                return val
             i = hist_periods.index(p)
             for j in (i - 1, i + 1):
                 if 0 <= j < len(hist_periods) and so[hist_periods[j]].get(cik):
-                    return so[hist_periods[j]][cik]
+                    approx.add(p)
+                    return so[hist_periods[j]][cik][0]
             return None
 
         def stake(p, ser=series):
@@ -140,16 +162,26 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
             return ser[idx[p]]["s"] / (out_raw * analytics.split_factor(splits, p))
 
         stakes = [stake(p) for p in hist_periods]
+        bad = [i for i, x in enumerate(stakes) if x is not None and x > 1.0]
+        if stakes[-1] is not None and stakes[-1] > 1.0:
+            continue  # more than 100% owned: a share count that predates an issuance
+        stakes = [None if i in bad else x for i, x in enumerate(stakes)]
         now, q_ago, y_ago = stakes[-1], stakes[-2], stakes[-5]
-        if now is None or now > 1.0:
-            continue  # no denominator, or a data error (more than 100% owned)
+        if now is None:
+            continue
         px = series[-1]["v"] / series[-1]["s"]
-        mcap = px * so[L][cik]
+        mcap = px * outstanding(L)
         first_idx = next((i for i, x in enumerate(series[-HISTORY:]) if x["s"] > 0), HISTORY - 1)
         held_year_ago = series[-5]["s"] > 0
         if y_ago is None and held_year_ago:
             skipped_no_shares += 1
             continue  # held a year ago but no share count to measure the stake: unknown, not zero
+        if not held_year_ago and outstanding(Y) and outstanding(Y) * px > 3e8:
+            # Already a sizeable public company a year ago, yet not held under any linked CUSIP:
+            # a merger, redomicile or CUSIP change the history could not be joined across.
+            # The gain is unknown, so the row is left out rather than shown as a new position.
+            unlinked += 1
+            continue
         d_y = now - (y_ago or 0)
         if not (E["price_min"] <= px <= E["price_max"] and E["mcap_min"] <= mcap <= E["mcap_max"] and d_y >= E["min_stake_change"]):
             continue
@@ -157,7 +189,7 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         per_mgr = {}
         for mid, b in books.items():
             ms = analytics.position_series(chain, b, period_list, splits)
-            m_now = ms[-1]["s"] / (so[L][cik] * analytics.split_factor(splits, L))
+            m_now = ms[-1]["s"] / (outstanding(L) * analytics.split_factor(splits, L))
             m_y = ms[-5]["s"] / (outstanding(Y) * analytics.split_factor(splits, Y)) if outstanding(Y) else None
             per_mgr[mid] = {"stake": m_now, "stakeYearAgo": m_y, "shares": ms[-1]["s"], "value": ms[-1]["v"]}
         breadth = sum(1 for m in per_mgr.values() if m["stake"] - (m["stakeYearAgo"] or 0) > 0.001)
@@ -172,7 +204,11 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
             flags.append("pending-deal")
         if any(sp["ratio"] < 1 and sp["period"] >= Y for sp in splits):
             flags.append("reverse-split")
-        if outstanding(Y) and so[L][cik] / (outstanding(Y) * analytics.split_factor(splits, Y)) > 1.3:
+        if bad:
+            flags.append("price-mismatch")
+        if approx:
+            flags.append("approx-shares")
+        if outstanding(Y) and outstanding(L) / (outstanding(Y) * analytics.split_factor(splits, Y)) > 1.3:
             flags.append("dilution")
         if foreign:
             flags.append("foreign-filer")
@@ -183,9 +219,14 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         rows.append({
             "cusip": c,
             "figi": info,
+            "ticker": securities.display_ticker(info["ticker"]),
+            "name": prof.get("secName") or name,
+            "sector": securities.SECTOR_OVERRIDES.get(securities.display_ticker(info["ticker"]), prof["sector"]),
+            "industry": prof["industry"],
+            "cik": cik,
             "price": px,
             "marketCap": mcap,
-            "sharesOutstanding": so[L][cik],
+            "sharesOutstanding": outstanding(L),
             "stake": now,
             "stakeQuarterAgo": q_ago,
             "stakeYearAgo": y_ago,
@@ -204,8 +245,14 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
             "deals": deals,
         })
     diag["noSharesOutstanding"] = skipped_no_shares
+    diag["unlinkedHistory"] = unlinked
     diag["passed"] = len(rows)
-    rows.sort(key=lambda r: (r["breadth"] >= 2, r["stakeChangeYoY"]), reverse=True)
-    rows = rows[: E["max_rows"]]
+    # Every passing row ships to the page, which filters and sorts. The most relevant ones under
+    # the default filters get a full company page (fundamentals, filings, quotes).
+    rows.sort(key=lambda r: r["stakeChangeYoY"], reverse=True)
+    shortlist = [r for r in rows if 2 <= r["price"] <= 30 and r["marketCap"] <= 3e9 and "pending-deal" not in r["flags"]][: E["profiled"]]
+    keep = {r["cusip"] for r in shortlist}
+    for r in rows:
+        r["profiled"] = r["cusip"] in keep
     log(f"Emerging screen: {diag}")
     return rows, diag

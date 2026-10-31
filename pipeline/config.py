@@ -63,5 +63,5 @@ EMERGING = {
     "mcap_max": 10e9,
     "min_value": 5e6,          # combined Big Three position, quarter end
     "min_stake_change": 0.01,  # +1 percentage point of shares outstanding, year over year
-    "max_rows": 90,
+    "profiled": 120,           # rows that get a full company page; all passing rows are listed
 }

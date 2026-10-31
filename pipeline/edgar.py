@@ -69,6 +69,10 @@ def cached_bytes(url: str, *, ttl_hours: float | None = None, version: str | Non
         return path.read_bytes()
     body = fetch(url)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if version:
+        # Drop superseded versions of the same resource (e.g. company facts before the latest 10-Q).
+        for stale in path.parent.glob(_cache_path(url).name + "@*"):
+            stale.unlink(missing_ok=True)
     path.write_bytes(body)
     return body
 

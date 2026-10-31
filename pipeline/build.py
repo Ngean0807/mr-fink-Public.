@@ -12,7 +12,7 @@ from pathlib import Path
 
 import hashlib
 
-from . import analytics, config, emerging, feed, fundamentals, notify, nport, periods, quotes, securities, thirteenf
+from . import analytics, config, edgar, emerging, feed, fundamentals, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -74,8 +74,18 @@ def describe_security(c: str, info: dict, books: dict, row: list, period_list: l
     return meta
 
 
+def prune_legacy_cache() -> None:
+    """Raw company-facts and N-PORT files from earlier versions; slim parsed copies replace them."""
+    for pattern in ("data.sec.gov_api_xbrl_companyfacts_*", "www.sec.gov_Archives_edgar_data_*_primary_doc.xml"):
+        for f in edgar.CACHE_DIR.glob(pattern):
+            if pattern.endswith(".xml") and f.stat().st_size < 1_000_000:
+                continue  # small primary docs (13F cover pages, 13G) stay cached
+            f.unlink(missing_ok=True)
+
+
 def main() -> None:
     t0 = time.time()
+    prune_legacy_cache()
     latest = latest_common_period()
     count = 0
     while periods.quarter_ends(latest, count + 1)[0] >= config.HISTORY_START:
@@ -121,6 +131,8 @@ def main() -> None:
     emerging_rows, emerging_diag = emerging.screen(books, books_with_big3["big3"], period_list, exclude=selected)
     for r in emerging_rows:
         c = r["cusip"]
+        if not r["profiled"] and c not in sec_meta:
+            continue
         if c not in sec_meta:
             sec_meta[c] = describe_security(c, r["figi"], books, books_with_big3["big3"][latest][c], period_list)
         sec_meta[c]["emerging"] = True
@@ -241,7 +253,9 @@ def main() -> None:
     OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))
     OUT.with_name("history.json").write_text(json.dumps(price_history, separators=(",", ":")))
     # Phone pushes go out only after the new data is written, so the link opens fresh numbers.
+    notify.sync_from_site()
     notify.notify_new(feed_events)
+    notify.export_state(OUT.with_name("notified.json"))
     if os.environ.get("NTFY_TEST") == "true":
         notify.send_test()
     STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))

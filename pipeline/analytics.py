@@ -58,59 +58,56 @@ KNOWN_SUCCESSIONS = {
 
 def _issuer_key(name: str) -> str:
     words = re.sub(r"[^A-Z0-9 ]", " ", name.upper()).split()
-    stop = {"THE", "INC", "CORP", "CORPORATION", "CO", "LTD", "PLC", "NEW", "COM", "HLDGS", "HOLDINGS", "GROUP", "SHS", "ORD", "CL", "A"}
+    stop = {"THE", "INC", "CORP", "CORPORATION", "CO", "COMPANY", "LTD", "LLC", "LP", "PLC", "NV", "SA", "AG", "NEW",
+            "COM", "HLDGS", "HOLDINGS", "GROUP", "SHS", "ORD", "CL", "A", "INDS", "INDUSTRIES", "N", "Y", "P"}
     return " ".join(w for w in words if w not in stop)
 
 
 def find_predecessors(cusip: str, name: str, books: dict[str, dict], periods: list[str]) -> list[dict]:
-    """Chain CUSIP changes (re-domiciles, holding-company reorganisations).
+    """Chain CUSIP changes (redomiciles, reverse splits, holding-company reorganisations).
 
-    If a security appears for every manager in the same quarter, and a CUSIP with the same issuer
-    name vanished from every manager that quarter, treat the old CUSIP as the predecessor.
+    Around the quarter a security first appears, look for a CUSIP that vanished from the same
+    managers that quarter and belongs to the same issuer: same 6-character issuer prefix, or the
+    same name once legal suffixes are dropped. Its shares must carry over, allowing a split ratio.
     """
     chain = []
     current = cusip
     visited = {cusip}
     while len(chain) < 5:  # guard: a security rarely changes CUSIP more than a couple of times
-        # The switch-over quarter is the first one in which every manager holds the new CUSIP
-        # (a stray early row in one filing should not move it).
-        firsts = []
-        for book in books.values():
-            held = [p for p in periods if current in book.get(p, {})]
-            if held:
-                firsts.append(held[0])
-        if not firsts:
+        firsts = sorted({held[0] for b in books.values() if (held := [p for p in periods if current in b.get(p, {})])})
+        found = None
+        # Try the earliest switch-over quarter first; one manager may pick up the new line late.
+        for first in firsts:
+            idx = periods.index(first)
+            if idx == 0:
+                continue
+            prev = periods[idx - 1]
+            new_name = next((b[first][current][2] for b in books.values() if current in b.get(first, {})), name)
+            keys = {_issuer_key(new_name), _issuer_key(name)}
+            candidates: dict[str, float] = {}
+            for book in books.values():
+                before, after = book.get(prev, {}), book.get(first, {})
+                for c, row in before.items():
+                    if c in after or c in visited:
+                        continue
+                    if c[:6] == current[:6] or _issuer_key(row[2]) in keys:
+                        candidates[c] = candidates.get(c, 0) + row[1]
+            if current in KNOWN_SUCCESSIONS and KNOWN_SUCCESSIONS[current] not in visited:
+                candidates = {KNOWN_SUCCESSIONS[current]: 1.0}
+            if not candidates:
+                continue
+            old = max(candidates, key=candidates.get)
+            old_sh = sum(b.get(prev, {}).get(old, [0])[0] for b in books.values())
+            new_sh = sum(b.get(first, {}).get(current, [0])[0] for b in books.values())
+            r = new_sh / old_sh if old_sh else 0
+            if any(0.6 < r / k < 1.66 for k in [1] + SPLIT_RATIOS + REVERSE_SPLIT_RATIOS):
+                found = (old, prev)
+                break
+        if not found:
             break
-        first = max(firsts)
-        idx = periods.index(first)
-        if idx == 0:
-            break
-        prev = periods[idx - 1]
-        # Match on the issuer name as filed at the switch-over (GE became "GE Aerospace" later).
-        key = next((_issuer_key(b[first][current][2]) for b in books.values() if current in b.get(first, {})), _issuer_key(name))
-        candidates: dict[str, float] = {}
-        for book in books.values():
-            before, after = book.get(prev, {}), book.get(first, {})
-            for c, row in before.items():
-                if c not in after and _issuer_key(row[2]) == key:
-                    candidates[c] = candidates.get(c, 0) + row[1]
-        if current in KNOWN_SUCCESSIONS:
-            candidates = {KNOWN_SUCCESSIONS[current]: 1.0}
-        if not candidates:
-            break
-        candidates = {k: v for k, v in candidates.items() if k not in visited}
-        if not candidates:
-            break
-        old = max(candidates, key=candidates.get)
-        visited.add(old)
-        # Share continuity: the old line's shares must carry over (allowing a split ratio).
-        old_sh = sum(b.get(prev, {}).get(old, [0])[0] for b in books.values())
-        new_sh = sum(b.get(first, {}).get(current, [0])[0] for b in books.values())
-        r = new_sh / old_sh if old_sh else 0
-        if not any(0.75 < r / k < 1.33 for k in [1] + SPLIT_RATIOS + REVERSE_SPLIT_RATIOS):
-            break
-        chain.append({"cusip": old, "until": prev})
-        current = old
+        visited.add(found[0])
+        chain.append({"cusip": found[0], "until": found[1]})
+        current = found[0]
     return chain
 
 

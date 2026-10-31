@@ -66,8 +66,9 @@ def click_url(e: dict, site: str) -> str:
     return f"{site.rstrip('/')}/#{e.get('manager', 'big3')}"
 
 
-def _send(server: str, topic: str, e: dict, site: str) -> None:
-    title, message, priority, tags = describe(e)
+def _send(server: str, topic: str, unit: list[dict], site: str) -> None:
+    e = unit[0]
+    title, message, priority, tags = describe_unit(unit)
     body = json.dumps({
         "topic": topic, "title": title, "message": message, "priority": {"low": 2, "default": 3, "high": 4}[priority],
         "tags": tags, "click": click_url(e, site),
@@ -91,15 +92,44 @@ def send_test(log=print) -> None:
     log("Notifications: test push sent")
 
 
+PRIORITY = {"13f": 0, "13g": 1, "8k": 2, "report": 3, "nport": 4}
+BACKLOG = 40  # more unseen filings than this means the state was lost: record them, send one summary
+
+
+def _units(fresh: list[dict]) -> list[list[dict]]:
+    """Group a manager's 13F filings from one run into a single push; everything else is one each.
+    Ordered most important first (13F, then 13G/13D, 8-K, 10-Q/K, N-PORT), oldest first within."""
+    groups: dict[str, list[dict]] = {}
+    singles = []
+    for e in fresh:
+        if e["kind"] == "13f":
+            groups.setdefault(e["manager"], []).append(e)
+        else:
+            singles.append([e])
+    units = list(groups.values()) + singles
+    units.sort(key=lambda u: (PRIORITY.get(u[0]["kind"], 9), min(e["accepted"] for e in u)))
+    return units
+
+
+def describe_unit(unit: list[dict]) -> tuple[str, str, str, list[str]]:
+    if len(unit) == 1:
+        return describe(unit[0])
+    e = unit[0]
+    who = MANAGER.get(e["manager"], e["entity"])
+    periods = sorted({_quarter(x["period"]) for x in unit if x.get("period")})
+    return (f"{who} 13F: {len(unit)} filings for {', '.join(periods)}",
+            "Filed by: " + ", ".join(sorted({x["entity"] for x in unit}))[:300], "high", ["bank"])
+
+
 def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
-    """Announce feed events not seen before. Returns the events that were sent."""
+    """Announce feed events not seen before. Returns the events that were sent (or grouped)."""
     topic = os.environ.get("NTFY_TOPIC")
     if not topic and send is None:
         return []
     server = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
     site = site_url()
     kinds = set(os.environ.get("NTFY_KINDS", "13f,13g,report,8k,nport").split(","))
-    send = send or (lambda e: _send(server, topic, e, site))
+    send = send or (lambda unit: _send(server, topic, unit, site))
 
     current = [e["accession"] for e in events]
     if not STATE.exists():
@@ -116,21 +146,47 @@ def notify_new(events: list[dict], *, send=None, log=print) -> list[dict]:
     new_kinds = {e["kind"] for e in events} - known_kinds
     if new_kinds:
         seen_set |= {e["accession"] for e in events if e["kind"] in new_kinds}
-        seen = seen + [e["accession"] for e in events if e["kind"] in new_kinds]
         log(f"Notifications: new filing types {sorted(new_kinds)} recorded without sending")
+    unseen = [e for e in events if e["accession"] not in seen_set]
     # 8-Ks only push for the items that change the investment case (see feed.KEY_8K_ITEMS).
-    fresh = [e for e in events if e["accession"] not in seen_set and e["kind"] in kinds and (e["kind"] != "8k" or e.get("key"))]
-    fresh.sort(key=lambda e: e["accepted"])
-    sent = []
-    for e in fresh[-MAX_PER_RUN:]:
-        try:
-            send(e)
-            sent.append(e)
-        except Exception as err:  # a failed push must never fail the data refresh
-            log(f"Notification failed for {e['accession']}: {err}")
-    _save(seen + [a for a in current if a not in seen_set], known_kinds | {e["kind"] for e in events})
-    log(f"Notifications: {len(sent)} sent, {len(fresh) - len(sent)} skipped")
+    eligible = [e for e in unseen if e["kind"] in kinds and (e["kind"] != "8k" or e.get("key"))]
+    done = {e["accession"] for e in unseen if e not in eligible}  # never pushed: mark as handled
+    sent: list[dict] = []
+    if len(eligible) > BACKLOG:
+        done |= {e["accession"] for e in eligible}
+        log(f"Notifications: {len(eligible)} unseen filings looks like lost state; recorded without sending")
+    else:
+        for unit in _units(eligible)[:MAX_PER_RUN]:
+            try:
+                send(unit)
+                sent.extend(unit)
+                done |= {e["accession"] for e in unit}
+            except Exception as err:  # a failed push must never fail the data refresh; retried next run
+                log(f"Notification failed for {unit[0]['accession']}: {err}")
+    # Only what was sent (or deliberately skipped) is marked seen; the rest waits for the next run.
+    _save(seen + [a for a in current if a in done or (a in seen_set and a not in seen)], known_kinds | {e["kind"] for e in events})
+    log(f"Notifications: {len(sent)} filings sent, {len(eligible) - len(sent)} waiting")
     return sent
+
+
+def sync_from_site(log=print) -> None:
+    """Load the announced-filings state published with the site, so it survives cache loss."""
+    site = site_url()
+    if not site:
+        return
+    try:
+        with urllib.request.urlopen(site + "data/notified.json", timeout=20) as r:
+            body = r.read()
+        json.loads(body)
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        STATE.write_bytes(body)
+    except Exception as err:
+        log(f"Notifications: no published state ({err}); using the local cache")
+
+
+def export_state(path) -> None:
+    if STATE.exists():
+        path.write_text(STATE.read_text())
 
 
 def _save(accessions: list[str], kinds: set[str]) -> None:
