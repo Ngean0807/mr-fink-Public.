@@ -21,6 +21,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read  # the alert job reads the previous run's result
 
 concurrency:
   group: refresh
@@ -63,7 +64,9 @@ jobs:
         # Saving ~hundreds of MB every 5 minutes churns the 10 GB cache limit; once an hour is enough
         # (the notification state is published with the site, not kept only here).
         id: hourly
-        run: echo "save=$([ "$(date -u +%M)" -lt 5 ] || [ "${{ github.event_name }}" != "schedule" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        # Runs come every 5 minutes from cron-job.org (workflow_dispatch) or GitHub's schedule; a
+        # push to main (new code) always saves.
+        run: echo "save=$([ "$(date -u +%M)" -lt 5 ] || [ "${{ github.event_name }}" = "push" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Save EDGAR cache
         # Also after a failed or timed-out build, so a slow first run (OpenFIGI mapping thousands of
         # new CUSIPs) is not repeated from scratch by every later run.
@@ -85,3 +88,32 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # A push to the owner's phone when a refresh fails after a good one, and when it recovers.
+  # Without this a broken refresh only shows as a site that quietly stops updating.
+  alert:
+    needs: [build, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare with the previous run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          BUILD: ${{ needs.build.result }}
+          DEPLOY: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "$NTFY_TOPIC" ] || exit 0
+          now=success
+          { [ "$BUILD" = failure ] || [ "$DEPLOY" = failure ]; } && now=failure
+          prev=$(gh api "repos/${{ github.repository }}/actions/workflows/refresh.yml/runs?per_page=10&status=completed" \
+            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }}) | select(.conclusion == \"success\" or .conclusion == \"failure\")][0].conclusion")
+          echo "this run: $now, previous: $prev"
+          if [ "$now" = failure ] && [ "$prev" != failure ]; then
+            curl -s -H "Title: Mr. Fink refresh failed" -H "Priority: high" -H "Tags: warning" -H "Click: $RUN_URL" \
+              -d "The site stopped updating (build: $BUILD, deploy: $DEPLOY). Tap for the log." "https://ntfy.sh/$NTFY_TOPIC"
+          elif [ "$now" = success ] && [ "$prev" = failure ]; then
+            curl -s -H "Title: Mr. Fink refresh recovered" -H "Tags: white_check_mark" -H "Click: $RUN_URL" \
+              -d "Updates are running again." "https://ntfy.sh/$NTFY_TOPIC"
+          fi
