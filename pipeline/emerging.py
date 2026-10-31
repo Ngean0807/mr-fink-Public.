@@ -207,6 +207,13 @@ def screen(books: dict[str, dict], big3: dict, period_list: list[str], exclude: 
         if stakes[-1] is not None and stakes[-1] > 1.0:
             continue  # more than 100% owned: a share count that predates an issuance
         stakes = [None if i in bad else x for i, x in enumerate(stakes)]
+        # A one-quarter spike that reverts (the share count and the holdings straddling a split or
+        # an issuance) is a timing artefact, not ownership; drop the point.
+        for i in range(1, len(stakes) - 1):
+            a, x, b = stakes[i - 1], stakes[i], stakes[i + 1]
+            if a and x and b and x > 1.8 * max(a, b):
+                stakes[i] = None
+                bad.append(i)
         now, q_ago, y_ago = stakes[-1], stakes[-2], stakes[-5]
         if now is None:
             continue
