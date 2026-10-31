@@ -22,7 +22,7 @@
     cmp: (() => { try { return localStorage.getItem("mrfink.cmp") === "1"; } catch (e) { return false; } })(),
     view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
-    em: { pmin: 2, pmax: 30, mcapMin: 0, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
+    em: { pmin: 2, pmax: 30, mcapMin: 0, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, insidersBuying: false, sector: "", sort: "stakeChangeYoY", dir: -1, limit: 100 },
   };
 
   // ---------- watchlist (kept in this browser) ----------
@@ -1004,7 +1004,9 @@
         && (f.pattern === "all" || r.pattern === f.pattern)
         && !(f.hideDeals && flags.includes("pending-deal"))
         && !(f.hideThin && flags.includes("thin"))
-        && !(f.allThree && r.breadth < 3);
+        && !(f.allThree && r.breadth < 3)
+        && !(f.insidersBuying && !(r.insiders && r.insiders.bought > 0))
+        && (!f.sector || (emSec(r).sector || r.sector) === f.sector);
     });
   }
   const pp = (x, signed = true) => (x == null ? "—" : (signed && x > 0 ? "+" : "") + (x * 100).toFixed(x * 100 >= 10 || x * 100 <= -10 ? 1 : 2) + " pp");
@@ -1027,6 +1029,18 @@
   const MC_PRESETS = [["all", 0, 1e10, "All sizes"], ["micro", 0, 3e8, "Micro · under $300M"], ["small", 3e8, 2e9, "Small · $300M–$2B"], ["mid", 2e9, 1e10, "Mid · $2B–$10B"]];
   const EM_SORT_LABELS = [["stakeChangeYoY", "Δ Big Three stake, 1 year"], ["stakeChangeQoQ", "Δ Big Three stake, 1 quarter"], ["stake", "Big Three stake"], ["mcap", "Market cap"],
     ["px", "Price"], ["day", "Today’s change"], ["flowYoY", "Net buying, 1 year"], ["ins", "Insider buying, 90 days"], ["rev", "Revenue growth"], ["breadth", "Managers buying"], ["ticker", "Ticker"]];
+  /** On phones the sorted column is often off screen: repeat its value under the company name. */
+  function sortedValue(r) {
+    const k = state.em.sort;
+    if (["ticker", "px", "day"].includes(k)) return "";
+    const label = (EM_SORT_LABELS.find((x) => x[0] === k) || [])[1] || "";
+    const v = {
+      mcap: () => live("mcap", r.ticker), stake: () => pct(r.stake, 1, false), stakeChangeQoQ: () => pp(r.stakeChangeQoQ), stakeChangeYoY: () => pp(r.stakeChangeYoY),
+      flowYoY: () => usdS(r.flowYoY), ins: () => insNet(r), rev: () => { const g = (emSec(r).fundamentals || {}).revenueGrowth; return g == null ? "n.m." : signed(g); },
+      breadth: () => `${r.breadth} of 3`, pattern: () => PATTERNS[r.pattern][0],
+    }[k];
+    return v ? `<span class="sortval" title="${esc(label)}"><b>${v()}</b></span>` : "";
+  }
   function emergingSorted() {
     const f = state.em;
     const get = EM_SORT[f.sort] || EM_SORT.stakeChangeYoY;
@@ -1101,7 +1115,14 @@
     });
   }
 
+  // The screen keeps its last filters in this browser.
+  const EM_DEFAULT = JSON.parse(JSON.stringify(state.em));
+  const emIsDefault = () => Object.keys(EM_DEFAULT).every((k) => k === "limit" || state.em[k] === EM_DEFAULT[k]);
+  try { const saved = JSON.parse(localStorage.getItem("mrfink.em") || "null"); if (saved) Object.assign(state.em, saved, { limit: 100 }); } catch (e) { /* storage unavailable */ }
+  const saveEm = () => { try { const { limit, ...rest } = state.em; localStorage.setItem("mrfink.em", JSON.stringify(rest)); } catch (e) { /* storage unavailable */ } };
+
   function renderEmerging() {
+    saveEm();
     if (!BT) loadBacktest().then(() => { const el = $("bt"); if (el && state.page === "emerging") { el.innerHTML = backtestSection(); drawBacktest(); } });
     if (!H) loadHistory().then(() => { const el = $("em-track"); if (el && state.page === "emerging") el.innerHTML = trackRecord(); });
     const E = D.emerging;
@@ -1119,7 +1140,7 @@
       const fund = s.fundamentals || {};
       const flags = liveFlags(r);
       return `<tr data-slug="${slugOf(s.ticker)}">
-        <td class="l fz fz-em"><a class="co" href="${emLink(r)}">${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
+        <td class="l fz fz-em"><a class="co" href="${emLink(r)}">${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}</b><small>${esc(s.industry || s.sector || "")}</small>${sortedValue(r)}</span></a></td>
         <td>${live("px", s.ticker)}</td><td>${live("pill", s.ticker)}</td>
         <td>${live("val", s.ticker, r.sharesOutstanding)}</td>
         <td class="sep"><b class="v">${pct(r.stake, 1, false)}</b></td>
@@ -1160,6 +1181,9 @@
           <label class="chk"><input id="em-deals" type="checkbox" ${f.hideDeals ? "checked" : ""}> Hide pending deals</label>
           <label class="chk"><input id="em-thin" type="checkbox" ${f.hideThin ? "checked" : ""}> Hide thin trading</label>
           <label class="chk"><input id="em-three" type="checkbox" ${f.allThree ? "checked" : ""}> All three buying</label>
+          <label class="chk"><input id="em-ins" type="checkbox" ${f.insidersBuying ? "checked" : ""}> Insiders bought (90 days)</label>
+          <label>Sector <select id="em-sector"><option value="">All sectors</option>${[...new Set(emergingAll().map((r) => emSec(r).sector || r.sector).filter(Boolean))].sort().map((x) => `<option ${f.sector === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
+          ${emIsDefault() ? "" : '<button type="button" class="linkbtn" id="em-reset">Reset filters</button>'}
         </div>
         <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${unpatterned.length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
         <div class="tools em-tools">
@@ -1217,6 +1241,9 @@
     $("em-deals").addEventListener("change", (e) => { f.hideDeals = e.target.checked; render(); });
     $("em-thin").addEventListener("change", (e) => { f.hideThin = e.target.checked; render(); });
     $("em-three").addEventListener("change", (e) => { f.allThree = e.target.checked; render(); });
+    $("em-ins").addEventListener("change", (e) => { f.insidersBuying = e.target.checked; render(); });
+    $("em-sector").addEventListener("change", (e) => { f.sector = e.target.value; f.limit = 100; render(); });
+    $("em-reset")?.addEventListener("click", () => { Object.assign(f, EM_DEFAULT); render(); });
     app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; f.limit = 100; render(); }));
     $("em-more")?.addEventListener("click", () => { f.limit = Infinity; render(); });
     $("export-em").addEventListener("click", exportEmerging);
