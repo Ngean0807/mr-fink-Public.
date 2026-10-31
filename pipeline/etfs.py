@@ -80,7 +80,7 @@ SECTOR_NAMES = {"statestreet": "Select Sector SPDR", "vanguard": "Vanguard secto
 
 def summary(f: dict) -> dict:
     """Fund size and the 10 largest positions from one N-PORT filing (parsed once, kept)."""
-    key = f"nport_summary2_{f['accession']}.json.gz"
+    key = f"nport_summary3_{f['accession']}.json.gz"
     cached = edgar.load_artifact(key)
     if cached is not None:
         return cached
@@ -107,8 +107,9 @@ def summary(f: dict) -> dict:
             continue
         # Bond funds hold many lines of one issuer (the US Treasury): add them up by issuer.
         nm = rec.get("name") or rec.get("title") or ""
-        slot = by_name.setdefault(nm, {"name": nm, "cusip": (rec.get("cusip") or "").upper(), "pct": 0.0})
+        slot = by_name.setdefault(nm, {"name": nm, "cusip": (rec.get("cusip") or "").upper(), "pct": 0.0, "lines": 0})
         slot["pct"] += pct / 100
+        slot["lines"] += 1
     out = {"netAssets": float(header["netAssets"]) if header.get("netAssets") else None, "name": header.get("seriesName"),
            "period": header.get("repPdDate") or f["period"], "holdings": n, "top": sorted(by_name.values(), key=lambda r: -r["pct"])[:10]}
     edgar.save_artifact(key, out)

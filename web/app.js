@@ -778,6 +778,7 @@
           <div class="card-head"><h2 id="mv-h">Biggest moves last quarter</h2><span class="feed-meta">${v.moves ? `all ${v.positions.toLocaleString("en-US")} securities` : `top ${D.meta.topN}`}</span></div>
           <div class="tabs" role="group" aria-label="Direction">${[["bought", "Bought"], ["sold", "Sold"]].map(([k, l]) => `<button type="button" class="tab" data-movers="${k}" aria-pressed="${state.movers === k}">${l}</button>`).join("")}</div>
           <div class="list">${v.moves ? wholeBookMoves(v) : movers.map((r) => { const c = sec(r.cusip); return `<a href="#t-${slugOf(c.ticker)}">${tkChip(c)}<span class="nm"><b>${esc(niceName(c.name))}</b><small>${numS(r.qoq.dShares)} shares</small></span><span class="rt"><b class="${r.qoq.trade >= 0 ? "txt-up" : "txt-down"}">${usdS(r.qoq.trade)}</b>${pill(r.qoq.dSharesPct, { sm: true })}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>None this quarter.</small></span><span></span></div>'}</div>
+          <p class="foot mv-gone">Net flow = change in shares × quarter-end price. Splits are adjusted, listing changes and spin-offs are netted into one line, and companies that left every Big Three book (acquired, delisted) are not counted as sales.</p>
           ${v.moves && state.movers === "sold" && (v.moves.gone || []).length ? `<p class="foot mv-gone">Not counted as sales: ${v.moves.gone.map((r) => `<b>${esc(r.ticker)}</b>`).join(", ")} left every Big Three book (acquired or delisted).</p>` : ""}
           ${v.moves ? `<button type="button" class="more" data-moves-more>${state.movesMore ? "Show fewer" : `Show top ${v.moves[state.movers].length}`}</button>` : ""}
         </section>
@@ -1741,7 +1742,12 @@
     if (!f.top || !f.top.length) return `<p class="foot">${f.series ? "No N-PORT report found for this fund yet." : "A unit or grantor trust: it does not file N-PORT, so holdings are not published on EDGAR."}</p>`;
     const page = (c) => Object.values(D.securities).find((x) => x.cusip === c) || emergingAll().find((x) => x.cusip === c);
     return `<div class="etf-top"><b>Largest holdings</b> <span class="muted">as of ${dateL(f.period)} · ${num(f.holdings)} positions · <a href="${f.filing}" target="_blank" rel="noopener">N-PORT</a></span>
-      <ol>${f.top.map((h) => { const s0 = page(h.cusip); return `<li>${s0 ? `<a href="#t-${slugOf(s0.ticker)}">${esc(niceName(h.name))}</a>` : esc(niceName(h.name))} <span class="muted">${pct(h.pct, 2, false)}</span></li>`; }).join("")}</ol></div>`;
+      <ol>${f.top.map((h) => {
+        const s0 = h.lines > 1 ? null : page(h.cusip);
+        const many = h.lines > 1 ? ` <small class="muted">(${h.lines} ${/bond|treasury|aggregate/i.test(f.category + f.name) ? "bonds" : "lines"} combined)</small>` : "";
+        return `<li>${s0 ? `<a href="#t-${slugOf(s0.ticker)}">${esc(niceName(h.name))}</a>` : esc(niceName(h.name))}${many} <span class="muted">${pct(h.pct, 2, false)}</span></li>`;
+      }).join("")}</ol>
+      <p class="foot">Holdings of one issuer are added together (for a bond fund, every bond of that issuer; for Alphabet, both share classes). Cash collateral and money-market sweep vehicles are left out.</p></div>`;
   }
   function renderEtfs() {
     saveEtf();
@@ -1785,7 +1791,7 @@
           <span class="muted">${rows.length} funds · tap one for its largest holdings</span>
         </div>
         <div class="table-scroll"><table class="tbl etf-tbl">
-          <thead><tr>${[["name", "Fund", "l fz fz-em"], ["px", "Price"], ["day", "Today"], ["ytd", "YTD"], ["ret1y", "1 year"], [null, "1-year chart"], ["netAssets", "Fund size"]].map(([k, l, cls]) => k
+          <thead><tr>${[["name", "Fund", "l fz fz-em"], ["px", "Price"], ["day", "Today"], ["ytd", "YTD, price"], ["ret1y", "1 year, price"], [null, "1-year chart"], ["netAssets", "Fund size (all classes)"]].map(([k, l, cls]) => k
             ? `<th scope="col" class="${cls || ""}"${e.sort === k ? ` aria-sort="${e.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-etf-sort="${k}">${l}${e.sort === k ? (e.dir > 0 ? " ↑" : " ↓") : ""}</button></th>`
             : `<th scope="col">${l}</th>`).join("")}</tr></thead>
           <tbody>${body}</tbody></table></div>
@@ -1795,7 +1801,7 @@
           <p class="note">Select Sector SPDR · Vanguard sector · iShares U.S. sector. “Best year” ranks sectors by the three funds’ average 1-year return.</p>
           <div class="table-scroll flat"><table class="own-table etf-sectors"><thead><tr><th class="l" scope="col">Sector</th><th class="l" scope="col">SPDR</th><th class="l" scope="col">Vanguard</th><th class="l" scope="col">iShares</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
         </section>
-        <p class="foot">Fund size and holdings: each fund’s latest Form N-PORT on SEC EDGAR (the whole fund, all share classes; published quarterly with a delay of about 60 days). Prices and returns: Yahoo Finance, price only (dividends not included). SPY, MDY and GLD are trusts that do not file N-PORT. The iShares communication fund (IYZ) covers telecom only. Not investment advice.</p>
+        <p class="foot">Fund size and holdings: each fund’s latest Form N-PORT on SEC EDGAR (the whole fund, all share classes; published quarterly with a delay of about 60 days). Prices and returns: Yahoo Finance; returns are price returns, so distributions are not included (for a bond fund such as TLT the total return is noticeably higher). Fund size is the whole fund across all share classes (for VTI, the Vanguard Total Stock Market Index Fund including its mutual fund classes). SPY, MDY and GLD are trusts that do not file N-PORT. The iShares communication fund (IYZ) covers telecom only. Not investment advice.</p>
       </div>`;
     const app = $("app");
     app.querySelectorAll("[data-etf-issuer]").forEach((b) => b.addEventListener("click", () => { e.issuer = b.dataset.etfIssuer; render(); }));
