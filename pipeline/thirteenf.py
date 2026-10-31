@@ -47,6 +47,20 @@ def list_filings(cik: str) -> list[Filing]:
     return out
 
 
+def reported_periods(cik: str) -> tuple[str, dict[str, str]]:
+    """(entity name, {period: form}) for every 13F report (13F-HR, or 13F-NT for one filed by affiliates)."""
+    cik = cik.zfill(10)
+    root = edgar.cached_json(f"https://data.sec.gov/submissions/CIK{cik}.json", ttl_hours=config.SUBMISSIONS_TTL_HOURS)
+    out: dict[str, str] = {}
+    r = root["filings"]["recent"]
+    for i, form in enumerate(r["form"]):
+        if form.startswith("13F-") and r["reportDate"][i]:
+            out.setdefault(r["reportDate"][i], form)
+    for f in list_filings(cik):  # older pages of the history
+        out.setdefault(f.period, f.form)
+    return root["name"], out
+
+
 def _text(xml: bytes, tag: str) -> str | None:
     m = re.search(rb"<(?:\w+:)?" + tag.encode() + rb">\s*([^<]*?)\s*</", xml)
     return m.group(1).decode() if m else None

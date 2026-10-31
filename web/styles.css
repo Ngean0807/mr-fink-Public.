@@ -217,6 +217,14 @@ button { font: inherit; color: inherit; }
   color: var(--accent-ink); font: 500 14px var(--font-ui); cursor: pointer; margin-left: auto;
 }
 .follow[aria-pressed="true"] { background: var(--accent-soft); border-color: transparent; }
+.ins-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; margin: 4px 0 10px; }
+.ins-sum b { font-weight: 500; }
+.mv-gone { padding: 0 16px; margin: 6px 0 0; }
+.season { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: var(--radius); background: var(--surface-2); padding: 12px 16px; font-size: 13px; color: var(--ink-2); }
+.season b { color: var(--ink); font-weight: 500; }
+.season a { color: inherit; }
+.early .tbl td:first-child, .early .tbl th:first-child { width: 56px; }
+.early .tbl .fz { position: static; box-shadow: none; }
 .co-acts { display: inline-flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
 .co-acts .follow { margin-left: 0; }
 .alert-panel { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 14px 16px; display: grid; gap: 14px; max-width: 760px; }
@@ -348,6 +356,7 @@ details.callout[open] > summary::after { content: "▴"; }
 .mix i { display: block; height: 100%; border-radius: 2px; }
 .act { font: 500 12px var(--font-ui); padding: 2px 8px; border-radius: 6px; }
 .act.added, .act.new { background: var(--pos-soft); color: var(--pos); }
+.act.out { background: var(--neg-soft); color: var(--neg); }
 .act.trimmed, .act.exited { background: var(--neg-soft); color: var(--neg); }
 .act.unchanged { background: var(--chip); color: var(--ink-2); }
 .heat { display: inline-block; min-width: 58px; padding: 3px 6px; border-radius: 4px; }

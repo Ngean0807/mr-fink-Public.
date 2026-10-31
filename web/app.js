@@ -648,6 +648,64 @@
     return { total, top, flow, move, added, trimmed, median: stakes.length ? stakes[Math.floor(stakes.length / 2)] : null };
   }
 
+  // ---------- 13F season: a new quarter arriving manager by manager ----------
+  function seasonBanner(v) {
+    const Qs = D.meta.quarters || {};
+    const lines = MGRS.map((id) => {
+      const q = Qs[id];
+      if (!q) return null;
+      const early = D.views[id].early;
+      if (early) return { id, text: `<b>${MGR_NAME[id]}</b> filed ${early.label} on ${dateL(early.filed)}`, done: true };
+      if (q.progress) return { id, text: `<b>${MGR_NAME[id]}</b> ${q.progress.filed.length} of ${q.progress.filed.length + q.progress.pending.length} filing entities so far`, done: false };
+      return null;
+    }).filter(Boolean);
+    if (!lines.length) return "";
+    const nextQ = (D.views[lines[0].id].early || {}).label || qlabel(Qs[lines[0].id].progress.period);
+    if (state.view === "big3") {
+      return `<div class="season"><span><b>${nextQ} 13F season:</b> ${lines.map((l) => `<a href="#${l.id}">${l.text}</a>`).join(" · ")}. The tables stay at ${qlabel(D.meta.latest)} until all three have filed, so every view compares the same quarter.</span></div>`;
+    }
+    const mine = lines.find((l) => l.id === state.view);
+    if (!mine) return "";
+    const q = Qs[state.view];
+    if (v.early) {
+      return `<div class="season"><span>${mine.text}. The main table stays at ${qlabel(D.meta.latest)} until the other managers file.</span><button type="button" class="btn primary" id="toggle-early">${state.early ? "Hide" : "Show"} ${v.early.label} holdings</button></div>`;
+    }
+    return `<div class="season"><span>${mine.text} for ${qlabel(q.progress.period)}. It moves to the new quarter when every entity has reported${q.progress.pending.length ? ` (waiting for ${esc(q.progress.pending.slice(0, 3).join(", "))}${q.progress.pending.length > 3 ? "…" : ""})` : ""}.</span></div>`;
+  }
+  /** Largest net buys or sells across the whole book (pipeline/movers.py), linked where a page exists. */
+  function wholeBookMoves(v) {
+    const list = v.moves[state.movers].slice(0, state.movesMore ? 25 : 8);
+    if (!list.length) return '<div class="item"><span></span><span class="nm"><small>None this quarter.</small></span><span></span></div>';
+    return list.map((r) => {
+      const sl = slugOf(r.ticker);
+      const href = bySlug(sl) || emergingAll().some((x) => x.ticker === r.ticker) ? `#t-${sl}` : null;
+      const tag = r.status === "new" ? '<span class="act new">New</span>' : r.status === "exited" ? '<span class="act out">Sold out</span>'
+        : r.status === "converted" ? '<span class="act" title="Net of the listing it replaced (for example ADR to ordinary shares)">Listing change</span>' : pill(r.dSharesPct, { sm: true });
+      const inner = `${tkChip(r)}<span class="nm"><b>${esc(niceName(r.name))}</b><small>${numS(r.dShares)} shares</small></span><span class="rt"><b class="${r.flow >= 0 ? "txt-up" : "txt-down"}">${usdS(r.flow)}</b>${tag}</span>`;
+      return href ? `<a href="${href}">${inner}</a>` : `<div class="item">${inner}</div>`;
+    }).join("");
+  }
+  function earlySection(v) {
+    const e = v.early;
+    const t0 = v.totals[v.totals.length - 1];
+    const link = (r) => { const sl = slugOf(r.ticker); return bySlug(sl) || emergingAll().some((x) => x.ticker === r.ticker) ? `#t-${sl}` : null; };
+    const body = e.rows.map((r) => {
+      const href = link(r);
+      const mv = r.prevRank ? r.prevRank - r.rank : null;
+      const rk = `${r.rank}${mv == null ? '<small class="txt-up">new</small>' : mv > 0 ? `<small class="txt-up">▲${mv}</small>` : mv < 0 ? `<small class="txt-down">▼${-mv}</small>` : ""}`;
+      const co = `${tkChip(r)}<span class="co-nm"><b>${esc(niceName(r.name))}</b></span>`;
+      return `<tr><td><span class="rk">${rk}</span></td><td class="l fz fz-em">${href ? `<a class="co" href="${href}">${co}</a>` : `<span class="co">${co}</span>`}</td>
+        <td><b class="v">${usd(r.value)}</b></td><td>${r.prevValue == null ? "—" : usd(r.prevValue)}</td>
+        <td>${r.dSharesPct == null ? '<span class="act new">New</span>' : pill(r.dSharesPct, { sm: true })}${r.split ? ` <small class="muted" title="Share counts adjusted for a ${r.split >= 1 ? r.split + "-for-1 split" : "1-for-" + Math.round(1 / r.split) + " reverse split"}">split-adj.</small>` : ""}</td></tr>`;
+    }).join("");
+    return `<section class="section early" aria-labelledby="early-h">
+      <div class="section-head"><div><h2 id="early-h">${esc(v.name)} ${e.label}: top ${e.rows.length}</h2>
+        <p class="note">Filed ${dateL(e.filed)} · book ${usd(e.total)} (${pill(e.total / t0 - 1, { sm: true })} vs ${qlabel(D.meta.latest)}) · ${e.positions.toLocaleString("en-US")} securities · changes against ${esc(v.name)}’s own ${qlabel(D.meta.latest)} filing</p></div></div>
+      <div class="table-scroll"><table class="tbl"><thead><tr><th scope="col">#</th><th scope="col" class="l fz fz-em">Company</th><th scope="col">${e.label} value</th><th scope="col">${qlabel(D.meta.latest)} value</th><th scope="col">Shares QoQ</th></tr></thead><tbody>${body}</tbody></table></div>
+      <p class="foot">Sources: ${e.sources.map((x) => `<a href="${x.url}" target="_blank" rel="noopener">${esc(x.entity)} ${esc(x.form)}</a>`).join(", ")}</p>
+    </section>`;
+  }
+
   function renderHome() {
     const v = view();
     const s = stats(v);
@@ -678,6 +736,8 @@
           </div>
           <p class="figure-note">Holdings as of ${dateL(D.meta.latest)} · last filed ${dateL(lastFiled)}</p>
         </div>
+        ${seasonBanner(v)}
+        ${v.early && state.early ? earlySection(v) : ""}
         <div class="chart-block">
           ${rangeBar(toggles)}
           ${state.view === "big3" && state.homeMode === "managers" ? `<div class="legend">${MGRS.map((id) => `<span><i style="background:${mColor(id)}"></i>${MGR_NAME[id]}</span>`).join("")}</div>` : ""}
@@ -712,9 +772,11 @@
           </dl>
         </section>
         <section class="card" aria-labelledby="mv-h">
-          <div class="card-head"><h2 id="mv-h">Biggest moves last quarter</h2></div>
+          <div class="card-head"><h2 id="mv-h">Biggest moves last quarter</h2><span class="feed-meta">${v.moves ? `all ${v.positions.toLocaleString("en-US")} securities` : `top ${D.meta.topN}`}</span></div>
           <div class="tabs" role="group" aria-label="Direction">${[["bought", "Bought"], ["sold", "Sold"]].map(([k, l]) => `<button type="button" class="tab" data-movers="${k}" aria-pressed="${state.movers === k}">${l}</button>`).join("")}</div>
-          <div class="list">${movers.map((r) => { const c = sec(r.cusip); return `<a href="#t-${slugOf(c.ticker)}">${tkChip(c)}<span class="nm"><b>${esc(niceName(c.name))}</b><small>${numS(r.qoq.dShares)} shares</small></span><span class="rt"><b class="${r.qoq.trade >= 0 ? "txt-up" : "txt-down"}">${usdS(r.qoq.trade)}</b>${pill(r.qoq.dSharesPct, { sm: true })}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>None this quarter.</small></span><span></span></div>'}</div>
+          <div class="list">${v.moves ? wholeBookMoves(v) : movers.map((r) => { const c = sec(r.cusip); return `<a href="#t-${slugOf(c.ticker)}">${tkChip(c)}<span class="nm"><b>${esc(niceName(c.name))}</b><small>${numS(r.qoq.dShares)} shares</small></span><span class="rt"><b class="${r.qoq.trade >= 0 ? "txt-up" : "txt-down"}">${usdS(r.qoq.trade)}</b>${pill(r.qoq.dSharesPct, { sm: true })}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>None this quarter.</small></span><span></span></div>'}</div>
+          ${v.moves && state.movers === "sold" && (v.moves.gone || []).length ? `<p class="foot mv-gone">Not counted as sales: ${v.moves.gone.map((r) => `<b>${esc(r.ticker)}</b>`).join(", ")} left every Big Three book (acquired or delisted).</p>` : ""}
+          ${v.moves ? `<button type="button" class="more" data-moves-more>${state.movesMore ? "Show fewer" : `Show top ${v.moves[state.movers].length}`}</button>` : ""}
         </section>
         <section class="card" aria-labelledby="cmp-h">
           <div class="card-head"><h2 id="cmp-h">Compare managers</h2></div>
@@ -733,6 +795,7 @@
     wireCommon(app);
     app.querySelectorAll("[data-home-mode]").forEach((b) => b.addEventListener("click", () => { state.homeMode = b.dataset.homeMode; render(); }));
     app.querySelectorAll("[data-movers]").forEach((b) => b.addEventListener("click", () => { state.movers = b.dataset.movers; render(); }));
+    app.querySelector("[data-moves-more]")?.addEventListener("click", () => { state.movesMore = !state.movesMore; render(); });
     app.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       state.tab = b.dataset.tab;
       state.sort = { key: "rank", dir: 1 };
@@ -742,6 +805,7 @@
     }));
     $("filter").addEventListener("input", (e) => { state.filter = e.target.value; renderTable(); });
     $("export-home").addEventListener("click", exportHome);
+    $("toggle-early")?.addEventListener("click", () => { state.early = !state.early; render(); if (state.early) $("early-h")?.scrollIntoView({ behavior: "smooth", block: "start" }); });
   }
 
   function heatClass(values, v) {
@@ -955,6 +1019,7 @@
     flowYoY: (r) => r.flowYoY,
     pattern: (r) => r.pattern,
     rev: (r) => (emSec(r).fundamentals || {}).revenueGrowth,
+    ins: (r) => (r.insiders ? r.insiders.bought - r.insiders.sold : null),
   };
   function emergingSorted() {
     const f = state.em;
@@ -1014,6 +1079,7 @@
         <td>${signed(r.flowYoY, usdS, 5e5)}</td>
         <td class="sep"><span class="pat pat-${r.pattern}" title="${esc(PATTERNS[r.pattern][1])}">${PATTERNS[r.pattern][0]}</span></td>
         <td>${fund.revenueGrowth == null ? '<span class="na">n.m.</span>' : signed(fund.revenueGrowth)}</td>
+        <td>${insNet(r)}</td>
         <td>${spark(r.stakeHistory, "var(--accent)")}</td>
         <td class="l">${flags.map((k) => `<span class="flag" title="${esc(FLAGS[k][1])}">${FLAGS[k][0]}</span>`).join(" ") || '<span class="na">—</span>'}</td>
       </tr>`;
@@ -1046,8 +1112,8 @@
         <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${unpatterned.length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
         <div class="tools em-tools">${exportBtn("export-em")}</div>
         <div class="table-scroll"><table class="tbl em-tbl">
-          <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
-          <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
+          <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}${th("ins", "Insiders 90d")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
+          <tbody>${body || `<tr><td colspan="14" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
         </table></div>
         ${sorted.length > f.limit ? `<button type="button" class="more" id="em-more" style="border:1px solid var(--line);border-radius:var(--radius)">Show all ${sorted.length} companies</button>` : ""}
         <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
@@ -1167,6 +1233,7 @@
         </div>
         ${emergingSection(s)}
         ${fundsSection(s)}
+        ${insidersSection(s)}
         <section class="section" aria-labelledby="own-h">
           <div class="section-head"><h2 id="own-h">Big Three ownership</h2><span class="note">${qlabel(D.meta.latest)} 13F filings</span></div>
           <div class="table-scroll flat"><table class="own-table">
@@ -1256,6 +1323,27 @@
     if (!H && !s.lite) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
   }
 
+  /** Open-market insider trades from Form 4 over the last 90 days. */
+  function insidersSection(s) {
+    const ins = s.insiders;
+    if (!ins) return "";
+    const net = ins.bought - ins.sold;
+    const rows = ins.trades.map((t) => `<tr>
+        <td class="l">${dateL(t.date)}</td><td class="l"><b>${esc(t.name)}</b><small class="muted"> ${esc(t.role)}</small></td>
+        <td><span class="act ${t.code === "P" ? "new" : "out"}">${t.code === "P" ? "Bought" : "Sold"}</span>${t.plan ? ' <small class="muted" title="Pre-arranged trading plan (Rule 10b5-1)">plan</small>' : ""}</td>
+        <td>${num(t.shares)}</td><td>${price(t.price)}</td><td><b>${usd(t.value)}</b></td><td><a href="${t.url}" target="_blank" rel="noopener">Form 4</a></td></tr>`).join("");
+    return `<section class="section" aria-labelledby="ins-h">
+      <div class="section-head"><h2 id="ins-h">Insider trades</h2><span class="note">Form 4 · last ${ins.days} days</span></div>
+      <div class="ins-sum">
+        <span>Bought <b class="txt-up">${ins.bought ? usd(ins.bought) : "none"}</b> <small class="muted">${ins.buys} trade${ins.buys === 1 ? "" : "s"}, ${ins.buyers} insider${ins.buyers === 1 ? "" : "s"}</small></span>
+        <span>Sold <b class="txt-down">${ins.sold ? usd(ins.sold) : "none"}</b> <small class="muted">${ins.sells} trade${ins.sells === 1 ? "" : "s"}</small></span>
+        <span>Net <b class="${net >= 0 ? "txt-up" : "txt-down"}">${usdS(net)}</b></span>
+      </div>
+      ${rows ? `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Date</th><th class="l" scope="col">Insider</th><th scope="col">Trade</th><th scope="col">Shares</th><th scope="col">Price</th><th scope="col">Value</th><th scope="col"><span class="sr">Filing</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<p class="foot">No open-market purchases or sales by officers, directors or 10% owners in the last ${ins.days} days.</p>`}
+      <p class="foot">Open-market purchases and sales only; stock awards, option exercises, tax withholding and gifts are left out.${ins.pending ? ` ${ins.pending} recent Form 4 filings are still being read and will appear after the next refreshes.` : ""}</p>
+    </section>`;
+  }
   function fundsSection(s) {
     const funds = s.funds || [];
     if (!funds.length) return "";
@@ -1447,7 +1535,9 @@
       ["Price ($)", (r) => pxOf(r.ticker) || r.price], ["Today (%)", (r) => pc(dayChg(r.ticker))], ["Market cap ($)", (r) => mcapOf(r.ticker, r.sharesOutstanding) || r.marketCap],
       ["Big Three stake (%)", (r) => pc(r.stake)], ["Stake change QoQ (pp)", (r) => pc(r.stakeChangeQoQ)], ["Stake change YoY (pp)", (r) => pc(r.stakeChangeYoY)],
       ["Managers buying", (r) => r.breadth], ["Net buying YoY ($)", (r) => r.flowYoY], ["Pattern", (r) => PATTERNS[r.pattern][0]],
-      ["Revenue growth (%)", (r) => pc((S(r).fundamentals || {}).revenueGrowth)], ["Flags", (r) => liveFlags(r).map((k) => FLAGS[k][0]).join("; ")],
+      ["Revenue growth (%)", (r) => pc((S(r).fundamentals || {}).revenueGrowth)],
+      ["Insiders bought 90d ($)", (r) => r.insiders && r.insiders.bought], ["Insiders sold 90d ($)", (r) => r.insiders && r.insiders.sold],
+      ["Flags", (r) => liveFlags(r).map((k) => FLAGS[k][0]).join("; ")],
     ], emergingSorted());
   }
   function exportWatch() {
@@ -1468,6 +1558,13 @@
     }).filter(Boolean);
   }
   const anySec = (c) => D.securities[c] || emergingAll().find((r) => r.cusip === c);
+  /** Net insider buying, last 90 days: from the full record, else the Emerging row's summary. */
+  function insNet(s) {
+    const ins = s.insiders || (emergingAll().find((r) => r.cusip === s.cusip) || {}).insiders;
+    if (!ins || (!ins.bought && !ins.sold)) return '<span class="na">—</span>';
+    const net = ins.bought - ins.sold;
+    return `<span class="${net >= 0 ? "txt-up" : "txt-down"}" title="Bought ${usd(ins.bought)} · sold ${usd(ins.sold)}">${usdS(net)}</span>`;
+  }
   function renderWatch() {
     const items = watchItems().map((r) => anySec(r.cusip));
     const stake = (s) => { const h = D.securities[s.cusip] && holder(s.cusip, "big3"); const r = emergingAll().find((x) => x.cusip === s.cusip); return h && h.ownership != null ? h.ownership : r ? r.stake : null; };
@@ -1477,6 +1574,7 @@
         <td>${live("px", s.ticker)}</td><td>${live("pill", s.ticker)}</td><td>${live("mcap", s.ticker)}</td>
         <td class="sep">${stake(s) == null ? '<span class="na">n/a</span>' : pct(stake(s), 1, false)}</td>
         <td>${since(s) == null ? "—" : pill(since(s), { sm: true })}</td>
+        <td>${insNet(s)}</td>
         <td><button type="button" class="btn" data-unwatch="${esc(s.ticker)}" aria-label="Remove ${esc(s.ticker)}">Remove</button></td>
       </tr>`).join("");
     $("app").innerHTML = `<div class="main">
@@ -1486,7 +1584,7 @@
         </div>
         ${items.length ? `<div class="tools em-tools">${exportBtn("export-watch")}</div>` : ""}
         ${items.length ? `<div class="table-scroll"><table class="tbl">
-          <thead><tr><th class="l fz fz-em" scope="col">Company</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Market cap</th><th scope="col" class="sep">Big Three stake</th><th scope="col">Since 13F</th><th scope="col"><span class="sr">Remove</span></th></tr></thead>
+          <thead><tr><th class="l fz fz-em" scope="col">Company</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Market cap</th><th scope="col" class="sep">Big Three stake</th><th scope="col">Since 13F</th><th scope="col" title="Open-market insider buying minus selling, last 90 days (Form 4)">Insiders 90d</th><th scope="col"><span class="sr">Remove</span></th></tr></thead>
           <tbody>${body}</tbody></table></div>
           <p class="foot">Since 13F is the price change from the quarter-end price in the latest 13F (${dateL(D.meta.latest)}). Each company page has a 🔔 Alerts button for its phone channel.</p>
           ${watchFilings(items)}`
@@ -1644,6 +1742,20 @@
       });
     }));
   }
+  // ---------- install as an app ----------
+  let installPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; if (!$("npanel").hidden) renderNotifyPanel(); });
+  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  function installSection() {
+    if (standalone()) return `<section class="np-sec"><h3>App</h3><p>Mr. Fink is installed on this device.</p></section>`;
+    const how = installPrompt
+      ? `<div><button type="button" class="btn primary" id="np-install">Install Mr. Fink</button></div>`
+      : isIOS()
+        ? `<p>In Safari, tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b>. Once installed, the bell's browser notifications also work on iPhone while the app is open.</p>`
+        : `<p>In Chrome or Edge, open the browser menu and choose <b>Install app</b> (or <b>Add to Home screen</b> on Android).</p>`;
+    return `<section class="np-sec"><h3>Install as an app</h3><p>An icon on your home screen, full screen without the browser bar, and the last data available offline.</p>${how}</section>`;
+  }
   function renderNotifyPanel() {
     const topics = (D.meta.notify && D.meta.notify.topics) || {};
     const server = (D.meta.notify && D.meta.notify.server) || "https://ntfy.sh";
@@ -1671,7 +1783,8 @@
         <p>2. Subscribe to the channels you want. In the app tap +, then paste the channel name, or open the link on your phone.</p>
         ${chosen.length ? chosen.map(([k, l]) => `<div class="np-sub"><span><b>${l}</b><br><code>${esc(topics[k])}</code></span><button type="button" class="btn" data-copy="${esc(topics[k])}">Copy</button><a class="btn" href="${esc(server.replace(/\/$/, ""))}/${esc(topics[k])}" target="_blank" rel="noopener">Open</a></div>`).join("") : '<p class="np-status">Pick at least one filing type above.</p>'}
         <p class="np-status">Channels carry public SEC filings only. Anyone can subscribe to them.</p>
-      </section>`;
+      </section>
+      ${installSection()}`;
     $("np-close").addEventListener("click", closeNotify);
     $("npanel").querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
       nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => $("npanel").querySelector(`[data-nkind="${k}"]`).checked);
@@ -1691,6 +1804,13 @@
       catch (e) { toast("This browser shows notifications only from installed apps."); }
     });
     wireCopy($("npanel"));
+    $("np-install")?.addEventListener("click", async () => {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      installPrompt = null;
+      if (outcome === "accepted") toast("Mr. Fink is installed.");
+      renderNotifyPanel();
+    });
     $("bell-dot").hidden = !(nprefs.browser && perm === "granted");
   }
   function openNotify() {
@@ -1745,6 +1865,7 @@
     setupSearch();
     setupNotify();
     window.addEventListener("hashchange", route);
+    if (HOSTED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* offline mode unavailable */ });
     document.addEventListener("click", (e) => {
       const a = e.target.closest("[data-back], [data-replace], [data-follow], [data-unwatch]");
       if (!a) return;
