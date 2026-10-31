@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      test_notification:
+        description: Send a test push to the phone
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -42,6 +47,9 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'Mr Fink nissim711@gmail.com' }}
           MRFINK_SUBMISSIONS_TTL: "0"
+          # Phone pushes via ntfy: the topic is a repository secret, never written to the site.
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TEST: ${{ inputs.test_notification }}
         run: python -m pipeline.build
       - name: Price feed config
         # Optional: a free Finnhub key turns on real-time prices (websocket trades) in the browser.

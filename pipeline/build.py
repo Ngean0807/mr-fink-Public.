@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import hashlib
 
-from . import analytics, config, feed, fundamentals, periods, quotes, securities, thirteenf
+from . import analytics, config, feed, fundamentals, notify, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -226,6 +227,10 @@ def main() -> None:
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))
     OUT.with_name("history.json").write_text(json.dumps(price_history, separators=(",", ":")))
+    # Phone pushes go out only after the new data is written, so the link opens fresh numbers.
+    notify.notify_new(feed_events)
+    if os.environ.get("NTFY_TEST") == "true":
+        notify.send_test()
     STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))
     print(f"Wrote {OUT} ({OUT.stat().st_size/1024:,.0f} KB) in {time.time()-t0:,.0f}s")
 

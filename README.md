@@ -75,6 +75,22 @@ market cap and P/E at the live price) and "Top 30 at today's prices". The Finnhu
 anyone who opens the page; use a free key dedicated to this site. Yahoo Finance data is unofficial
 and for personal use.
 
+### Phone notifications
+
+Each refresh compares the filing feed with what it has already announced and pushes the new
+ones to a phone through [ntfy](https://ntfy.sh) (free app for iOS and Android, no account):
+
+| Filing | Push |
+| --- | --- |
+| 13F-HR / 13F-HR/A by a manager | high priority: "Vanguard 13F: new holdings for Q3 2026" |
+| Schedule 13G / 13G/A by a manager on a tracked company | "BlackRock owns 8.12% of NVDA" |
+| 10-Q / 10-K by a tracked company | low priority: "NVDA filed its quarterly report (10-Q)" |
+
+Tapping a push opens the company or manager page; the "SEC filing" button opens EDGAR.
+Setup: pick a hard-to-guess topic name, subscribe to it in the ntfy app, and save it as the
+repository secret `NTFY_TOPIC`. Run the workflow manually with "Send a test push" to check.
+`NTFY_KINDS` (e.g. `13f,13g`) narrows what is sent.
+
 Setup once: push to GitHub and enable Pages with source "GitHub Actions". The workflow identifies
 itself to SEC with the maintainer's contact; override it with a repository variable
 `SEC_USER_AGENT`. GitHub pauses scheduled
