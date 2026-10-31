@@ -6,6 +6,7 @@ derived as YTD minus the quarters already known (e.g. Q4 = FY - 9M).
 """
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from . import edgar
@@ -183,13 +184,33 @@ def shares_outstanding(cf: dict, ticker: str, asof: str) -> tuple[str, float] | 
     return None
 
 
+def _needed_concepts() -> set[str]:
+    lists = [REVENUE, COST_OF_REVENUE, GROSS_PROFIT, OPERATING_INCOME, NET_INCOME, EPS_DILUTED, OPERATING_CF, CAPEX,
+             EQUITY, CASH, SHORT_INVESTMENTS, DEBT_TOTAL, DEBT_NONCURRENT, DEBT_CURRENT, SHORT_BORROWINGS]
+    extra = ["WeightedAverageNumberOfDilutedSharesOutstanding", "NetIncomeLossAvailableToCommonStockholdersDiluted",
+             "NetIncomeLossAvailableToCommonStockholdersBasic", "EntityCommonStockSharesOutstanding"]
+    return {c for lst in lists for c in lst} | set(extra)
+
+
 def company_facts(cik: str, version: str | None = None) -> dict | None:
-    """XBRL facts, refetched whenever the company files a new 10-Q/10-K (`version` = its accession)."""
+    """XBRL facts, re-read whenever the company files a new 10-Q/10-K (`version` = its accession).
+
+    Company facts files run to several MB; only the concepts used here are kept on disk.
+    """
+    key = f"facts_{cik}_{(version or 'latest').replace('/', '_')}.json.gz"
+    cached = edgar.load_artifact(key)
+    if cached is not None:
+        return cached
     try:
-        return edgar.cached_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", ttl_hours=24 * 7, version=version)
+        raw = json.loads(edgar.fetch(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"))
     except Exception:
         return None
-
+    keep = _needed_concepts()
+    slim = {"facts": {tx: {c: v for c, v in concepts.items() if c in keep} for tx, concepts in raw.get("facts", {}).items()}}
+    for old in (edgar.CACHE_DIR / "derived").glob(f"facts_{cik}_*.json.gz"):
+        old.unlink(missing_ok=True)
+    edgar.save_artifact(key, slim)
+    return slim
 
 def _growth(series: dict[str, float], end: str) -> float | None:
     """Year-over-year growth of a TTM series at `end` against the point ~1 year earlier."""

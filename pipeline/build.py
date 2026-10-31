@@ -12,7 +12,7 @@ from pathlib import Path
 
 import hashlib
 
-from . import analytics, config, feed, fundamentals, notify, periods, quotes, securities, thirteenf
+from . import analytics, config, edgar, emerging, feed, fundamentals, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -48,8 +48,44 @@ def combine(books: dict[str, dict], period_list: list[str]) -> dict:
     return out
 
 
+def describe_security(c: str, info: dict, books: dict, row: list, period_list: list[str]) -> dict:
+    """Identity, splits, CUSIP history and SEC profile for one security."""
+    ticker = securities.display_ticker(info["ticker"])
+    preds = analytics.find_predecessors(c, row[2], books, period_list)
+    splits = analytics.detect_splits(c, analytics.stitch(c, preds, books, period_list), period_list)
+    company = securities.sec_company(info["ticker"])
+    meta = {
+        "cusip": c,
+        "ticker": ticker,
+        "name": row[2].title() if not company else company["title"],
+        "classTitle": row[3],
+        "securityType": info["type"],
+        "figi": info["figi"],
+        "price": row[1] / row[0] if row[0] else None,
+        "splits": splits,
+        "predecessors": preds,
+        "cik": company["cik"] if company else None,
+    }
+    if company:
+        prof = securities.profile(company["cik"])
+        meta.update(prof)
+        meta["sector"] = securities.SECTOR_OVERRIDES.get(ticker, prof["sector"])
+    print(f"  {ticker:<7} {meta['name'][:34]:<34} splits={[(s['period'], s['ratio']) for s in splits]} preds={[p['cusip'] for p in preds]}")
+    return meta
+
+
+def prune_legacy_cache() -> None:
+    """Raw company-facts and N-PORT files from earlier versions; slim parsed copies replace them."""
+    for pattern in ("data.sec.gov_api_xbrl_companyfacts_*", "www.sec.gov_Archives_edgar_data_*_primary_doc.xml"):
+        for f in edgar.CACHE_DIR.glob(pattern):
+            if pattern.endswith(".xml") and f.stat().st_size < 1_000_000:
+                continue  # small primary docs (13F cover pages, 13G) stay cached
+            f.unlink(missing_ok=True)
+
+
 def main() -> None:
     t0 = time.time()
+    prune_legacy_cache()
     latest = latest_common_period()
     count = 0
     while periods.quarter_ends(latest, count + 1)[0] >= config.HISTORY_START:
@@ -89,42 +125,25 @@ def main() -> None:
         selected.update(top)
 
     print(f"Profiling {len(selected)} securities (splits, CUSIP history, fundamentals)")
-    sec_meta = {}
-    for c in sorted(selected):
-        info = figi[c]
-        row = books_with_big3["big3"][latest][c]
-        ticker = securities.display_ticker(info["ticker"])
-        preds = analytics.find_predecessors(c, row[2], books, period_list)
-        chain = [c] + [p["cusip"] for p in preds]
-        # Split detection runs on the stitched history so splits before a CUSIP change are caught too.
-        stitched = {}
-        for mid, b in books.items():
-            stitched[mid] = {}
-            for p in period_list:
-                rows = [b[p][x] for x in chain if x in b.get(p, {})]
-                stitched[mid][p] = {c: max(rows, key=lambda r: r[1])} if rows else {}
-        splits = analytics.detect_splits(c, stitched, period_list)
-        company = securities.sec_company(info["ticker"])
-        meta = {
-            "cusip": c,
-            "ticker": ticker,
-            "name": row[2].title() if not company else company["title"],
-            "classTitle": row[3],
-            "securityType": info["type"],
-            "figi": info["figi"],
-            "price": row[1] / row[0] if row[0] else None,
-            "splits": splits,
-            "predecessors": preds,
-            "cik": company["cik"] if company else None,
-        }
-        if company:
-            prof = securities.profile(company["cik"])
-            meta.update(prof)
-            meta["sector"] = securities.SECTOR_OVERRIDES.get(ticker, prof["sector"])
-        sec_meta[c] = meta
-        print(f"  {ticker:<7} {meta['name'][:34]:<34} splits={[(s['period'], s['ratio']) for s in splits]} preds={[p['cusip'] for p in preds]}")
+    sec_meta = {c: describe_security(c, figi[c], books, books_with_big3["big3"][latest][c], period_list) for c in sorted(selected)}
+
+    # Small caps the Big Three are accumulating, outside their top holdings.
+    emerging_rows, emerging_diag = emerging.screen(books, books_with_big3["big3"], period_list, exclude=selected)
+    for r in emerging_rows:
+        c = r["cusip"]
+        if not r["profiled"] and c not in sec_meta:
+            continue
+        if c not in sec_meta:
+            sec_meta[c] = describe_security(c, r["figi"], books, books_with_big3["big3"][latest][c], period_list)
+        sec_meta[c]["emerging"] = True
 
     feed_events, stakes_13g, latest_report = feed.build_feed(sec_meta, config.SUBMISSIONS_TTL_HOURS)
+    # Fund-level positions (N-PORT) for every tracked security, and the funds' filings in the feed.
+    chains = {c: [c] + [p["cusip"] for p in m["predecessors"]] for c, m in sec_meta.items()}
+    fund_positions, nport_events = nport.build(chains, ttl_hours=6)
+    for c, m in sec_meta.items():
+        m["funds"] = sorted(fund_positions.get(c, []), key=lambda f: -f["value"])
+    feed_events = sorted(feed_events + nport_events, key=lambda e: e["accepted"], reverse=True)
     for c, meta in sec_meta.items():
         meta["stakes13g"] = sorted(stakes_13g.get(c, []), key=lambda g: g["accepted"], reverse=True)
         if meta.get("cik"):
@@ -218,6 +237,12 @@ def main() -> None:
         "views": out_views,
         "securities": sec_meta,
         "feed": feed_events,
+        "emerging": {
+            "asOf": latest,
+            "params": config.EMERGING,
+            "diagnostics": emerging_diag,
+            "rows": [{k: v for k, v in r.items() if k != "figi"} for r in emerging_rows],
+        },
     }
     # Market prices: a delayed quote, five sessions intraday and ten years of daily closes.
     tickers = sorted({m["ticker"] for m in sec_meta.values()})
@@ -228,7 +253,9 @@ def main() -> None:
     OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))
     OUT.with_name("history.json").write_text(json.dumps(price_history, separators=(",", ":")))
     # Phone pushes go out only after the new data is written, so the link opens fresh numbers.
+    notify.sync_from_site()
     notify.notify_new(feed_events)
+    notify.export_state(OUT.with_name("notified.json"))
     if os.environ.get("NTFY_TEST") == "true":
         notify.send_test()
     STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))
