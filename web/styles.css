@@ -93,8 +93,9 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none !important; }
 .brand-mark {
-  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent); color: var(--surface); font: 700 17px/1 var(--font-ui);
+  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  background: var(--accent) url("icons/icon-192.png") center / cover no-repeat; box-shadow: 0 0 0 1px var(--line);
+  color: transparent; font-size: 0;
 }
 .brand-name { font: 500 20px/1 var(--font-ui); letter-spacing: -.01em; white-space: nowrap; }
 .brand-name span { color: var(--muted); font-weight: 400; }
