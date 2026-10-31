@@ -33,6 +33,7 @@
     watch = isWatched(t) ? watch.filter((x) => x !== t) : watch.concat(t);
     try { localStorage.setItem("mrfink.watch", JSON.stringify(watch)); } catch (e) { /* storage unavailable */ }
     toast(isWatched(t) ? `${t} added to your watchlist` : `${t} removed from your watchlist`);
+    pushPrefsChanged();
   }
 
   // ---------- formatting ----------
@@ -1052,7 +1053,51 @@
     return `<b>Track record.</b> Since the last 13F deadline (${dateL(new Date(deadline).toISOString().slice(0, 10))}), the median stock on this list moved ${signed(mine)} (${n} with price history), against ${signed(big)} for the Big Three top ${nb}. One period is not a backtest, but it is the honest test of following these filings.`;
   }
 
+  // ---------- backtest of the screen (pipeline/backtest.py, data/backtest.json) ----------
+  let BT = null, btLoad = null;
+  function loadBacktest() {
+    if (!btLoad) btLoad = fetch("data/backtest.json").then((r) => (r.ok ? r.json() : null)).then((d) => (BT = d)).catch(() => null);
+    return btLoad;
+  }
+  function backtestSection() {
+    if (!BT) return `<h2 id="bt-h">Has this screen worked?</h2><p class="foot">Loading the backtest…</p>`;
+    const s = BT.summary, c = BT.cohorts;
+    const g = s.growth3;
+    const last = (k) => (g[k] && g[k].length ? g[k][g[k].length - 1] : null);
+    const money = (x) => (x == null ? "—" : "$" + x.toFixed(2));
+    const pc1 = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%");
+    const first = c[0], end = c[g.screen.length - 1];
+    const rows = [
+      ["S&amp;P 500 (SPY)", "spy", "var(--muted)"], ["Russell 2000 (IWM)", "iwm", "var(--ss)"], ["This screen", "screen", "var(--accent)"],
+      ["All three managers buying", "allThree", "var(--vg)"], ["All small caps, no signal", "universe", "var(--line-strong)"], ["Top 25 by stake gain", "top25", "var(--neg-line)"],
+    ].filter((r) => g[r[1]] && g[r[1]].length);
+    return `<div class="section-head"><div><h2 id="bt-h">Has this screen worked?</h2>
+        <p class="note">Backtest ${qlabel(first.period)}–${qlabel(end.period)}: each quarter’s list bought at the first quarter end after its 13F was public, equal weight, rebalanced quarterly</p></div></div>
+      <div class="bt-grid">
+        <div class="chart" id="bt-chart"></div>
+        <div class="list bt-legend">${rows.map(([l, k, col]) => `<div class="item"><span class="sw" style="background:${col}"></span><span class="nm"><b>${l}</b></span><span class="rt"><b>${money(last(k))}</b></span></div>`).join("")}</div>
+      </div>
+      <p class="bt-verdict"><b>Verdict:</b> $1 in the screen became ${money(last("screen"))}, against ${money(last("universe"))} for all small caps that passed the same price and size filters, and ${money(last("spy"))} for the S&amp;P 500. Over 12-month holds the screen averaged ${pc1(s.avg12)} a year against ${pc1(s.avgUniverse12)} for the small-cap universe and beat it in ${Math.round(s.beatUniverse12 * 100)}% of ${s.cohorts12} quarters: no reliable edge. The strongest version (top 25 by stake gain) did worst, consistent with stocks giving back gains after index inclusion.</p>
+      <details class="bt-method"><summary>How it was tested</summary><p>${esc(BT.method).replace(/\n- /g, "<br>• ").replace(/\n/g, " ")}</p></details>`;
+  }
+  function drawBacktest() {
+    const host = $("bt-chart");
+    if (!host || !BT) return;
+    const c = BT.cohorts, g = BT.summary.growth3, n = g.screen.length;
+    const dates = c.slice(0, n).map((x) => x.entry);
+    const y = new Date(dates[n - 1]); y.setUTCMonth(y.getUTCMonth() + 3);
+    dates.push(y.toISOString().slice(0, 10));
+    const ser = (k, name, color) => ({ name, color, values: [1, ...g[k].slice(0, n)] });
+    lineChart(host, {
+      series: [ser("spy", "S&P 500", "var(--muted)"), ser("iwm", "Russell 2000", "var(--ss)"), ser("universe", "All small caps", "var(--line-strong)"),
+        ser("allThree", "All three buying", "var(--vg)"), ser("top25", "Top 25", "var(--neg-line)"), ser("screen", "This screen", "var(--accent)")],
+      dates, height: 260, fmt: (v) => "$" + v.toFixed(2), axisFmt: (v) => "$" + v.toFixed(1), xLabel: (i) => dates[i].slice(0, 4),
+      tipTitle: (i) => `<strong>${dateL(dates[i])}</strong>`,
+    });
+  }
+
   function renderEmerging() {
+    if (!BT) loadBacktest().then(() => { const el = $("bt"); if (el && state.page === "emerging") { el.innerHTML = backtestSection(); drawBacktest(); } });
     if (!H) loadHistory().then(() => { const el = $("em-track"); if (el && state.page === "emerging") el.innerHTML = trackRecord(); });
     const E = D.emerging;
     const f = state.em;
@@ -1099,7 +1144,7 @@
         </div>
         <details class="callout" ${innerWidth > 640 ? "open" : ""}>
           <summary><b>How to read this list</b><span class="muted"> · and its track record</span></summary>
-          An index fund owns about the same share of every company in its index, so differences in the Big Three’s stake come from index membership, share issuance and corporate events, not from a view on the company. Most gains here are one-quarter step-ups at the June Russell reconstitution, and those additions are announced in May, months before the 13F shows them. Treat this as a map of index money flowing into small caps, not as a buy list.
+          An index fund owns about the same share of every company in its index, so differences in the Big Three’s stake come from index membership, share issuance and corporate events, not from a view on the company. Most gains here are one-quarter step-ups at the June Russell reconstitution, and those additions are announced in May, months before the 13F shows them. Treat this as a map of index money flowing into small caps, not as a buy list: the backtest below finds no reliable edge from buying it.
           <div id="em-track">${trackRecord()}</div>
         </details>
         <div class="filters" role="group" aria-label="Screen filters">
@@ -1117,6 +1162,7 @@
         </table></div>
         ${sorted.length > f.limit ? `<button type="button" class="more" id="em-more" style="border:1px solid var(--line);border-radius:var(--radius)">Show all ${sorted.length} companies</button>` : ""}
         <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end (SEC XBRL balance sheet), so offerings and splits do not count as buying. pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
+        <section class="section bt" aria-labelledby="bt-h" id="bt">${backtestSection()}</section>
       </div>
       <aside class="rail" aria-label="About the screen">
         <section class="card" aria-labelledby="fun-h">
@@ -1158,6 +1204,7 @@
     app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; f.limit = 100; render(); }));
     $("em-more")?.addEventListener("click", () => { f.limit = Infinity; render(); });
     $("export-em").addEventListener("click", exportEmerging);
+    drawBacktest();
     app.querySelectorAll("[data-emsort]").forEach((b) => b.addEventListener("click", () => {
       const k = b.dataset.emsort;
       f.dir = f.sort === k ? -f.dir : k === "ticker" ? 1 : -1;
@@ -1742,6 +1789,74 @@
       });
     }));
   }
+  // ---------- push notifications through the Mr. Fink push server (worker/) ----------
+  let PUSH_URL = null;
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && canNotify();
+  const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  async function pushSubscription(create) {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub && create) {
+      const { publicKey } = await (await fetch(PUSH_URL + "/vapid")).json();
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(publicKey) });
+    }
+    return sub;
+  }
+  /** Register or update this browser with the push server: filing types and watchlist. */
+  async function pushSync(create = false) {
+    if (!PUSH_URL || !pushSupported()) return false;
+    const sub = await pushSubscription(create);
+    if (!sub) return false;
+    const r = await fetch(PUSH_URL + "/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds: nprefs.kinds, tickers: watch }) });
+    return r.ok;
+  }
+  let pushTimer = null;
+  const pushPrefsChanged = () => { if (nprefs.push) { clearTimeout(pushTimer); pushTimer = setTimeout(() => pushSync().catch(() => {}), 800); } };
+  function pushSection() {
+    if (!PUSH_URL) return "";
+    const head = `<section class="np-sec"><h3>Push notifications, even when the site is closed</h3>`;
+    if (!pushSupported()) {
+      return isIOS() && !standalone()
+        ? `${head}<p>On iPhone, first install Mr. Fink as an app (below), open it from the home screen, then turn push on here.</p></section>`
+        : `${head}<p>This browser does not support push notifications.</p></section>`;
+    }
+    const perm = Notification.permission;
+    if (perm === "denied") return `${head}<p>Notifications are blocked for this site in your browser settings.</p></section>`;
+    return `${head}<p>No app to install. Uses the filing types above and every company in your watchlist.</p>
+      <div>${nprefs.push && perm === "granted"
+        ? '<button type="button" class="btn" id="np-push-test">Send a test</button> <button type="button" class="btn" id="np-push-off">Turn off</button>'
+        : '<button type="button" class="btn primary" id="np-push-on">Turn on push notifications</button>'}</div>
+      <p class="np-status">${nprefs.push && perm === "granted" ? "On for this device." : "Off."}</p></section>`;
+  }
+  function wirePush() {
+    $("np-push-on")?.addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      try {
+        if ((await Notification.requestPermission()) !== "granted") throw new Error("permission");
+        if (!(await pushSync(true))) throw new Error("server");
+        nprefs.push = true; saveN(); toast("Push notifications are on.");
+      } catch (err) { toast(err.message === "permission" ? "Notifications were not allowed." : "Could not reach the push server. Try again later."); }
+      renderNotifyPanel();
+    });
+    $("np-push-test")?.addEventListener("click", async () => {
+      try {
+        const sub = await pushSubscription(false);
+        const r = await fetch(PUSH_URL + "/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub && sub.endpoint }) });
+        toast(r.ok ? "Test sent. It should arrive in a few seconds." : "The push server did not accept the test.");
+      } catch (err) { toast("Could not reach the push server."); }
+    });
+    $("np-push-off")?.addEventListener("click", async () => {
+      try {
+        const sub = await pushSubscription(false);
+        if (sub) {
+          await fetch(PUSH_URL + "/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+          await sub.unsubscribe();
+        }
+      } catch (err) { /* already gone */ }
+      nprefs.push = false; saveN(); renderNotifyPanel();
+    });
+  }
+
   // ---------- install as an app ----------
   let installPrompt = null;
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; if (!$("npanel").hidden) renderNotifyPanel(); });
@@ -1770,6 +1885,7 @@
         <h3>Notify me about</h3>
         ${NKINDS.map(([k, l, d]) => `<label class="np-kind"><input type="checkbox" data-nkind="${k}" ${nprefs.kinds.includes(k) ? "checked" : ""}><span>${l}</span><small>${d}</small></label>`).join("")}
       </section>
+      ${pushSection()}
       <section class="np-sec">
         <h3>In this browser</h3>
         <p>No install. Works while the site is open in a tab, on desktop and Android.</p>
@@ -1789,6 +1905,7 @@
     $("npanel").querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
       nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => $("npanel").querySelector(`[data-nkind="${k}"]`).checked);
       saveN();
+      pushPrefsChanged();
       renderNotifyPanel();
     }));
     $("np-browser")?.addEventListener("click", async () => {
@@ -1804,6 +1921,7 @@
       catch (e) { toast("This browser shows notifications only from installed apps."); }
     });
     wireCopy($("npanel"));
+    wirePush();
     $("np-install")?.addEventListener("click", async () => {
       installPrompt.prompt();
       const { outcome } = await installPrompt.userChoice;
@@ -1895,6 +2013,8 @@
       poll();
       setInterval(poll, POLL_MS);
       fetch("data/config.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
+        PUSH_URL = (cfg && cfg.pushUrl) || null;
+        if (!$("npanel").hidden) renderNotifyPanel();
         if (cfg && cfg.finnhubKey) startRealtime(cfg.finnhubKey);
         else { priceMode = "delayed"; setInterval(pollQuotes, POLL_MS); }
         flush();

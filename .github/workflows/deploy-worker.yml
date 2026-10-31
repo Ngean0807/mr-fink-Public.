@@ -1,0 +1,49 @@
+name: Deploy push server
+
+# The Cloudflare Worker that sends Web Push notifications (worker/). Needs the repository secret
+# CLOUDFLARE_API_TOKEN ("Edit Cloudflare Workers" template) and the variable CLOUDFLARE_ACCOUNT_ID.
+on:
+  push:
+    branches: [main]
+    paths: ["worker/**", ".github/workflows/deploy-worker.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the Cloudflare settings
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::Set the CLOUDFLARE_API_TOKEN secret and CLOUDFLARE_ACCOUNT_ID variable to deploy the push server."
+            exit 0
+          fi
+          echo "ready=1" >> "$GITHUB_ENV"
+      - name: KV namespace and workers.dev subdomain
+        if: env.ready == '1'
+        run: |
+          api=https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID
+          auth="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          id=$(curl -s -H "$auth" "$api/storage/kv/namespaces?per_page=100" | jq -r '.result[] | select(.title=="mrfink-push") | .id')
+          if [ -z "$id" ]; then
+            id=$(curl -s -X POST -H "$auth" -H "Content-Type: application/json" -d '{"title":"mrfink-push"}' "$api/storage/kv/namespaces" | jq -r '.result.id')
+          fi
+          [ -n "$id" ] && [ "$id" != null ] || { echo "Could not create the KV namespace (check the token's permissions)"; exit 1; }
+          sed -i "s/__KV_ID__/$id/" worker/wrangler.toml
+          sub=$(curl -s -H "$auth" "$api/workers/subdomain" | jq -r '.result.subdomain // empty')
+          if [ -z "$sub" ]; then
+            sub="mrfink-$(openssl rand -hex 3)"
+            curl -s -X PUT -H "$auth" -H "Content-Type: application/json" -d "{\"subdomain\":\"$sub\"}" "$api/workers/subdomain" | jq -c '.success, .errors'
+          fi
+          echo "Push server URL: https://mrfink-push.$sub.workers.dev"
+      - name: Deploy
+        if: env.ready == '1'
+        working-directory: worker
+        run: npx --yes wrangler@3.80.0 deploy

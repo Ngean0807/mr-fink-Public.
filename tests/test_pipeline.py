@@ -164,3 +164,21 @@ class MoversRealCasesTest(unittest.TestCase):
         m = movers.quarter_moves(book, "2026-06-30", "2026-03-31", per, figi, universe_now=book["2026-06-30"])
         flows = [abs(r["flow"]) for r in m["bought"] + m["sold"]]
         self.assertTrue(all(f < 2e9 for f in flows), m)   # no $15B "sale" and "purchase"
+
+
+class AuditTest(unittest.TestCase):
+    def test_flags_a_half_filed_book_and_a_missed_split(self):
+        from pipeline import audit
+        per = ["2026-03-31", "2026-06-30"]
+        views = {"vanguard": {"name": "Vanguard", "totals": [7.5e12, 3.1e12], "rows": [
+            {"cusip": "482480100", "qoq": {"dSharesPct": 9.0, "status": None}},
+            {"cusip": "SPACEX000", "qoq": {"dSharesPct": None, "status": "new"}}]}}
+        w = audit.check(views, "2026-06-30", per)
+        self.assertEqual(len(w), 2)
+        self.assertIn("total book -59%", w[0])
+        self.assertIn("482480100", w[1])
+
+    def test_quiet_on_a_normal_quarter(self):
+        from pipeline import audit
+        views = {"big3": {"name": "Big Three", "totals": [15e12, 17e12], "rows": [{"cusip": "X", "qoq": {"dSharesPct": 0.02}}]}}
+        self.assertEqual(audit.check(views, "2026-06-30", ["2026-03-31", "2026-06-30"]), [])

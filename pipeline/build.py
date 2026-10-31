@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, config, edgar, emerging, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, backtest, config, edgar, emerging, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -376,6 +376,7 @@ def main() -> None:
                     r["name"] = meta["name"]
         out_views[vid]["moves"] = moves
 
+    warnings = audit.check(out_views, latest, period_list)
     # The fingerprint changes whenever any filing behind the page changes; the browser polls
     # status.json and reloads the data only when it differs.
     accessions = sorted({s["accession"] for v in out_views.values() for s in v["sources"] + (v.get("early") or {}).get("sources", [])}
@@ -394,6 +395,7 @@ def main() -> None:
             "managers": [{"id": m["id"], "name": m["name"], "ciks": m["ciks"]} for m in config.MANAGERS],
             # 13F season: each manager's latest complete quarter and progress on the next one.
             "quarters": {mid: {"complete": q, "progress": prog} for mid, (q, prog) in quarters.items()},
+            "warnings": warnings,
             "topN": config.TOP_N,
             "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics(), "companyPrefix": (config.ticker_topic("x") or "")[:-1] or None},
         },
@@ -433,7 +435,15 @@ def main() -> None:
     notify.export_ticker_state(OUT.with_name("notified_tickers.json"))
     if os.environ.get("NTFY_TEST") == "true":
         notify.send_test()
-    STATUS.write_text(json.dumps({"checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))
+    audit.notify_new(warnings)
+    # The Emerging backtest is re-run once per new quarter (it reads every 13F since 2017).
+    try:
+        bt = json.loads(backtest.OUT.read_text()) if backtest.OUT.exists() else {}
+        if bt.get("latest", "") < latest:
+            backtest.main()
+    except Exception as e:
+        print(f"Backtest skipped: {e}")
+    STATUS.write_text(json.dumps({"warnings": len(warnings), "checkedAt": now, "fingerprint": fingerprint, "latest": latest, "latestFiling": feed_events[0]["accepted"] if feed_events else None, "quotesAsOf": quote_data["asOf"]}))
     print(f"Wrote {OUT} ({OUT.stat().st_size/1024:,.0f} KB) in {time.time()-t0:,.0f}s")
 
 
