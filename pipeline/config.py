@@ -44,8 +44,8 @@ MANAGERS = [
 # Q1 2017 is the first quarter BlackRock, Inc. filed one combined 13F-HR for the whole firm;
 # before that its subsidiaries filed separately, so the series would not be comparable.
 HISTORY_START = "2017-03-31"
-TOP_N = 30
-CANDIDATES = 90          # largest CUSIPs screened per manager before excluding funds/ETFs
+TOP_N = 50
+CANDIDATES = 150         # largest CUSIPs screened per manager before excluding funds/ETFs
 
 # OpenFIGI security types that represent an operating company's equity (funds and ETPs are excluded).
 COMPANY_SECURITY_TYPES = {"Common Stock", "ADR", "REIT", "NY Reg Shrs", "GDR", "Tracking Stk", "Dutch Cert", "MLP"}
@@ -53,3 +53,15 @@ COMPANY_SECURITY_TYPES = {"Common Stock", "ADR", "REIT", "NY Reg Shrs", "GDR", "
 # How stale EDGAR filing indexes may be before they are re-read. The scheduled refresh sets 0 so
 # every run sees filings accepted minutes earlier; local runs default to one hour.
 SUBMISSIONS_TTL_HOURS = float(os.environ.get("MRFINK_SUBMISSIONS_TTL", "1"))
+
+# "Emerging" screen: small, low-priced companies where the Big Three's combined ownership stake is
+# rising. The wide bounds below decide what is computed; the page filters further (default $2-30).
+EMERGING = {
+    "price_min": 1.0,
+    "price_max": 40.0,
+    "mcap_min": 50e6,
+    "mcap_max": 10e9,
+    "min_value": 5e6,          # combined Big Three position, quarter end
+    "min_stake_change": 0.01,  # +1 percentage point of shares outstanding, year over year
+    "max_rows": 90,
+}

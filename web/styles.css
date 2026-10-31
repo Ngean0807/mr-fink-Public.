@@ -313,6 +313,28 @@ sup { font-size: 10px; color: var(--muted); }
 .more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: none; padding: 10px; color: var(--accent-ink); font: 500 13px var(--font-ui); cursor: pointer; border-radius: 0 0 var(--radius) var(--radius); }
 .more:hover { background: var(--surface-2); }
 
+/* Emerging screen */
+.em-sw { background: linear-gradient(135deg, var(--pos-line), var(--accent)); }
+.callout { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 12px 16px; background: var(--surface-2); color: var(--ink-2); font-size: 13px; max-width: 110ch; display: grid; gap: 8px; }
+.callout b { color: var(--ink); font-weight: 500; }
+.em-why h2 { font-size: 18px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.filters label { display: inline-flex; align-items: center; gap: 6px; }
+.filters input[type="number"] { width: 64px; height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 0 8px; font: inherit; }
+.filters select { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); padding: 0 8px; font: inherit; }
+.filters .chk input { width: 16px; height: 16px; accent-color: var(--accent); }
+.tab small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+.tbl .fz-em { left: 0; min-width: 230px; max-width: 270px; box-shadow: inset -1px 0 0 var(--line); }
+.em-tbl { min-width: 1380px; }
+.mdot.off { opacity: .2; }
+.tbl .mdot { margin: 0 2px; }
+.pat { display: inline-block; font: 500 12px var(--font-ui); padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.pat-steady { background: var(--pos-soft); color: var(--pos); }
+.pat-step { background: var(--accent-soft); color: var(--accent-ink); }
+.pat-new { background: var(--warn-soft); color: var(--warn); }
+.pat-rising { background: var(--chip); color: var(--ink-2); }
+.flag { display: inline-block; font: 500 11px var(--font-ui); padding: 1px 6px; border-radius: 5px; background: var(--neg-soft); color: var(--neg); white-space: nowrap; }
+
 /* Company page */
 .mdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex: none; }
 .list .mdot { margin: 0 4px; width: 12px; height: 12px; }

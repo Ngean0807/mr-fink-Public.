@@ -67,7 +67,8 @@ def find_predecessors(cusip: str, name: str, books: dict[str, dict], periods: li
     """
     chain = []
     current = cusip
-    while True:
+    visited = {cusip}
+    while len(chain) < 5:  # guard: a security rarely changes CUSIP more than a couple of times
         # The switch-over quarter is the first one in which every manager holds the new CUSIP
         # (a stray early row in one filing should not move it).
         firsts = []
@@ -94,7 +95,11 @@ def find_predecessors(cusip: str, name: str, books: dict[str, dict], periods: li
             candidates = {KNOWN_SUCCESSIONS[current]: 1.0}
         if not candidates:
             break
+        candidates = {k: v for k, v in candidates.items() if k not in visited}
+        if not candidates:
+            break
         old = max(candidates, key=candidates.get)
+        visited.add(old)
         # Share continuity: the old line's shares must carry over (allowing a split ratio).
         old_sh = sum(b.get(prev, {}).get(old, [0])[0] for b in books.values())
         new_sh = sum(b.get(first, {}).get(current, [0])[0] for b in books.values())
@@ -104,6 +109,18 @@ def find_predecessors(cusip: str, name: str, books: dict[str, dict], periods: li
         chain.append({"cusip": old, "until": prev})
         current = old
     return chain
+
+
+def stitch(cusip: str, preds: list[dict], books: dict[str, dict], periods: list[str]) -> dict[str, dict]:
+    """Per-manager books restricted to one security, with predecessor CUSIPs folded in."""
+    chain = [cusip] + [p["cusip"] for p in preds]
+    out = {}
+    for mid, b in books.items():
+        out[mid] = {}
+        for p in periods:
+            rows = [b[p][x] for x in chain if x in b.get(p, {})]
+            out[mid][p] = {cusip: max(rows, key=lambda r: r[1])} if rows else {}
+    return out
 
 
 def position_series(cusips: list[str], book: dict[str, dict], periods: list[str], splits: list[dict]) -> list[dict]:

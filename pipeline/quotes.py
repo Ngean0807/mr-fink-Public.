@@ -45,6 +45,10 @@ def intraday(ticker: str) -> dict:
     m = res["meta"]
     pts = _series(res)
     regular = (m.get("currentTradingPeriod") or {}).get("regular") or {}
+    # Average daily dollar volume over the five sessions, for the liquidity check.
+    q = (res.get("indicators", {}).get("quote") or [{}])[0]
+    dollars = sum((v or 0) * (c or 0) for v, c in zip(q.get("volume") or [], q.get("close") or []))
+    sessions = len({t // 86400 for t in res.get("timestamp") or []}) or 1
     return {
         "price": m.get("regularMarketPrice"),
         "prevClose": m.get("previousClose") or m.get("chartPreviousClose"),
@@ -57,6 +61,7 @@ def intraday(ticker: str) -> dict:
         "exchange": m.get("fullExchangeName"),
         "session": {"start": regular.get("start"), "end": regular.get("end")},
         "intraday": [[t, round(p, 2)] for t, p in pts],
+        "avgDollarVolume": round(dollars / sessions),
     }
 
 

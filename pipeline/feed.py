@@ -12,7 +12,8 @@ from datetime import date, timedelta
 from . import config, edgar
 
 MANAGER_FORMS = {"13F-HR", "13F-HR/A", "13F-NT", "13F-NT/A"}
-G_FORMS = {"SC 13G", "SC 13G/A", "SCHEDULE 13G", "SCHEDULE 13G/A"}
+# Beneficial-ownership reports: 13G (passive, the usual for index managers) and 13D (active intent).
+G_FORMS = {"SC 13G", "SC 13G/A", "SCHEDULE 13G", "SCHEDULE 13G/A", "SC 13D", "SC 13D/A", "SCHEDULE 13D", "SCHEDULE 13D/A"}
 REPORT_FORMS = {"10-Q", "10-K", "10-Q/A", "10-K/A"}
 
 # Filing agents that file 13Gs for a manager under their own accession prefix.
@@ -51,7 +52,7 @@ def _parse_13g(cik: str, accession: str) -> dict | None:
         xml = edgar.cached_bytes(f"{folder}/primary_doc.xml").decode("utf-8", "replace")
     except Exception:
         return None
-    pct = re.search(r"<classPercent>\s*([\d.]+)", xml)
+    pct = re.search(r"<(?:classPercent|percentOfClass)>\s*([\d.]+)", xml)
     person = re.search(r"<reportingPersonName>\s*([^<]+)", xml)
     event = re.search(r"<eventDateRequiresFilingThisStatement>\s*([^<]+)", xml)
     shares = re.search(r"<aggregateAmountOwned>\s*([\d.,]+)", xml)

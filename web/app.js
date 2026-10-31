@@ -21,6 +21,7 @@
   const state = {
     view: "big3", page: "home", slug: null, range: "5Y", pxRange: "1D", homeMode: "combined", coMode: "price",
     tab: "overview", sort: { key: "rank", dir: 1 }, filter: "", feedTab: "all", feedMore: false, movers: "bought",
+    em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1 },
   };
 
   // ---------- formatting ----------
@@ -217,27 +218,47 @@
       return H;
     }).catch(() => (H = {}));
   }
+  // Finnhub's free tier streams at most 50 symbols per connection, so only what is on screen is
+  // subscribed; navigating swaps the set. Opening quotes come over REST (60 calls a minute).
+  const WS_LIMIT = 50;
+  let rt = null;
+  function wantedSymbols() {
+    const list = [];
+    if (state.page === "company") { const s = bySlug(state.slug); if (s) list.push(s.ticker); }
+    if (state.page === "emerging") list.push(...emergingRows().map((r) => sec(r.cusip).ticker));
+    if (state.page !== "emerging") list.push(...view().rows.map((r) => sec(r.cusip).ticker));
+    return [...new Set(list)].slice(0, WS_LIMIT);
+  }
+  function syncSubscriptions() {
+    if (!rt || !rt.ws || rt.ws.readyState !== 1) return;
+    const want = new Set(wantedSymbols());
+    for (const t of [...rt.subs]) if (!want.has(t)) { rt.ws.send(JSON.stringify({ type: "unsubscribe", symbol: t })); rt.subs.delete(t); }
+    const fresh = [];
+    for (const t of want) if (!rt.subs.has(t)) { rt.ws.send(JSON.stringify({ type: "subscribe", symbol: t })); rt.subs.add(t); if (!rt.quoted.has(t)) fresh.push(t); }
+    fresh.forEach((t, i) => {
+      rt.quoted.add(t);
+      setTimeout(() => {
+        fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t)}&token=${encodeURIComponent(rt.key)}`)
+          .then((r) => r.json()).then((q) => { if (q && q.c) setQuote(t, { price: q.c, prevClose: q.pc, dayHigh: q.h, dayLow: q.l, time: q.t }); })
+          .catch(() => rt.quoted.delete(t));
+      }, i * 1100);
+    });
+  }
   function startRealtime(key) {
     priceMode = "realtime";
-    const tickers = [...new Set(Object.values(D.securities).map((x) => x.ticker))];
-    // Opening quote for each symbol (free tier: 60 calls/min), then stream trades.
-    tickers.forEach((t, i) => setTimeout(() => {
-      fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t)}&token=${encodeURIComponent(key)}`)
-        .then((r) => r.json()).then((q) => { if (q && q.c) setQuote(t, { price: q.c, prevClose: q.pc, dayHigh: q.h, dayLow: q.l, time: q.t }); })
-        .catch(() => {});
-    }, i * 1100));
+    rt = { key, ws: null, subs: new Set(), quoted: new Set() };
     let backoff = 2000;
     (function connect() {
-      let ws;
-      try { ws = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(key)}`); } catch (e) { return; }
-      ws.onopen = () => { backoff = 2000; tickers.forEach((t) => ws.send(JSON.stringify({ type: "subscribe", symbol: t }))); };
-      ws.onmessage = (ev) => {
+      try { rt.ws = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(key)}`); } catch (e) { return; }
+      rt.subs = new Set();
+      rt.ws.onopen = () => { backoff = 2000; syncSubscriptions(); };
+      rt.ws.onmessage = (ev) => {
         try {
           const m = JSON.parse(ev.data);
           if (m.type === "trade") for (const tr of m.data || []) setQuote(tr.s, { price: tr.p, time: Math.floor(tr.t / 1000) }, true);
         } catch (e) { /* ignore malformed frames */ }
       };
-      ws.onclose = () => { setTimeout(connect, backoff); backoff = Math.min(60000, backoff * 2); };
+      rt.ws.onclose = () => { setTimeout(connect, backoff); backoff = Math.min(60000, backoff * 2); };
     })();
   }
   async function pollQuotes() {
@@ -422,7 +443,7 @@
 
   // ---------- header ----------
   function renderTape() {
-    const rows = view().rows.slice(0, 12);
+    const rows = (state.page === "emerging" ? emergingRows() : view().rows).slice(0, 12);
     $("tape").innerHTML = rows.map((r) => {
       const s = sec(r.cusip);
       return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
@@ -433,8 +454,8 @@
       const t = D.views[id].totals;
       const sw = id === "big3" ? "background:conic-gradient(var(--blk) 0 33%, var(--vg) 0 66%, var(--ss) 0)" : `background:${mColor(id)}`;
       const cur = state.view === id;
-      return `<a class="chip" href="#${id}" ${cur ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
-    }).join("");
+      return `<a class="chip" href="#${id}" ${cur && state.page !== "emerging" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
+    }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "");
   }
 
   function renderLive() {
@@ -567,12 +588,12 @@
           ${rangeBar(toggles)}
           ${state.view === "big3" && state.homeMode === "managers" ? `<div class="legend">${MGRS.map((id) => `<span><i style="background:${mColor(id)}"></i>${MGR_NAME[id]}</span>`).join("")}</div>` : ""}
           <div class="chart" id="home-chart"></div>
-          <div class="bridge"><span>Top 30, last quarter:</span><span>net buying <b class="${s.flow >= 0 ? "txt-up" : "txt-down"}">${usdS(s.flow)}</b></span><span>price moves <b class="${s.move >= 0 ? "txt-up" : "txt-down"}">${usdS(s.move)}</b></span><span>${s.added} added, ${s.trimmed} trimmed</span></div>
-          <div class="bridge"><span>Top 30 at today’s prices:</span><span data-live="mtm" data-t="">${mtm()}</span></div>
+          <div class="bridge"><span>Top ${D.meta.topN}, last quarter:</span><span>net buying <b class="${s.flow >= 0 ? "txt-up" : "txt-down"}">${usdS(s.flow)}</b></span><span>price moves <b class="${s.move >= 0 ? "txt-up" : "txt-down"}">${usdS(s.move)}</b></span><span>${s.added} added, ${s.trimmed} trimmed</span></div>
+          <div class="bridge"><span>Top ${D.meta.topN} at today’s prices:</span><span data-live="mtm" data-t="">${mtm()}</span></div>
         </div>
         <section class="section" aria-labelledby="hold-h">
           <div class="section-head">
-            <div><h2 id="hold-h">Top 30 company holdings</h2><p class="note">Operating companies only (ETFs and funds excluded), ranked by market value on ${dateL(D.meta.latest)}</p></div>
+            <div><h2 id="hold-h">Top ${D.meta.topN} company holdings</h2><p class="note">Operating companies only (ETFs and funds excluded), ranked by market value on ${dateL(D.meta.latest)}</p></div>
             <div class="tools"><label class="filter"><span class="sr">Filter holdings</span><input id="filter" type="search" placeholder="Filter by ticker, name, sector" value="${esc(state.filter)}"></label><span class="count" id="count"></span></div>
           </div>
           <div class="tabs" role="group" aria-label="Table view">${[["overview", "Overview"], ["analytics", "Analytics"], ["fundamentals", "Fundamentals"]].map(([k, l]) => `<button type="button" class="tab" data-tab="${k}" aria-pressed="${state.tab === k}">${l}</button>`).join("")}</div>
@@ -588,9 +609,9 @@
           <dl class="kv">
             <div><dt>13F book value</dt><dd>${usd(s.total)}</dd></div>
             <div><dt>Quarter change</dt><dd>${signed(s.total / v.totals[n - 2] - 1)}</dd></div>
-            <div><dt>Top 30 value</dt><dd>${usd(s.top)}</dd></div>
-            <div><dt>Top 30 share of book</dt><dd>${pct(s.top / s.total, 1, false)}</dd></div>
-            <div><dt>Median stake, top 30</dt><dd>${pct(s.median, 1, false)}</dd></div>
+            <div><dt>Top ${D.meta.topN} value</dt><dd>${usd(s.top)}</dd></div>
+            <div><dt>Top ${D.meta.topN} share of book</dt><dd>${pct(s.top / s.total, 1, false)}</dd></div>
+            <div><dt>Median stake, top ${D.meta.topN}</dt><dd>${pct(s.median, 1, false)}</dd></div>
             <div><dt>Securities reported</dt><dd>${v.positions.toLocaleString("en-US")}</dd></div>
             <div><dt>Report date</dt><dd>${dateL(D.meta.latest)}</dd></div>
             <div><dt>Next 13F (${qlabel(nd.period)})</dt><dd>${daysToDue > 0 ? `due ${dateL(nd.due)}, in ${daysToDue} days` : "due now, watching EDGAR"}</dd></div>
@@ -780,6 +801,160 @@
     </section>`;
   }
 
+  // ---------- emerging ----------
+  const PATTERNS = {
+    steady: ["Steady accumulation", "Stake rose in at least three of the last four quarters"],
+    step: ["Step-up", "One quarter added most of the gain, typical of an index addition"],
+    new: ["New position", "First held within the last year: IPO, spin-off or index entry"],
+    rising: ["Rising", "Stake higher than a year ago, without a clear pattern"],
+  };
+  const FLAGS = {
+    "pending-deal": ["Deal pending", "Merger, tender or going-private filing in the last 9 months: the price may be pinned to a deal"],
+    "reverse-split": ["Reverse split", "Reverse split in the last year, often a sign of distress"],
+    dilution: ["Share count +30%", "Shares outstanding grew more than 30% in a year"],
+    "foreign-filer": ["Foreign filer", "Files 20-F/40-F; fewer disclosures"],
+    "new-listing": ["Listed < 2 yrs", "Short public history"],
+    "price-mismatch": ["Check data", "The managers' filings disagree on the quarter-end price"],
+    thin: ["Thin trading", "Under $1M traded per day on average"],
+  };
+  const emergingAll = () => (D.emerging ? D.emerging.rows : []);
+  const liveFlags = (r) => {
+    const q = Q[sec(r.cusip).ticker];
+    return r.flags.concat(q && q.avgDollarVolume != null && q.avgDollarVolume < 1e6 ? ["thin"] : []);
+  };
+  function emergingRows() {
+    const f = state.em;
+    return emergingAll().filter((r) => {
+      const t = sec(r.cusip).ticker;
+      const p = pxOf(t) || r.price;
+      const mcap = r.sharesOutstanding * p;
+      const flags = liveFlags(r);
+      return p >= f.pmin && p <= f.pmax && mcap <= f.mcap
+        && (f.pattern === "all" || r.pattern === f.pattern)
+        && !(f.hideDeals && flags.includes("pending-deal"))
+        && !(f.hideThin && flags.includes("thin"))
+        && !(f.allThree && r.breadth < 3);
+    });
+  }
+  const pp = (x, signed = true) => (x == null ? "—" : (signed && x > 0 ? "+" : "") + (x * 100).toFixed(x * 100 >= 10 || x * 100 <= -10 ? 1 : 2) + " pp");
+
+  function renderEmerging() {
+    const E = D.emerging;
+    const f = state.em;
+    const rows = emergingRows();
+    const diag = E.diagnostics || {};
+    const cols = [
+      ["ticker", "Company", (r) => sec(r.cusip).ticker],
+      ["px", "Price", (r) => pxOf(sec(r.cusip).ticker) || r.price],
+      ["day", "Today", (r) => dayChg(sec(r.cusip).ticker)],
+      ["mcap", "Market cap", (r) => r.sharesOutstanding * (pxOf(sec(r.cusip).ticker) || r.price)],
+      ["stake", "Big Three stake", (r) => r.stake],
+      ["stakeChangeQoQ", "Δ stake QoQ", (r) => r.stakeChangeQoQ],
+      ["stakeChangeYoY", "Δ stake YoY", (r) => r.stakeChangeYoY],
+      ["breadth", "Buying", (r) => r.breadth],
+      ["flowYoY", "Net buying YoY", (r) => r.flowYoY],
+      ["pattern", "Pattern", (r) => r.pattern],
+      ["rev", "Rev. growth", (r) => (sec(r.cusip).fundamentals || {}).revenueGrowth],
+    ];
+    const col = cols.find((c) => c[0] === f.sort) || cols[6];
+    const sorted = rows.slice().sort((a, b) => {
+      const x = col[2](a), y = col[2](b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (x < y ? -1 : x > y ? 1 : 0) * f.dir;
+    });
+    const mgrDots = (r) => MGRS.map((id) => {
+      const m = r.managers[id];
+      const up = m && m.stake - (m.stakeYearAgo || 0) > 0.001;
+      return `<span class="mdot ${up ? "" : "off"}" style="background:${mColor(id)}" title="${MGR_NAME[id]}: ${m ? pct(m.stake, 2, false) + " now, " + (m.stakeYearAgo == null ? "not held" : pct(m.stakeYearAgo, 2, false)) + " a year ago" : "not held"}"></span>`;
+    }).join("");
+    const body = sorted.map((r) => {
+      const s = sec(r.cusip);
+      const fund = s.fundamentals || {};
+      const flags = liveFlags(r);
+      return `<tr data-slug="${slugOf(s.ticker)}">
+        <td class="l fz fz-em"><a class="co" href="#t-${slugOf(s.ticker)}">${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
+        <td>${live("px", s.ticker)}</td><td>${live("pill", s.ticker)}</td>
+        <td>${live("val", s.ticker, r.sharesOutstanding)}</td>
+        <td class="sep"><b class="v">${pct(r.stake, 1, false)}</b></td>
+        <td>${signed(r.stakeChangeQoQ, pp, 0.0005)}</td>
+        <td>${signed(r.stakeChangeYoY, pp, 0.0005)}</td>
+        <td class="c">${mgrDots(r)}</td>
+        <td>${signed(r.flowYoY, usdS, 5e5)}</td>
+        <td class="sep"><span class="pat pat-${r.pattern}" title="${esc(PATTERNS[r.pattern][1])}">${PATTERNS[r.pattern][0]}</span></td>
+        <td>${fund.revenueGrowth == null ? '<span class="na">n.m.</span>' : signed(fund.revenueGrowth)}</td>
+        <td>${spark(r.stakeHistory, "var(--accent)")}</td>
+        <td class="l">${flags.map((k) => `<span class="flag" title="${esc(FLAGS[k][1])}">${FLAGS[k][0]}</span>`).join(" ") || '<span class="na">—</span>'}</td>
+      </tr>`;
+    }).join("");
+    const th = (key, label, cls = "") => `<th scope="col" class="${cls}"${f.sort === key ? ` aria-sort="${f.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-emsort="${key}">${label}${f.sort === key ? (f.dir > 0 ? " ↑" : " ↓") : ""}</button></th>`;
+    const counts = Object.keys(PATTERNS).map((k) => [k, emergingAll().filter((r) => r.pattern === k).length]);
+
+    $("app").innerHTML = `
+      <div class="main">
+        <div class="hero">
+          <nav class="crumbs" aria-label="Breadcrumb"><a href="#big3">Screens</a><span aria-hidden="true">›</span><span>Emerging</span></nav>
+          <h1>Emerging holdings</h1>
+          <p class="hero-sub">Small companies trading at $${f.pmin}–$${f.pmax} where BlackRock, Vanguard and State Street together own a growing share of the company</p>
+          <div class="figure"><span class="figure-value">${rows.length}</span><span class="muted">companies match · 13F data as of ${dateL(E.asOf)}</span></div>
+        </div>
+        <div class="callout">
+          <b>How to read this.</b> Most of the Big Three’s money is indexed, so a rising stake usually means the stock joined an index (Russell 2000, S&amp;P SmallCap 600) or its funds took in money. That buying is real and often predictable, but it is not a stock pick. The pattern column separates a one-quarter step-up from steady accumulation, and the flags mark cases where the stake says little.
+        </div>
+        <div class="filters" role="group" aria-label="Screen filters">
+          <label>Price <input id="em-pmin" type="number" min="0" step="1" value="${f.pmin}"> – <input id="em-pmax" type="number" min="1" step="1" value="${f.pmax}"></label>
+          <label>Market cap <select id="em-mcap">${[[5e8, "under $500M"], [1e9, "under $1B"], [3e9, "under $3B"], [5e9, "under $5B"], [1e10, "under $10B"]].map(([v, l]) => `<option value="${v}" ${f.mcap === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <label class="chk"><input id="em-deals" type="checkbox" ${f.hideDeals ? "checked" : ""}> Hide pending deals</label>
+          <label class="chk"><input id="em-thin" type="checkbox" ${f.hideThin ? "checked" : ""}> Hide thin trading</label>
+          <label class="chk"><input id="em-three" type="checkbox" ${f.allThree ? "checked" : ""}> All three buying</label>
+        </div>
+        <div class="tabs" role="group" aria-label="Pattern">${[["all", `All <small>${emergingAll().length}</small>`], ...counts.map(([k, n]) => [k, `${PATTERNS[k][0]} <small>${n}</small>`])].map(([k, l]) => `<button type="button" class="tab" data-pattern="${k}" aria-pressed="${f.pattern === k}">${l}</button>`).join("")}</div>
+        <div class="table-scroll"><table class="tbl em-tbl">
+          <thead><tr>${th("ticker", "Company", "l fz fz-em")}${th("px", "Price")}${th("day", "Today")}${th("mcap", "Market cap")}${th("stake", "Big Three stake", "sep")}${th("stakeChangeQoQ", "Δ stake QoQ")}${th("stakeChangeYoY", "Δ stake YoY")}${th("breadth", "Buying", "c")}${th("flowYoY", "Net buying YoY")}${th("pattern", "Pattern", "sep")}${th("rev", "Rev. growth")}<th scope="col">Stake, 2Y</th><th scope="col" class="l">Flags</th></tr></thead>
+          <tbody>${body || `<tr><td colspan="13" class="l na" style="height:80px">No company matches these filters. Widen the price range or market cap.</td></tr>`}</tbody>
+        </table></div>
+        <p class="foot">Stake = combined shares held by the three managers ÷ shares outstanding from the company’s latest cover page (SEC XBRL), so offerings and splits do not count as buying. pp = percentage points. “Buying” shows which managers raised their own stake over the year. Net buying is the change in shares valued at the quarter-end price. Prices and market caps are live. 13F reports lag the quarter by up to 45 days. Not investment advice.</p>
+      </div>
+      <aside class="rail" aria-label="About the screen">
+        <section class="card" aria-labelledby="fun-h">
+          <div class="card-head"><h2 id="fun-h">How the screen narrows</h2></div>
+          <dl class="kv">
+            <div><dt>Securities held</dt><dd>${(diag.held || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>Low price, growing position</dt><dd>${(diag.prefilter || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>Operating companies</dt><dd>${(diag.companies || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>Stake up ≥ ${(D.emerging.params.min_stake_change * 100).toFixed(0)} pp in a year</dt><dd>${(diag.passed || 0).toLocaleString("en-US")}</dd></div>
+            <div><dt>Shown with your filters</dt><dd>${rows.length}</dd></div>
+          </dl>
+        </section>
+        <section class="card" aria-labelledby="pat-h">
+          <div class="card-head"><h2 id="pat-h">Patterns</h2></div>
+          <div class="list">${Object.entries(PATTERNS).map(([k, [l, d]]) => `<div class="item"><span class="pat pat-${k}">${l}</span><span class="nm"><small>${esc(d)}</small></span><span></span></div>`).join("")}</div>
+        </section>
+        <section class="card" aria-labelledby="top-em-h">
+          <div class="card-head"><h2 id="top-em-h">Largest stake gains</h2></div>
+          <div class="list">${rows.slice().sort((a, b) => b.stakeChangeYoY - a.stakeChangeYoY).slice(0, 6).map((r) => { const o = sec(r.cusip); return `<a href="#t-${slugOf(o.ticker)}">${tkChip(o)}<span class="nm"><b>${esc(niceName(o.name))}</b><small>${pct(r.stake, 1, false)} owned by the Big Three</small></span><span class="rt"><b class="txt-up">${pp(r.stakeChangeYoY)}</b><small class="muted">a year</small></span></a>`; }).join("")}</div>
+        </section>
+      </aside>`;
+
+    const app = $("app");
+    const num0 = (id) => parseFloat($(id).value);
+    $("em-pmin").addEventListener("change", () => { f.pmin = Math.max(0, num0("em-pmin") || 0); render(); });
+    $("em-pmax").addEventListener("change", () => { f.pmax = Math.max(f.pmin, num0("em-pmax") || 30); render(); });
+    $("em-mcap").addEventListener("change", (e) => { f.mcap = +e.target.value; render(); });
+    $("em-deals").addEventListener("change", (e) => { f.hideDeals = e.target.checked; render(); });
+    $("em-thin").addEventListener("change", (e) => { f.hideThin = e.target.checked; render(); });
+    $("em-three").addEventListener("change", (e) => { f.allThree = e.target.checked; render(); });
+    app.querySelectorAll("[data-pattern]").forEach((b) => b.addEventListener("click", () => { f.pattern = b.dataset.pattern; render(); }));
+    app.querySelectorAll("[data-emsort]").forEach((b) => b.addEventListener("click", () => {
+      const k = b.dataset.emsort;
+      f.dir = f.sort === k ? -f.dir : k === "ticker" ? 1 : -1;
+      f.sort = k;
+      render();
+    }));
+    app.querySelectorAll(".em-tbl tbody tr[data-slug]").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest("a")) location.hash = "t-" + tr.dataset.slug; }));
+  }
+
   // ---------- company ----------
   function renderCompany() {
     const s = bySlug(state.slug);
@@ -830,6 +1005,7 @@
           <div class="chart" id="co-chart"></div>
           ${state.coMode !== "price" && (s.splits || []).length ? `<p class="figure-note">Share counts split-adjusted for ${(s.splits || []).map((sp) => (sp.ratio >= 1 ? `${sp.ratio}:1` : `1:${Math.round(1 / sp.ratio)}`) + " in " + qlabel(sp.period)).join(" and ")}.</p>` : ""}
         </div>
+        ${emergingSection(s)}
         <section class="section" aria-labelledby="own-h">
           <div class="section-head"><h2 id="own-h">Big Three ownership</h2><span class="note">${qlabel(D.meta.latest)} 13F filings</span></div>
           <div class="table-scroll flat"><table class="own-table">
@@ -895,7 +1071,7 @@
         ${feedCard(s.ticker)}
         <section class="card" aria-labelledby="sim-h">
           <div class="card-head"><h2 id="sim-h">More ${esc(s.sector || "holdings")}</h2></div>
-          <div class="list">${view().rows.filter((r) => sec(r.cusip).sector === s.sector && r.cusip !== c).slice(0, 5).map((r) => { const o = sec(r.cusip); return `<a href="#t-${slugOf(o.ticker)}">${tkChip(o)}<span class="nm"><b>${esc(niceName(o.name))}</b><small>${usd(r.value)} held by ${esc(MGR_NAME[state.view])}</small></span><span class="rt">${r.qoq ? pill(r.qoq.dSharesPct, { sm: true }) : ""}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>No other top-30 holdings in this sector.</small></span><span></span></div>'}</div>
+          <div class="list">${view().rows.filter((r) => sec(r.cusip).sector === s.sector && r.cusip !== c).slice(0, 5).map((r) => { const o = sec(r.cusip); return `<a href="#t-${slugOf(o.ticker)}">${tkChip(o)}<span class="nm"><b>${esc(niceName(o.name))}</b><small>${usd(r.value)} held by ${esc(MGR_NAME[state.view])}</small></span><span class="rt">${r.qoq ? pill(r.qoq.dSharesPct, { sm: true }) : ""}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>No other top-${D.meta.topN} holdings in this sector.</small></span><span></span></div>'}</div>
         </section>
       </aside>`;
 
@@ -906,6 +1082,18 @@
     app.querySelectorAll("[data-co-mode]").forEach((b) => b.addEventListener("click", () => { state.coMode = b.dataset.coMode; render(); }));
     app.querySelectorAll("[data-pxrange]").forEach((b) => b.addEventListener("click", () => { state.pxRange = b.dataset.pxrange; render(); }));
     if (!H) loadHistory().then(() => { if (state.page === "company" && state.coMode === "price") { $("co-figure").innerHTML = coFigure(s); drawCoChart(s); } });
+  }
+
+  function emergingSection(s) {
+    const r = emergingAll().find((x) => x.cusip === s.cusip);
+    if (!r) return "";
+    const flags = liveFlags(r);
+    return `<section class="section callout em-why" aria-labelledby="emw-h">
+      <h2 id="emw-h">Why it is on the Emerging list</h2>
+      <p>The Big Three own <b>${pct(r.stake, 2, false)}</b> of ${esc(s.ticker)}, ${signed(r.stakeChangeYoY, pp, 0.0005)} over the year and ${signed(r.stakeChangeQoQ, pp, 0.0005)} last quarter. Pattern: <span class="pat pat-${r.pattern}">${PATTERNS[r.pattern][0]}</span> ${esc(PATTERNS[r.pattern][1].toLowerCase())}.</p>
+      <div class="legend">${r.stakePeriods.map((p, i) => `<span>${qshort(p)} <b>${r.stakeHistory[i] == null ? "—" : pct(r.stakeHistory[i], 1, false)}</b></span>`).join("")}</div>
+      ${flags.length ? `<p>${flags.map((k) => `<span class="flag">${FLAGS[k][0]}</span> ${esc(FLAGS[k][1])}`).join("<br>")}</p>` : ""}
+    </section>`;
   }
 
   /** Price points for the selected range: intraday for 1D/5D, daily closes otherwise, live price appended. */
@@ -974,7 +1162,9 @@
     renderChips();
     renderTape();
     if (state.page === "company") renderCompany();
+    else if (state.page === "emerging") renderEmerging();
     else renderHome();
+    syncSubscriptions();
     renderLive();
   }
   function route() {
@@ -983,6 +1173,9 @@
     if (h.startsWith("t-")) {
       state.page = "company";
       state.slug = h.slice(2);
+    } else if (h === "emerging" && D.emerging) {
+      state.page = "emerging";
+      state.slug = null;
     } else {
       state.page = "home";
       state.slug = null;
