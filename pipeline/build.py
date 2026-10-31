@@ -181,9 +181,11 @@ def main() -> None:
         views[vid] = {"top": top, "rank": {c: i + 1 for i, c in enumerate(now_rank)}, "prevRank": {c: i + 1 for i, c in enumerate(prev_rank)}}
         selected.update(top)
 
+    print(f"[{time.time() - t0:,.0f}s] profile top")
     print(f"Profiling {len(selected)} securities (splits, CUSIP history, fundamentals)")
     sec_meta = {c: describe_security(c, figi[c], books, books_with_big3["big3"][latest][c], period_list) for c in sorted(selected)}
 
+    print(f"[{time.time() - t0:,.0f}s] top profiled")
     # Small caps the Big Three are accumulating, outside their top holdings.
     emerging_rows, emerging_diag = emerging.screen(books, books_with_big3["big3"], period_list, exclude=selected)
     for r in emerging_rows:
@@ -193,6 +195,7 @@ def main() -> None:
         if c not in sec_meta:
             sec_meta[c] = describe_security(c, r["figi"], books, books_with_big3["big3"][latest][c], period_list)
         sec_meta[c]["emerging"] = True
+    print(f"[{time.time() - t0:,.0f}s] emerging screen")
     # The other Emerging names get the same company page, written to its own file (data/co/) and
     # loaded when opened, so the main data file stays small. They are not in the filing feed.
     lite: dict[str, dict] = {}
@@ -207,9 +210,11 @@ def main() -> None:
             print(f"  company page skipped for {r['ticker']}: {e}")
     print(f"Emerging: {len(lite)} company pages outside the main data file")
 
+    print(f"[{time.time() - t0:,.0f}s] emerging pages described")
     feed_events, stakes_13g, latest_report = feed.build_feed(sec_meta, config.SUBMISSIONS_TTL_HOURS)
     # Fund-level positions (N-PORT) for every tracked security, and the funds' filings in the feed.
     chains = {c: [c] + [p["cusip"] for p in m["predecessors"]] for c, m in {**sec_meta, **lite}.items()}
+    print(f"[{time.time() - t0:,.0f}s] feed")
     fund_positions, nport_events = nport.build(chains, ttl_hours=6)
     for c, m in {**sec_meta, **lite}.items():
         m["funds"] = sorted(fund_positions.get(c, []), key=lambda f: -f["value"])
@@ -222,6 +227,7 @@ def main() -> None:
     # all three houses even where a name is outside one manager's top 30.
     for c, meta in sec_meta.items():
         meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
+    print(f"[{time.time() - t0:,.0f}s] fundamentals + holders (top)")
     for c, meta in lite.items():
         if meta.get("cik"):
             report, stakes, filings = feed.company_filings(meta["cik"], meta["ticker"], ttl_hours=6)
@@ -232,6 +238,7 @@ def main() -> None:
             meta["stakes13g"], meta["filings"] = [], []
         meta["holders"] = holders_of(c, meta, books_with_big3, views, period_list)
 
+    print(f"[{time.time() - t0:,.0f}s] emerging pages filings/fundamentals")
     out_views = {}
     names = {m["id"]: m["name"] for m in config.MANAGERS}
     names["big3"] = "Big Three"
@@ -304,6 +311,7 @@ def main() -> None:
         },
     }
     # Market prices: a delayed quote, five sessions intraday and ten years of daily closes.
+    print(f"[{time.time() - t0:,.0f}s] views")
     tickers = sorted({m["ticker"] for m in sec_meta.values()})
     quote_data, price_history = quotes.build(tickers)
     # Emerging names without a full company page still need a price on first paint.
@@ -315,7 +323,9 @@ def main() -> None:
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     OUT.with_name("quotes.json").write_text(json.dumps(quote_data, separators=(",", ":")))
     OUT.with_name("history.json").write_text(json.dumps(price_history, separators=(",", ":")))
+    print(f"[{time.time() - t0:,.0f}s] quotes")
     write_company_pages(lite, data["quotes"]["quotes"])
+    print(f"[{time.time() - t0:,.0f}s] company pages written")
     # Phone pushes go out only after the new data is written, so the link opens fresh numbers.
     notify.sync_from_site()
     notify.notify_new(feed_events)
