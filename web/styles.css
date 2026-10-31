@@ -199,6 +199,29 @@ button { font: inherit; color: inherit; }
   display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px 32px; align-items: start;
 }
 .main, .rail { display: grid; gap: 28px; min-width: 0; align-content: start; }
+/* Company page: back to the list, previous / next within it */
+.co-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.back {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 10px; border-radius: 18px;
+  border: 1px solid var(--line-strong); color: var(--ink) !important; font: 500 14px var(--font-ui); text-decoration: none !important; background: var(--surface);
+}
+.back svg { fill: currentColor; }
+.back:hover { background: var(--chip); }
+.pns { display: inline-flex; align-items: center; gap: 4px; font: 500 13px var(--font-ui); color: var(--ink-2); white-space: nowrap; }
+.pns small { color: var(--muted); font-size: 12px; padding: 0 6px; }
+.pn { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 16px; color: var(--accent-ink); text-decoration: none !important; }
+.pn:hover { background: var(--accent-soft); }
+.pn.off { color: var(--line-strong); }
+.follow {
+  height: 32px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--accent-ink); font: 500 14px var(--font-ui); cursor: pointer; margin-left: auto;
+}
+.follow[aria-pressed="true"] { background: var(--accent-soft); border-color: transparent; }
+.chip-watch .star { color: #f9ab00; font-size: 15px; line-height: 1; }
+details.callout > summary { cursor: pointer; list-style: none; color: var(--ink); }
+details.callout > summary::-webkit-details-marker { display: none; }
+details.callout > summary::after { content: "▾"; margin-left: 6px; color: var(--muted); }
+details.callout[open] > summary::after { content: "▴"; }
 .crumbs { font: 500 12px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); display: flex; gap: 6px; flex-wrap: wrap; }
 .crumbs a { color: var(--ink-2); }
 
@@ -414,10 +437,15 @@ sup { font-size: 10px; color: var(--muted); }
   .fund-cell { min-width: 0; }
   .tbl .fz-em { min-width: 150px; max-width: 170px; }
   .tbl .fz-em .co-nm small { display: none; }
-  .topbar-inner { grid-template-columns: auto minmax(0, 1fr); }
-  .brand-name span { display: none; }
-  .top-actions { grid-column: 1 / -1; justify-content: space-between; }
-  .live { height: 26px; font-size: 12px; }
+  /* One header row on phones: logo mark, search, status dot, bell */
+  .topbar-inner { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding-block: 6px; }
+  .brand-name { display: none; }
+  .top-actions { gap: 6px; }
+  .live { height: 40px; width: 40px; padding: 0; justify-content: center; border-radius: 50%; }
+  #live-text { display: none; }
+  .co-nav { margin-bottom: 10px; }
+  .pns small { display: none; }
+  .follow { margin-left: 0; }
   .search input { height: 40px; font-size: 15px; }
   .search svg { top: 10px; }
   .figure-value { font-size: 30px; }

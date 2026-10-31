@@ -24,6 +24,16 @@
     em: { pmin: 2, pmax: 30, mcap: 3e9, pattern: "all", hideDeals: true, hideThin: true, allThree: false, sort: "stakeChangeYoY", dir: -1, limit: 100 },
   };
 
+  // ---------- watchlist (kept in this browser) ----------
+  let watch = [];
+  try { watch = JSON.parse(localStorage.getItem("mrfink.watch") || "[]").filter((t) => typeof t === "string"); } catch (e) { watch = []; }
+  const isWatched = (t) => watch.includes(t);
+  function toggleWatch(t) {
+    watch = isWatched(t) ? watch.filter((x) => x !== t) : watch.concat(t);
+    try { localStorage.setItem("mrfink.watch", JSON.stringify(watch)); } catch (e) { /* storage unavailable */ }
+    toast(isWatched(t) ? `${t} added to your watchlist` : `${t} removed from your watchlist`);
+  }
+
   // ---------- formatting ----------
   const SCALE = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
   function compact(v) {
@@ -268,7 +278,7 @@
   function wantedSymbols() {
     const list = [];
     if (state.page === "company") { const s = bySlug(state.slug); if (s) list.push(s.ticker); }
-    const tableRows = state.page === "emerging" ? emergingSorted() : view().rows;
+    const tableRows = state.page === "emerging" ? emergingSorted() : state.page === "watch" ? watchItems() : view().rows;
     const tk = (r) => emSec(r).ticker;
     list.push(...tableRows.slice(0, 12).map(tk));  // the price strip
     if (state.page !== "company") list.push(...tableRows.map(tk));
@@ -496,18 +506,19 @@
 
   // ---------- header ----------
   function renderTape() {
-    const rows = (state.page === "emerging" ? emergingSorted() : view().rows).slice(0, 12);
+    const rows = (state.page === "emerging" ? emergingSorted() : state.page === "watch" && watch.length ? watchItems() : view().rows).slice(0, 12);
     $("tape").innerHTML = rows.map((r) => {
       const s = emSec(r);
-      return `<a class="tape-item" href="${state.page === "emerging" ? emLink(s) : "#t-" + slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
+      return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
     }).join("");
   }
   function renderChips() {
-    $("chips").innerHTML = VIEWS.map((id) => {
+    const watchChip = `<a class="chip chip-watch" href="#watchlist" ${state.page === "watch" ? 'aria-current="page"' : ""}><span class="star" aria-hidden="true">★</span>Watchlist <small>${watch.length || ""}</small></a>`;
+    $("chips").innerHTML = watchChip + VIEWS.map((id) => {
       const t = D.views[id].totals;
       const sw = id === "big3" ? "background:conic-gradient(var(--blk) 0 33%, var(--vg) 0 66%, var(--ss) 0)" : `background:${mColor(id)}`;
       const cur = state.view === id;
-      return `<a class="chip" href="#${id}" ${cur && state.page !== "emerging" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
+      return `<a class="chip" href="#${id}" ${cur && state.page === "home" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
     }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "");
   }
 
@@ -789,23 +800,28 @@
     ];
   }
 
-  function renderTable() {
+  /** The holdings table's rows as shown: filtered and sorted. */
+  function homeSorted() {
     const cols = columns();
-    const v = view();
     const q = state.filter.trim().toLowerCase();
-    let rows = v.rows.filter((r) => {
+    const rows = view().rows.filter((r) => {
       if (!q) return true;
       const s = sec(r.cusip);
       return [s.ticker, niceName(s.name), s.sector, s.industry].some((x) => (x || "").toLowerCase().includes(q));
     });
     const col = cols.find((c) => c.key === state.sort.key) || cols[0];
-    rows = rows.slice().sort((a, b) => {
+    return rows.slice().sort((a, b) => {
       const x = col.get(a), y = col.get(b);
       if (x == null && y == null) return 0;
       if (x == null) return 1;
       if (y == null) return -1;
       return (x < y ? -1 : x > y ? 1 : 0) * state.sort.dir;
     });
+  }
+  function renderTable() {
+    const cols = columns();
+    const v = view();
+    const rows = homeSorted();
     const groups = { q: "Quarter over quarter", y: "Year over year", i: "Since first held" };
     let grp = "";
     if (cols.some((c) => c.group)) {
@@ -995,10 +1011,11 @@
           <p class="hero-sub">Small companies trading at $${f.pmin}–$${f.pmax} where BlackRock, Vanguard and State Street together own a growing share of the company</p>
           <div class="figure"><span class="figure-value">${rows.length}</span><span class="muted">companies match · 13F data as of ${dateL(E.asOf)}</span></div>
         </div>
-        <div class="callout">
-          <b>How to read this.</b> An index fund owns about the same share of every company in its index, so differences in the Big Three’s stake come from index membership, share issuance and corporate events, not from a view on the company. Most gains here are one-quarter step-ups at the June Russell reconstitution, and those additions are announced in May, months before the 13F shows them. Treat this as a map of index money flowing into small caps, not as a buy list.
+        <details class="callout" ${innerWidth > 640 ? "open" : ""}>
+          <summary><b>How to read this list</b><span class="muted"> · and its track record</span></summary>
+          An index fund owns about the same share of every company in its index, so differences in the Big Three’s stake come from index membership, share issuance and corporate events, not from a view on the company. Most gains here are one-quarter step-ups at the June Russell reconstitution, and those additions are announced in May, months before the 13F shows them. Treat this as a map of index money flowing into small caps, not as a buy list.
           <div id="em-track">${trackRecord()}</div>
-        </div>
+        </details>
         <div class="filters" role="group" aria-label="Screen filters">
           <label>Price <input id="em-pmin" type="number" min="0" step="1" value="${f.pmin}"> – <input id="em-pmax" type="number" min="1" step="1" value="${f.pmax}"></label>
           <label>Market cap <select id="em-mcap">${[[5e8, "under $500M"], [1e9, "under $1B"], [3e9, "under $3B"], [5e9, "under $5B"], [1e10, "under $10B"]].map(([v, l]) => `<option value="${v}" ${f.mcap === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -1112,8 +1129,9 @@
     $("app").innerHTML = `
       <div class="main">
         <div class="hero">
-          <nav class="crumbs" aria-label="Breadcrumb">${state.from === "emerging" ? '<a href="#emerging">Emerging</a>' : `<a href="#${state.view}">${esc(MGR_NAME[state.view])}</a>`}<span aria-hidden="true">›</span><span>${esc(s.ticker)}${s.exchange ? " • " + esc(s.exchange.toUpperCase()) : ""}</span></nav>
-          <h1>${esc(niceName(s.name))} ${tkChip(s)}</h1>
+          ${coNav(s)}
+          <nav class="crumbs" aria-label="Breadcrumb"><span>${esc(s.ticker)}${s.exchange ? " • " + esc(s.exchange.toUpperCase()) : ""}</span></nav>
+          <h1>${esc(niceName(s.name))} ${tkChip(s)}<button type="button" class="follow" data-follow="${esc(s.ticker)}" aria-pressed="${isWatched(s.ticker)}">${isWatched(s.ticker) ? "★ Following" : "☆ Follow"}</button></h1>
           <p class="hero-sub">${esc(s.sector || "")}${s.industry ? " · " + esc(s.industry) : ""}</p>
           <div class="figure" id="co-figure">${coFigure(s)}</div>
           <p class="figure-note">${live("stamp", s.ticker)} · 13F quarter-end price ${price(s.price)} on ${dateL(D.meta.latest)}</p>
@@ -1305,6 +1323,59 @@
     lineChart(host, { series, dates: per.slice(i0), height: 280, fmt: k ? usd : (v) => num(v) + " shares", axisFmt: k ? axisUsd : axisNum });
   }
 
+  // ---------- watchlist page ----------
+  /** Followed companies, as rows with a cusip (full record when loaded, else the Emerging row). */
+  function watchItems() {
+    return watch.map((t) => {
+      const s = bySlug(slugOf(t)) || emergingAll().find((r) => r.ticker === t);
+      return s || null;
+    }).filter(Boolean);
+  }
+  const anySec = (c) => D.securities[c] || emergingAll().find((r) => r.cusip === c);
+  function renderWatch() {
+    const items = watchItems().map((r) => anySec(r.cusip));
+    const stake = (s) => { const h = D.securities[s.cusip] && holder(s.cusip, "big3"); const r = emergingAll().find((x) => x.cusip === s.cusip); return h && h.ownership != null ? h.ownership : r ? r.stake : null; };
+    const since = (s) => { const p = pxOf(s.ticker); return p && s.price ? p / s.price - 1 : null; };
+    const body = items.map((s) => `<tr data-slug="${slugOf(s.ticker)}">
+        <td class="l fz fz-em"><a class="co" href="#t-${slugOf(s.ticker)}">${tkChip(s)}<span class="co-nm"><b>${esc(niceName(s.name))}</b><small>${esc(s.industry || s.sector || "")}</small></span></a></td>
+        <td>${live("px", s.ticker)}</td><td>${live("pill", s.ticker)}</td><td>${live("mcap", s.ticker)}</td>
+        <td class="sep">${stake(s) == null ? '<span class="na">n/a</span>' : pct(stake(s), 1, false)}</td>
+        <td>${since(s) == null ? "—" : pill(since(s), { sm: true })}</td>
+        <td><button type="button" class="btn" data-unwatch="${esc(s.ticker)}" aria-label="Remove ${esc(s.ticker)}">Remove</button></td>
+      </tr>`).join("");
+    $("app").innerHTML = `<div class="main">
+        <div class="hero">
+          <h1>Watchlist</h1>
+          <p class="hero-sub">Companies you follow, with live prices. Kept in this browser.</p>
+        </div>
+        ${items.length ? `<div class="table-scroll"><table class="tbl">
+          <thead><tr><th class="l fz fz-em" scope="col">Company</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Market cap</th><th scope="col" class="sep">Big Three stake</th><th scope="col">Since 13F</th><th scope="col"><span class="sr">Remove</span></th></tr></thead>
+          <tbody>${body}</tbody></table></div>
+          <p class="foot">Since 13F is the price change from the quarter-end price in the latest 13F (${dateL(D.meta.latest)}).</p>`
+        : `<p class="empty-state">No companies yet. Open any company and tap <b>☆ Follow</b> to keep it here with a live price.</p>`}
+      </div>`;
+    $("app").querySelectorAll("tbody tr[data-slug]").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest("a, button")) location.hash = "t-" + tr.dataset.slug; }));
+  }
+
+  // ---------- company navigation: back to the list, previous / next in it ----------
+  function originList() {
+    if (state.from === "emerging") return { hash: "emerging", label: "Emerging", tickers: emergingSorted().slice(0, state.em.limit).map((r) => r.ticker) };
+    if (state.from === "watch") return { hash: "watchlist", label: "Watchlist", tickers: watch.slice() };
+    return { hash: state.view, label: MGR_NAME[state.view], tickers: homeSorted().map((r) => sec(r.cusip).ticker) };
+  }
+  function coNav(s) {
+    const L = originList();
+    const i = L.tickers.indexOf(s.ticker);
+    const link = (t, dir) => t ? `<a class="pn" href="#t-${slugOf(t)}" data-replace aria-label="${dir === -1 ? "Previous" : "Next"}: ${esc(t)}">${dir === -1 ? "‹ " + esc(t) : esc(t) + " ›"}</a>` : `<span class="pn off">${dir === -1 ? "‹" : "›"}</span>`;
+    return `<div class="co-nav">
+      <a class="back" href="#${L.hash}" data-back><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>${esc(L.label)}</a>
+      ${i >= 0 ? `<span class="pns">${link(L.tickers[i - 1], -1)}<small>${i + 1} of ${L.tickers.length}</small>${link(L.tickers[i + 1], 1)}</span>` : ""}
+    </div>`;
+  }
+  // Back returns to the list where it was left (scroll position), not to its top.
+  const scrollMem = {};
+  let arrivedFromList = false;
+
   // ---------- routing ----------
   function render() {
     hideTip();
@@ -1312,19 +1383,26 @@
     renderTape();
     if (state.page === "company") renderCompany();
     else if (state.page === "emerging") renderEmerging();
+    else if (state.page === "watch") renderWatch();
     else renderHome();
     syncSubscriptions();
     renderLive();
   }
+  const pageKey = () => (state.page === "home" ? "home:" + state.view : state.page === "company" ? "co:" + state.slug : state.page);
   function route() {
     const h = decodeURIComponent(location.hash.replace("#", ""));
     const before = state.page + state.slug;
+    const leaving = pageKey();
+    if (state.page !== "company") scrollMem[leaving] = window.scrollY;
     if (h.startsWith("t-")) {
-      if (state.page !== "company") state.from = state.page;
+      if (state.page !== "company") { state.from = state.page; arrivedFromList = true; }
       state.page = "company";
       state.slug = h.slice(2);
     } else if (h === "emerging" && D.emerging) {
       state.page = "emerging";
+      state.slug = null;
+    } else if (h === "watchlist") {
+      state.page = "watch";
       state.slug = null;
     } else {
       state.page = "home";
@@ -1332,7 +1410,10 @@
       if (VIEWS.includes(h) && h !== state.view) { state.view = h; state.sort = { key: "rank", dir: 1 }; }
     }
     render();
-    if (before !== state.page + state.slug) window.scrollTo(0, 0);
+    if (before === state.page + state.slug) return;
+    const back = leaving.startsWith("co:") && state.page !== "company" ? scrollMem[pageKey()] : null;
+    window.scrollTo(0, back || 0);
+    if (state.page !== "company") arrivedFromList = false;
   }
 
   // ---------- live updates ----------
@@ -1473,6 +1554,24 @@
     setupSearch();
     setupNotify();
     window.addEventListener("hashchange", route);
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-back], [data-replace], [data-follow], [data-unwatch]");
+      if (!a) return;
+      if (a.matches("[data-back]")) {
+        // Opened from the list in this tab: go back in history, so the list keeps its place.
+        if (arrivedFromList) { e.preventDefault(); history.back(); }
+      } else if (a.matches("[data-replace]")) {
+        // Previous / next replace the history entry, so Back still returns to the list.
+        e.preventDefault();
+        location.replace(a.getAttribute("href"));
+      } else {
+        e.preventDefault();
+        const t = a.dataset.follow || a.dataset.unwatch;
+        toggleWatch(t);
+        if (a.matches("[data-follow]")) { a.setAttribute("aria-pressed", isWatched(t)); a.textContent = isWatched(t) ? "★ Following" : "☆ Follow"; renderChips(); }
+        else render();
+      }
+    });
     let rt, lastW = innerWidth;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 150); });
     route();
