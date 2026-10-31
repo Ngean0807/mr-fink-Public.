@@ -33,6 +33,7 @@
     watch = isWatched(t) ? watch.filter((x) => x !== t) : watch.concat(t);
     try { localStorage.setItem("mrfink.watch", JSON.stringify(watch)); } catch (e) { /* storage unavailable */ }
     toast(isWatched(t) ? `${t} added to your watchlist` : `${t} removed from your watchlist`);
+    pushPrefsChanged();
   }
 
   // ---------- formatting ----------
@@ -1788,6 +1789,74 @@
       });
     }));
   }
+  // ---------- push notifications through the Mr. Fink push server (worker/) ----------
+  let PUSH_URL = null;
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && canNotify();
+  const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  async function pushSubscription(create) {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub && create) {
+      const { publicKey } = await (await fetch(PUSH_URL + "/vapid")).json();
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(publicKey) });
+    }
+    return sub;
+  }
+  /** Register or update this browser with the push server: filing types and watchlist. */
+  async function pushSync(create = false) {
+    if (!PUSH_URL || !pushSupported()) return false;
+    const sub = await pushSubscription(create);
+    if (!sub) return false;
+    const r = await fetch(PUSH_URL + "/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds: nprefs.kinds, tickers: watch }) });
+    return r.ok;
+  }
+  let pushTimer = null;
+  const pushPrefsChanged = () => { if (nprefs.push) { clearTimeout(pushTimer); pushTimer = setTimeout(() => pushSync().catch(() => {}), 800); } };
+  function pushSection() {
+    if (!PUSH_URL) return "";
+    const head = `<section class="np-sec"><h3>Push notifications, even when the site is closed</h3>`;
+    if (!pushSupported()) {
+      return isIOS() && !standalone()
+        ? `${head}<p>On iPhone, first install Mr. Fink as an app (below), open it from the home screen, then turn push on here.</p></section>`
+        : `${head}<p>This browser does not support push notifications.</p></section>`;
+    }
+    const perm = Notification.permission;
+    if (perm === "denied") return `${head}<p>Notifications are blocked for this site in your browser settings.</p></section>`;
+    return `${head}<p>No app to install. Uses the filing types above and every company in your watchlist.</p>
+      <div>${nprefs.push && perm === "granted"
+        ? '<button type="button" class="btn" id="np-push-test">Send a test</button> <button type="button" class="btn" id="np-push-off">Turn off</button>'
+        : '<button type="button" class="btn primary" id="np-push-on">Turn on push notifications</button>'}</div>
+      <p class="np-status">${nprefs.push && perm === "granted" ? "On for this device." : "Off."}</p></section>`;
+  }
+  function wirePush() {
+    $("np-push-on")?.addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      try {
+        if ((await Notification.requestPermission()) !== "granted") throw new Error("permission");
+        if (!(await pushSync(true))) throw new Error("server");
+        nprefs.push = true; saveN(); toast("Push notifications are on.");
+      } catch (err) { toast(err.message === "permission" ? "Notifications were not allowed." : "Could not reach the push server. Try again later."); }
+      renderNotifyPanel();
+    });
+    $("np-push-test")?.addEventListener("click", async () => {
+      try {
+        const sub = await pushSubscription(false);
+        const r = await fetch(PUSH_URL + "/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub && sub.endpoint }) });
+        toast(r.ok ? "Test sent. It should arrive in a few seconds." : "The push server did not accept the test.");
+      } catch (err) { toast("Could not reach the push server."); }
+    });
+    $("np-push-off")?.addEventListener("click", async () => {
+      try {
+        const sub = await pushSubscription(false);
+        if (sub) {
+          await fetch(PUSH_URL + "/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+          await sub.unsubscribe();
+        }
+      } catch (err) { /* already gone */ }
+      nprefs.push = false; saveN(); renderNotifyPanel();
+    });
+  }
+
   // ---------- install as an app ----------
   let installPrompt = null;
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; if (!$("npanel").hidden) renderNotifyPanel(); });
@@ -1816,6 +1885,7 @@
         <h3>Notify me about</h3>
         ${NKINDS.map(([k, l, d]) => `<label class="np-kind"><input type="checkbox" data-nkind="${k}" ${nprefs.kinds.includes(k) ? "checked" : ""}><span>${l}</span><small>${d}</small></label>`).join("")}
       </section>
+      ${pushSection()}
       <section class="np-sec">
         <h3>In this browser</h3>
         <p>No install. Works while the site is open in a tab, on desktop and Android.</p>
@@ -1835,6 +1905,7 @@
     $("npanel").querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
       nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => $("npanel").querySelector(`[data-nkind="${k}"]`).checked);
       saveN();
+      pushPrefsChanged();
       renderNotifyPanel();
     }));
     $("np-browser")?.addEventListener("click", async () => {
@@ -1850,6 +1921,7 @@
       catch (e) { toast("This browser shows notifications only from installed apps."); }
     });
     wireCopy($("npanel"));
+    wirePush();
     $("np-install")?.addEventListener("click", async () => {
       installPrompt.prompt();
       const { outcome } = await installPrompt.userChoice;
@@ -1941,6 +2013,8 @@
       poll();
       setInterval(poll, POLL_MS);
       fetch("data/config.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
+        PUSH_URL = (cfg && cfg.pushUrl) || null;
+        if (!$("npanel").hidden) renderNotifyPanel();
         if (cfg && cfg.finnhubKey) startRealtime(cfg.finnhubKey);
         else { priceMode = "delayed"; setInterval(pollQuotes, POLL_MS); }
         flush();

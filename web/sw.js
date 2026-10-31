@@ -1,6 +1,6 @@
 // Mr. Fink service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
-const CACHE = "mrfink-v1";
+const CACHE = "mrfink-v2";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -23,4 +23,21 @@ self.addEventListener("fetch", (e) => {
       return res;
     }).catch(() => caches.match(key).then((hit) => hit || caches.match("index.html")))
   );
+});
+
+// Push notifications from the Mr. Fink push server (worker/): show them, open the page on tap.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "Mr. Fink", body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Mr. Fink", {
+    body: d.body || "", tag: d.tag, icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { url: d.url || "./" },
+  }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const c of list) if (c.url.startsWith(self.registration.scope)) { c.navigate(url); return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
 });

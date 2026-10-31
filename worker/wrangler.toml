@@ -1,0 +1,14 @@
+# Deployed by .github/workflows/deploy-worker.yml (the KV id is filled in there).
+name = "mrfink-push"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+kv_namespaces = [{ binding = "PUSH", id = "__KV_ID__" }]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+SITE_URL = "https://ngean0807.github.io/mr-fink-Public./"
+VAPID_SUBJECT = "mailto:nissim711@gmail.com"

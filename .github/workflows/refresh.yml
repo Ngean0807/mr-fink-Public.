@@ -52,13 +52,21 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_TEST: ${{ inputs.test_notification }}
         run: python -m pipeline.build
-      - name: Price feed config
+      - name: Price feed and push server config
         # Optional: a free Finnhub key turns on real-time prices (websocket trades) in the browser.
         # Without it the page shows Yahoo Finance quotes refreshed by this workflow.
+        # The push server's address comes from the Cloudflare account (only the public URL is written).
         env:
           FINNHUB_KEY: ${{ vars.FINNHUB_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          python -c "import json, os; json.dump({'finnhubKey': os.environ.get('FINNHUB_KEY') or None}, open('web/data/config.json', 'w'))"
+          sub=""
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            sub=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | jq -r '.result.subdomain // empty')
+          fi
+          PUSH_URL=$([ -n "$sub" ] && echo "https://mrfink-push.$sub.workers.dev" || echo "") \
+            python -c "import json, os; json.dump({'finnhubKey': os.environ.get('FINNHUB_KEY') or None, 'pushUrl': os.environ.get('PUSH_URL') or None}, open('web/data/config.json', 'w'))"
       - name: Decide whether to save the cache
         if: always()
         # Saving ~hundreds of MB every 5 minutes churns the 10 GB cache limit; once an hour is enough
