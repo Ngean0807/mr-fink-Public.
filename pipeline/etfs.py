@@ -82,7 +82,7 @@ SECTOR_NAMES = {"statestreet": "Select Sector SPDR", "vanguard": "Vanguard secto
 # full holdings every business day. GLD holds gold bullion, not securities.
 SSGA_DAILY = {"SPY", "MDY"}
 SSGA_URL = "https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-{}.xlsx"
-NO_SECURITIES = {"GLD": "Holds physical gold bullion (allocated bars in vaults in London), not securities."}
+NO_SECURITIES = {"GLD": ("Holds physical gold bullion (allocated bars in vaults in London), not securities.", "https://www.spdrgoldshares.com/usa/gld/")}
 
 
 def _xlsx_rows(data: bytes) -> list[list[str]]:
@@ -136,14 +136,30 @@ def ssga_daily(ticker: str) -> dict:
     return {"top": sorted(hold, key=lambda h: -h["pct"])[:10], "holdings": len(hold), "period": period, "filing": url, "source": "State Street daily holdings"}
 
 
+def etf_name(fund: str, manager: str) -> str:
+    """The ETF's market name from its N-PORT series name: "State Street(R) Technology Select Sector
+    SPDR(R) ETF" -> "State Street Technology Select Sector SPDR ETF", "VANGUARD HEALTH CARE INDEX
+    FUND" -> "Vanguard Health Care ETF" (the ETF share class of that fund)."""
+    n = re.sub(r"\s*\((?:R|TM)\)", "", fund).strip()
+    if n.isupper():
+        n = " ".join(w if w in ("ETF", "REIT", "US", "U.S.") else w.capitalize() for w in n.split())
+    if manager == "vanguard":
+        n = re.sub(r"\s+Index Fund$", " ETF", n)
+    return n
+
+
 def summary(f: dict) -> dict:
-    """Fund size and the 10 largest positions from one N-PORT filing (parsed once, kept)."""
-    key = f"nport_summary3_{f['accession']}.json.gz"
+    """Fund size and the 10 largest positions from one N-PORT filing (parsed once, kept).
+
+    Positions of one issuer are added together, which is right for a stock fund (both Alphabet
+    classes) and a broad bond fund (Treasuries as one line). When that leaves fewer than 5 issuers
+    (TLT holds nothing but Treasuries), the 10 largest individual bonds are listed instead."""
+    key = f"nport_summary4_{f['accession']}.json.gz"
     cached = edgar.load_artifact(key)
     if cached is not None:
         return cached
     xml = edgar.fetch(f["xml"])
-    header, by_name, n = {}, {}, 0
+    header, by_name, lines, n = {}, {}, [], 0
     for _, el in ET.iterparse(io.BytesIO(xml), events=("end",)):
         tag = el.tag.rsplit("}", 1)[-1]
         if tag in ("netAssets", "seriesName", "repPdDate") and el.text:
@@ -168,8 +184,21 @@ def summary(f: dict) -> dict:
         slot = by_name.setdefault(nm, {"name": nm, "cusip": (rec.get("cusip") or "").upper(), "pct": 0.0, "lines": 0})
         slot["pct"] += pct / 100
         slot["lines"] += 1
+        title = rec.get("title") or nm
+        if rec.get("maturityDt"):  # a bond: "United States Treasury Bond 4.625% due 2054-05-15"
+            try:
+                title += f" {float(rec['annualizedRt']):g}%" if rec.get("annualizedRt") else ""
+            except ValueError:
+                pass
+            title += f" due {rec['maturityDt']}"
+        lines.append({"name": title, "cusip": (rec.get("cusip") or "").upper(), "pct": pct / 100, "lines": 1})
+    top = sorted(by_name.values(), key=lambda r: -r["pct"])[:10]
+    individual = len(top) < 5 and len(lines) > len(top)
+    if individual:
+        top = sorted(lines, key=lambda r: -r["pct"])[:10]
     out = {"netAssets": float(header["netAssets"]) if header.get("netAssets") else None, "name": header.get("seriesName"),
-           "period": header.get("repPdDate") or f["period"], "holdings": n, "top": sorted(by_name.values(), key=lambda r: -r["pct"])[:10]}
+           "period": header.get("repPdDate") or f["period"], "holdings": n, "top": top,
+           "individual": individual, "issuers": [{"name": r["name"], "pct": r["pct"], "lines": r["lines"]} for r in sorted(by_name.values(), key=lambda r: -r["pct"])[:3]] if individual else None}
     edgar.save_artifact(key, out)
     return out
 
@@ -211,9 +240,11 @@ def build(log=print) -> dict:
                 fs = nport.filings(row["series"], ttl_hours=24)
                 if fs:
                     s = summary(fs[0])
-                    row.update(netAssets=s["netAssets"], period=s["period"], holdings=s["holdings"], top=s["top"], filing=fs[0]["url"], source="N-PORT")
+                    row.update(netAssets=s["netAssets"], period=s["period"], holdings=s["holdings"], top=s["top"], filing=fs[0]["url"], source="N-PORT", individual=s.get("individual") or None, issuers=s.get("issuers"))
                     if s.get("name"):
                         row["fundName"] = s["name"]
+                        if cat.startswith("Sector:"):  # the fund's own name, as a broker lists it
+                            row["name"] = etf_name(s["name"], m)
             except Exception as e:
                 log(f"  N-PORT unavailable for {t}: {e}")
         elif t in SSGA_DAILY:
@@ -222,7 +253,7 @@ def build(log=print) -> dict:
             except Exception as e:
                 log(f"  State Street daily holdings unavailable for {t}: {e}")
         elif t in NO_SECURITIES:
-            row["note"] = NO_SECURITIES[t]
+            row["note"], row["noteUrl"] = NO_SECURITIES[t]
         try:
             row["ret1y"], row["ytd"], row["spark"] = _returns(quotes.history(t))
         except Exception as e:
