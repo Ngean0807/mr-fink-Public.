@@ -78,6 +78,64 @@ SECTORS = {
 SECTOR_NAMES = {"statestreet": "Select Sector SPDR", "vanguard": "Vanguard sector ETF", "blackrock": "iShares U.S. sector ETF"}
 
 
+# SPY and MDY are unit investment trusts and do not file N-PORT; State Street publishes their
+# full holdings every business day. GLD holds gold bullion, not securities.
+SSGA_DAILY = {"SPY", "MDY"}
+SSGA_URL = "https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-{}.xlsx"
+NO_SECURITIES = {"GLD": "Holds physical gold bullion (allocated bars in vaults in London), not securities."}
+
+
+def _xlsx_rows(data: bytes) -> list[list[str]]:
+    """Rows of the first worksheet of an .xlsx file, as text (standard library only)."""
+    import zipfile
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    z = zipfile.ZipFile(io.BytesIO(data))
+    shared = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(ns + "si"):
+            shared.append("".join(t.text or "" for t in si.iter(ns + "t")))
+    sheet = sorted(n for n in z.namelist() if n.startswith("xl/worksheets/sheet"))[0]
+    rows = []
+    for r in ET.fromstring(z.read(sheet)).iter(ns + "row"):
+        cells = {}
+        for c in r.iter(ns + "c"):
+            col = re.match(r"[A-Z]+", c.get("r", "A")).group(0)
+            idx = sum((ord(ch) - 64) * 26 ** k for k, ch in enumerate(reversed(col))) - 1
+            v = c.find(ns + "v")
+            text = "".join(t.text or "" for t in c.iter(ns + "t")) if c.get("t") == "inlineStr" else (v.text if v is not None else "")
+            cells[idx] = shared[int(text)] if c.get("t") == "s" and text else text
+        rows.append([cells.get(i, "") for i in range(max(cells) + 1)] if cells else [])
+    return rows
+
+
+def ssga_daily(ticker: str) -> dict:
+    """Ten largest holdings from State Street's daily holdings file (cached for 12 hours)."""
+    url = SSGA_URL.format(ticker.lower())
+    path = edgar.CACHE_DIR / "ssga" / f"{ticker}.xlsx"
+    if path.exists() and time.time() - path.stat().st_mtime < 12 * 3600:
+        data = path.read_bytes()
+    else:
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Mr. Fink dashboard)"})
+        data = urllib.request.urlopen(req, timeout=60).read()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    rows = _xlsx_rows(data)
+    as_of = next((r[1] for r in rows if r and r[0].startswith("Holdings")), "")
+    head = next(i for i, r in enumerate(rows) if r and r[0] == "Name")
+    cols = {name: i for i, name in enumerate(rows[head])}
+    hold = []
+    for r in rows[head + 1:]:
+        if not r or not r[0] or len(r) <= cols["Weight"]:
+            break
+        if (r[cols["Ticker"]] or "").startswith("CASH") or not r[cols["Weight"]]:
+            continue
+        hold.append({"name": r[0], "cusip": r[cols["Identifier"]], "pct": float(r[cols["Weight"]]) / 100, "lines": 1})
+    m = re.search(r"(\d{1,2})-(\w{3})-(\d{4})", as_of)
+    period = datetime.strptime(m.group(0), "%d-%b-%Y").date().isoformat() if m else None
+    return {"top": sorted(hold, key=lambda h: -h["pct"])[:10], "holdings": len(hold), "period": period, "filing": url, "source": "State Street daily holdings"}
+
+
 def summary(f: dict) -> dict:
     """Fund size and the 10 largest positions from one N-PORT filing (parsed once, kept)."""
     key = f"nport_summary3_{f['accession']}.json.gz"
@@ -153,11 +211,18 @@ def build(log=print) -> dict:
                 fs = nport.filings(row["series"], ttl_hours=24)
                 if fs:
                     s = summary(fs[0])
-                    row.update(netAssets=s["netAssets"], period=s["period"], holdings=s["holdings"], top=s["top"], filing=fs[0]["url"])
+                    row.update(netAssets=s["netAssets"], period=s["period"], holdings=s["holdings"], top=s["top"], filing=fs[0]["url"], source="N-PORT")
                     if s.get("name"):
                         row["fundName"] = s["name"]
             except Exception as e:
                 log(f"  N-PORT unavailable for {t}: {e}")
+        elif t in SSGA_DAILY:
+            try:
+                row.update(ssga_daily(t))
+            except Exception as e:
+                log(f"  State Street daily holdings unavailable for {t}: {e}")
+        elif t in NO_SECURITIES:
+            row["note"] = NO_SECURITIES[t]
         try:
             row["ret1y"], row["ytd"], row["spark"] = _returns(quotes.history(t))
         except Exception as e:

@@ -1739,9 +1739,9 @@
   const etfChip = (f) => `<span class="tk" style="background:${mColor(f.manager)}">${esc(f.ticker)}</span>`;
   /** Top holdings of one fund, linked to company pages where they exist. */
   function etfTop(f) {
-    if (!f.top || !f.top.length) return `<p class="foot">${f.series ? "No N-PORT report found for this fund yet." : "A unit or grantor trust: it does not file N-PORT, so holdings are not published on EDGAR."}</p>`;
+    if (!f.top || !f.top.length) return `<p class="foot">${f.note ? esc(f.note) : f.series ? "No N-PORT report found for this fund yet." : "Holdings are not available for this fund right now."}</p>`;
     const page = (c) => Object.values(D.securities).find((x) => x.cusip === c) || emergingAll().find((x) => x.cusip === c);
-    return `<div class="etf-top"><b>Largest holdings</b> <span class="muted">as of ${dateL(f.period)} · ${num(f.holdings)} positions · <a href="${f.filing}" target="_blank" rel="noopener">N-PORT</a></span>
+    return `<div class="etf-top"><b>Largest holdings</b> <span class="muted">as of ${dateL(f.period)} · ${num(f.holdings)} positions · <a href="${f.filing}" target="_blank" rel="noopener">${esc(f.source || "N-PORT")}</a></span>
       <ol>${f.top.map((h) => {
         const s0 = h.lines > 1 ? null : page(h.cusip);
         const many = h.lines > 1 ? ` <small class="muted">(${h.lines} ${/bond|treasury|aggregate/i.test(f.category + f.name) ? "bonds" : "lines"} combined)</small>` : "";
@@ -1801,7 +1801,7 @@
           <p class="note">Select Sector SPDR · Vanguard sector · iShares U.S. sector. “Best year” ranks sectors by the three funds’ average 1-year return.</p>
           <div class="table-scroll flat"><table class="own-table etf-sectors"><thead><tr><th class="l" scope="col">Sector</th><th class="l" scope="col">SPDR</th><th class="l" scope="col">Vanguard</th><th class="l" scope="col">iShares</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
         </section>
-        <p class="foot">Fund size and holdings: each fund’s latest Form N-PORT on SEC EDGAR (the whole fund, all share classes; published quarterly with a delay of about 60 days). Prices and returns: Yahoo Finance; returns are price returns, so distributions are not included (for a bond fund such as TLT the total return is noticeably higher). Fund size is the whole fund across all share classes (for VTI, the Vanguard Total Stock Market Index Fund including its mutual fund classes). SPY, MDY and GLD are trusts that do not file N-PORT. The iShares communication fund (IYZ) covers telecom only. Not investment advice.</p>
+        <p class="foot">Fund size and holdings: each fund’s latest Form N-PORT on SEC EDGAR (the whole fund, all share classes; published quarterly with a delay of about 60 days). Prices and returns: Yahoo Finance; returns are price returns, so distributions are not included (for a bond fund such as TLT the total return is noticeably higher). Fund size is the whole fund across all share classes (for VTI, the Vanguard Total Stock Market Index Fund including its mutual fund classes). SPY and MDY are unit trusts that do not file N-PORT: their holdings come from State Street’s daily holdings file. GLD holds gold bullion. The iShares communication fund (IYZ) covers telecom only. Not investment advice.</p>
       </div>`;
     const app = $("app");
     app.querySelectorAll("[data-etf-issuer]").forEach((b) => b.addEventListener("click", () => { e.issuer = b.dataset.etfIssuer; render(); }));
