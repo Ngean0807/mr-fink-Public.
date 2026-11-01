@@ -522,3 +522,8 @@ sup { font-size: 10px; color: var(--muted); }
   .live.on .dot, .flash-up, .flash-down { animation: none; }
 }
 .list.prose .nm small { white-space: normal; }
+.etf-pick { font: inherit; background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px; margin: -4px -6px; cursor: pointer; }
+.etf-pick:hover, .etf-pick[aria-expanded="true"] { border-color: var(--line); background: var(--surface-2); }
+.etf-caret { color: var(--muted); font-size: 11px; }
+.etf-name { margin-bottom: 6px; }
+.tbl td.etf-wrap, .own-table td.etf-wrap, .etf-top, .etf-top * { white-space: normal; }
