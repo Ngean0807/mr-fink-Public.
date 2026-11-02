@@ -1,7 +1,7 @@
 // Mr. Fink service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
-const CACHE = "mrfink-v3";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
+const CACHE = "mrfink-v4";
+const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
