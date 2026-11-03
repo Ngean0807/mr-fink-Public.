@@ -34,7 +34,7 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addToggle);
   else addToggle();
-  if (lang !== "he") return;
+  if (lang !== "he" || !window.MRFINK_I18N) return;  // no dictionary: stay in plain English
 
   document.documentElement.lang = "he";
   document.documentElement.dir = "rtl";
@@ -114,7 +114,9 @@
 
   // ---------- translation of one string ----------
   const cache = new Map();
+  const TICKER = /^[A-Z][A-Z0-9.\-]{0,5}$/;  // a bare ticker (COO, GM, CTO…) is data, never a word
   function tr(s, inner) {
+    if (TICKER.test(s)) return null;
     if (cache.has(s)) return cache.get(s);
     let out = null;
     if (Object.prototype.hasOwnProperty.call(I.dict, s)) out = I.dict[s];
@@ -147,7 +149,7 @@
     const val = n.nodeValue;
     if (!val || seen.get(n) === val || !LATIN.test(val)) return;
     const p = n.parentElement;
-    if (!p || SKIP.test(p.tagName) || p.closest("[translate=no]")) { seen.set(n, val); return; }
+    if (!p || SKIP.test(p.tagName) || p.closest("[translate=no], .tk")) { seen.set(n, val); return; }
     // An <option> without a value submits its text: keep the English as the value before translating it.
     if (p.tagName === "OPTION" && !p.hasAttribute("value")) p.setAttribute("value", val.trim());
     const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(val);
@@ -155,6 +157,7 @@
     let t = null;
     // A few words read differently depending on where they stand (I.ctx: [selector, {English: Hebrew}]).
     for (const [sel, map] of I.ctx || []) if (map[core] && p.closest(sel)) { t = map[core]; break; }
+    if (t == null && core && I.role && p.matches(I.roleSel)) t = I.role(core);
     if (t == null && core) t = tr(core);
     // Charts are drawn left to right: a Hebrew label inside one is kept together as a right-to-left unit.
     if (t != null && t !== core && p.namespaceURI === SVGNS && /[\u0590-\u05FF]/.test(t)) t = RLI + t + PDI;
@@ -188,7 +191,7 @@
     }
   });
   function start() {
-    doTree(document.body);
+    try { doTree(document.body); } catch (e) { /* keep going: the observer still translates later changes */ }
     if (document.title && LATIN.test(document.title)) { const t = tr(document.title); if (t) document.title = t; }
     mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
   }

@@ -45,7 +45,6 @@
     "5D": "שבוע",
     "1M": "חודש",
     "6M": "חצי שנה",
-    "YTD": "מתחילת השנה",
     "Combined": "ביחד",
     "By manager": "לפי מנהלת",
     "Chart series": "מה מוצג בגרף",
@@ -130,7 +129,6 @@
     "Net margin": "שיעור רווח נקי",
     "P/E": "מכפיל רווח",
     "P/S": "מכפיל מכירות",
-    "ROE": "תשואה על ההון",
     "FCF yield": "תשואת תזרים חופשי",
     "Results to": "דוחות עד",
     "Quarter over quarter": "מול הרבעון הקודם",
@@ -860,7 +858,7 @@
   P("{T} removed from your watchlist", (m) => `${m[1]} הוסרה מרשימת המעקב`);
   P("Remove {T}", (m) => `הסרת ${m[1]}`);
   P("All {T} filings on EDGAR", (m) => `כל הדיווחים של ${m[1]} ב-SEC`);
-  P("More {X}", (m, v) => `עוד ב${v(m[1])}`);
+  P("More (" + Object.keys(sectors).map((k) => k.replace(/ /g, "\\s")).join("|") + ")", (m, v) => `עוד בענף ${v(m[1])}`);
   P("No other top-(\\d+) holdings in this sector\\.", () => "אין עוד אחזקות גדולות בענף הזה.");
   P("No other top-\\$\\{D\\.meta\\.topN\\} holdings in this sector\\.", () => "אין עוד אחזקות גדולות בענף הזה.");
   P("Previous: {X}", (m, v) => `הקודמת: ${v(m[1])}`);
@@ -941,7 +939,7 @@
   P("Backtest {Q}–{Q}: each quarter’s list bought at the first quarter end after its 13F was public, equal weight, rebalanced quarterly", (m, v) =>
     `בדיקה היסטורית ${v(m[1])} עד ${v(m[2])}: הרשימה של כל רבעון נקנתה בסוף הרבעון הראשון אחרי שדוח ה-13F פורסם, סכום שווה לכל מניה, ועדכון כל רבעון`);
   P("{X} ETFs from the Big Three:", (m, v) => `קרנות סל של שלוש הגדולות בענף ${v(m[1])}:`);
-  P("Class ([A-Z0-9]+)(?: (.+))?", (m) => `מניה מסוג ${m[1]}${m[2] ? " " + FSI + m[2] + PDI : ""}`);
+  P("Class ([A-Z0-9]{1,2})(?: ([A-Z0-9 ]+))?", (m) => `מניה מסוג ${m[1]}${m[2] ? " " + FSI + m[2] + PDI : ""}`);
   P("Sector: {X}", (m, v) => `ענף: ${v(m[1])}`);
   P("{X}: largest holdings", (m, v) => `${v(m[1])}: האחזקות הגדולות`);
   P("{N} funds · tap one for its largest holdings", (m, v) => `${v(m[1])} קרנות · לחצו על קרן כדי לראות את האחזקות הגדולות שלה`);
@@ -951,7 +949,7 @@
   P("By issuer: (.+) {N} \\({N} bonds\\)\\. The largest individual bonds:", (m, v) => `לפי גוף מנפיק: ${m[1] === "United States of America" ? "ממשלת ארה״ב" : v(m[1])} ${v(m[2])} (${v(m[3])} אג״ח). האג״ח הגדולות:`);
   P("{X} · {N} fund size", (m, v) => `${v(m[1])} · גודל הקרן ${v(m[2])}`);
   P("(\\d+)-year return", (m) => (m[1] === "1" ? "תשואה בשנה" : `תשואה ב-${m[1]} שנים`));
-  P("{X} ([↑↓])", (m, v) => { const t = v(m[1]); return t.startsWith("\u2068") ? null : `${t} ${m[2]}`; });
+  P("{X} ([↑↓])", (m, v) => { const t = { ROE: "תשואה על ההון" }[m[1]] || v(m[1]); return t.startsWith("\u2068") ? null : `${t} ${m[2]}`; });
   P("Fund size and holdings: (.+)", () => null);
   P("U\\.S\\. Treasury Bonds ([\\d.]+)% due (\\d{4}-\\d\\d-\\d\\d)", (m) => `אג״ח ממשלת ארה״ב, ריבית ${iso(m[1] + "%")}, פירעון ${iso(m[2].split("-").reverse().map(Number).join("."))}`);
 
@@ -991,7 +989,7 @@
   P("• Benchmarks: the same small-cap universe without the stake test \\(isolates the signal from the small-cap effect\\), IWM and SPY price returns from Yahoo Finance\\.(?: Insider buying cannot be backtested: Form 4 data is collected for the last 90 days only\\.)?", (m) =>
     "• השוואה: אותן חברות קטנות בלי סינון האחזקה (כדי להפריד בין הסינון לבין ההשפעה של חברות קטנות), ותשואת המחיר של IWM ו-SPY מ-Yahoo Finance." + (m[0].includes("Insider") ? " אי אפשר לבדוק לאחור קניות של בעלי עניין: נתוני טופס 4 נאספים רק ל-90 הימים האחרונים." : ""));
   P("S&P 500 \\(SPY\\)", () => "מדד S&P 500 (SPY)");
-  P(".+ chart", () => "גרף");
+  P("(?:{T}|S&P 500|13F book value|Revenue|Net income|Shares held|Value held|Price)(?:,? (?:{T}|S&P 500|Russell 2000|All small caps|All three buying|Top 25|This screen|BlackRock|Vanguard|State Street))* chart", () => "גרף");
 
   // 13F season (only shown while the managers file a new quarter)
   P("{Q} 13F season:", (m, v) => `עונת דוחות 13F של ${v(m[1])}:`);
@@ -1029,14 +1027,14 @@
   // all lookups with collapsed spaces
   const all = {};
   for (const src of [industries, sectors, events, dict]) for (const [k, h] of Object.entries(src)) all[k.replace(/\s+/g, " ").trim()] = h;
-  patterns.push([/^[\s\S]+$/, (m) => role(m[0])]);  // insider roles last
 
   const ctx = [
     [".ins-sum", { "Bought": "קניות:", "Sold": "מכירות:", "none": "אין" }],
     ["#fin-h", { "Financials": "תוצאות כספיות" }],
+    [".range, .ranges, th, dt", { "YTD": "מתחילת השנה", "ROE": "תשואה על ההון" }],
     ["[data-etf-issuer]", { "Vanguard": "Vanguard" }],
     [".own-table", { "Bought": "קנייה", "Sold": "מכירה", "plan": "לפי תוכנית" }],
     ["[data-feed]", { "13F": "אחזקות (13F)", "13G/D": "מעל 5% (13G/D)", "N-PORT": "קרנות (N\u2011PORT)", "8-K": "דיווח מיידי (8-K)", "10-Q/K": "דוחות כספיים (10-Q/K)" }],
   ];
-  window.MRFINK_I18N = { dict: all, patterns, ctx, keep: () => true };
+  window.MRFINK_I18N = { dict: all, patterns, ctx, role, roleSel: ".own-table td.l > small", keep: () => true };
 })();
