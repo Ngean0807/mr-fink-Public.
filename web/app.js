@@ -69,6 +69,8 @@
   const price = (x) => (x == null ? "—" : "$" + x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const trim = (t) => t.replace(/\.0+(?=[A-Z]?$)/, "").replace(/(\.\d*?[1-9])0+(?=[A-Z]?$)/, "$1");
   const axisUsd = (v) => (v === 0 ? "$0" : (v < 0 ? "-$" : "$") + trim(compact(Math.abs(v))));
+  // Room for a y-axis label; in Hebrew "$20T" is written "$20 טריליון", which needs more.
+  const axisLen = (t) => t.length * 7 + (window.MRFINK_LANG === "he" && /[KMBT]$/.test(t) ? 44 : 0);
   const axisNum = (v) => (v === 0 ? "0" : trim(compact(v)));
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const qlabel = (p) => { const [y, m] = p.split("-"); return `Q${Math.floor((+m - 1) / 3) + 1} ${y}`; };
@@ -416,7 +418,7 @@
     lo = tk[0]; hi = tk[tk.length - 1];
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": series.map((s) => s.name).join(", ") + " chart" }, host);
     const n = dates.length;
-    const axisW = Math.max(...tk.map((t) => axisFmt(t).length)) * 7 + 12;
+    const axisW = Math.max(...tk.map((t) => axisLen(axisFmt(t)))) + 12;
     const plotR = W - m.r - axisW;
     const x = (i) => m.l + (n === 1 ? 0 : (i / (n - 1)) * (plotR - m.l));
     const y = (v) => H - m.b - ((v - lo) / (hi - lo || 1)) * (H - m.t - m.b);
@@ -425,7 +427,7 @@
       el("line", { x1: m.l, x2: plotR, y1: y(t), y2: y(t), class: "gridline" }, ax);
       el("text", { x: W - m.r, y: y(t) + 4, "text-anchor": "end" }, ax).textContent = axisFmt(t);
     });
-    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((plotR - m.l) / 72))));
+    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((plotR - m.l) / (window.MRFINK_LANG === "he" ? 100 : 72)))));
     for (let i = n - 1; i >= 0; i -= every) {
       el("text", { x: x(i), y: H - 8, "text-anchor": i === n - 1 ? "end" : "middle" }, ax).textContent = xLabel(i);
     }
@@ -482,7 +484,7 @@
     const vals = quarters.flatMap((q) => [q.revenue, q.netIncome]).filter((v) => v != null);
     const tk = ticks(Math.min(0, ...vals), Math.max(...vals), 3);
     const lo = tk[0], hi = tk[tk.length - 1];
-    const axisW = Math.max(...tk.map((t) => axisUsd(t).length)) * 7 + 12;
+    const axisW = Math.max(...tk.map((t) => axisLen(axisUsd(t)))) + 12;
     const plotR = W - m.r - axisW;
     const y = (v) => H - m.b - ((v - lo) / (hi - lo || 1)) * (H - m.t - m.b);
     const ax = el("g", { class: "axis" }, svg);

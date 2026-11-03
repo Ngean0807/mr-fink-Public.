@@ -527,3 +527,55 @@ sup { font-size: 10px; color: var(--muted); }
 .etf-caret { color: var(--muted); font-size: 11px; }
 .etf-name { margin-bottom: 6px; }
 .tbl td.etf-wrap, .own-table td.etf-wrap, .etf-top, .etf-top * { white-space: normal; }
+
+/* ---------- Language switch, and Hebrew (right to left). Nothing below applies in English except .lang. ---------- */
+.lang { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; flex: none; font: 500 14px "Rubik", var(--font-ui); display: grid; place-items: center; }
+.lang:hover { background: var(--chip); }
+[dir="rtl"] { --font-ui: "Google Sans", "Rubik", "Roboto", Arial, sans-serif; --font-body: "Roboto", "Rubik", Arial, sans-serif; }
+[dir="rtl"] body { font-family: var(--font-body); }
+/* Mixed Hebrew and English: each piece of text takes the direction of its own first letter, so names, tickers and
+   signed numbers (+3.2%, -$1.2B) read the same as in English. */
+[dir="rtl"] :is(td, th, span, b, small, strong, em, a, label, button, dd, dt, code, option, h1, h2, h3) { unicode-bidi: plaintext; }
+/* Charts, range meters and bars keep their left-to-right time and scale. */
+[dir="rtl"] :is(svg, .chart, .rmeter, .mix, .wbar, .spark, .tk) { direction: ltr; unicode-bidi: isolate; }
+[dir="rtl"] .search svg { left: auto; right: 14px; }
+[dir="rtl"] .search input { padding: 0 46px 0 16px; }
+[dir="rtl"] .bell-dot { right: auto; left: 9px; }
+[dir="rtl"] .follow { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .co-acts { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .sortby { margin-right: 0; margin-left: auto; }
+[dir="rtl"] .etf-top { left: auto; right: 0; }
+[dir="rtl"] :is(.season, .callout) { border-left: 1px solid var(--line); border-right: 3px solid var(--warn); }
+[dir="rtl"] .callout { border-right-color: var(--accent); }
+[dir="rtl"] .cmp-note i, [dir="rtl"] .mdot, [dir="rtl"] .tip i { margin-right: 0; margin-left: 6px; }
+[dir="rtl"] .mdot { margin-left: 8px; }
+[dir="rtl"] details.callout > summary::after { margin-left: 0; margin-right: 6px; }
+[dir="rtl"] .tab small { margin-left: 0; margin-right: 2px; }
+[dir="rtl"] .wbar { margin-left: 0; margin-right: 8px; }
+[dir="rtl"] .notes { padding-left: 0; padding-right: 18px; }
+[dir="rtl"] :is(.tbl, .own-table, .fin-table) :is(th, td) { text-align: left; }
+[dir="rtl"] :is(.tbl, .own-table, .fin-table) .l { text-align: right; }
+[dir="rtl"] .tbl .c { text-align: center; }
+[dir="rtl"] .tbl .sep { border-left: 0; border-right: 1px solid var(--line); }
+[dir="rtl"] .tbl .fz-0 { left: auto; right: 0; padding-right: 10px; padding-left: 4px; }
+[dir="rtl"] .tbl .fz-1 { left: auto; right: 44px; box-shadow: inset 1px 0 0 var(--line); }
+[dir="rtl"] .tbl .fz-em { left: auto; right: 0; box-shadow: inset 1px 0 0 var(--line); }
+[dir="rtl"] .tbl .rk { justify-items: start; }
+[dir="rtl"] .co-nm { text-align: right; }
+[dir="rtl"] .kv dd { text-align: left; }
+[dir="rtl"] .kv div.kv-range dd { text-align: left; }
+@media (max-width: 640px) {
+  [dir="rtl"] .follow, [dir="rtl"] .co-acts { margin-right: 0; }
+}
+[dir="rtl"] .ranges { flex-wrap: wrap; }
+[dir="rtl"] td:has(> b + small) { unicode-bidi: isolate; }
+[dir="rtl"] td:has(> b + small) > small { margin-right: 6px; }
+[dir="rtl"] .back svg { transform: scaleX(-1); }
+[dir="rtl"] .suggest .muted { white-space: nowrap; }
+@media (max-width: 640px) { .lang { width: 34px; height: 34px; font-size: 13px; } }
+[dir="rtl"] .fund-cell { min-width: 160px; }
+[dir="rtl"] :is(.tbl, .own-table, .fin-table) thead th { white-space: normal; min-width: 56px; }
+[dir="rtl"] .fund-cell .fund-name { white-space: normal; }
+[dir="rtl"] .suggest .muted { white-space: normal; }
+[dir="rtl"] .pn.off { display: inline-block; transform: scaleX(-1); }
+[dir="rtl"] .fund-cell .mdot { margin-left: 0; margin-right: 8px; }
