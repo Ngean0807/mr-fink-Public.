@@ -1677,6 +1677,10 @@
     return [...m.values()].sort((a, b) => b.value - a.value);
   }
   const secColor = (k) => SECTOR_COLOR[k] || "#9aa0a6";
+  // Each sector opens its Select Sector SPDR fund (holdings, and the three issuers' funds side by side).
+  const SECTOR_ETF = { "Information Technology": "XLK", "Communication Services": "XLC", "Consumer Discretionary": "XLY", "Consumer Staples": "XLP", "Energy": "XLE",
+    "Financials": "XLF", "Health Care": "XLV", "Industrials": "XLI", "Materials": "XLB", "Real Estate": "XLRE", "Utilities": "XLU" };
+  const secHref = (k) => (SECTOR_ETF[k] ? `#etfs/${SECTOR_ETF[k]}` : null);
   /** Donut with a legend. items: [{label, value, color, href?}] */
   function donut(items, { center = "", sub = "", fmt = usd } = {}) {
     const tot = items.reduce((a, x) => a + Math.max(0, x.value), 0) || 1;
@@ -1731,7 +1735,7 @@
     const rows = v.rows, n = v.totals.length, total = v.totals[n - 1];
     const secs = sectorAgg(rows);
     const top = secs.slice(0, 7), rest = secs.slice(7).reduce((a, x) => a + x.value, 0);
-    const dItems = top.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label) })).concat(rest ? [{ label: "Other sectors", value: rest, color: "#bdc1c6" }] : []);
+    const dItems = top.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label), href: secHref(x.label) })).concat(rest ? [{ label: "Other sectors", value: rest, color: "#bdc1c6" }] : []);
     const prevV = rows.reduce((a, r) => a + r.value - ((r.qoq && r.qoq.dValue) || 0), 0);
     const flow = rows.reduce((a, r) => a + ((r.qoq && r.qoq.trade) || 0), 0);
     const pe = rows.reduce((a, r) => a + ((r.qoq && r.qoq.priceEffect) || 0), 0);
@@ -1773,8 +1777,8 @@
       return `<tr><td class="l"><span class="mdot" style="background:${secColor(x.label)}"></span>${esc(x.label)}</td><td>${x.n}</td><td>${usd(x.value)}</td><td>${pct(w, 1, false)}</td><td>${pct(pw, 1, false)}</td><td>${signed(w - pw, (y) => pct(y, 2))}</td><td>${signed(x.trade, usdS)}</td></tr>`;
     }).join("");
     return `<div class="an-grid">
-      ${panelH("w6", "Allocation by sector", `top ${D.meta.topN} holdings`, donut(secs.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label) })), { center: String(secs.length), sub: "sectors" }))}
-      ${panelH("w6", "Net buying by sector", "last quarter", hbars(secs.map((x) => ({ label: SHORT_SECTOR[x.label] || x.label, value: x.trade, color: secColor(x.label), title: x.label })).sort((a, b) => b.value - a.value)))}
+      ${panelH("w6", "Allocation by sector", `top ${D.meta.topN} holdings`, donut(secs.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label), href: secHref(x.label) })), { center: String(secs.length), sub: "sectors" }))}
+      ${panelH("w6", "Net buying by sector", "last quarter", hbars(secs.map((x) => ({ label: SHORT_SECTOR[x.label] || x.label, value: x.trade, color: secColor(x.label), title: x.label, href: secHref(x.label) })).sort((a, b) => b.value - a.value)))}
       ${panelH("w12", "Sector table", "weights compare quarter-end values", `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Sector</th><th scope="col">Companies</th><th scope="col">Value</th><th scope="col">Weight</th><th scope="col">Weight ${qlabel(per[n - 2])}</th><th scope="col">Δ weight</th><th scope="col">Net buying</th></tr></thead><tbody>${body}</tbody></table></div>`)}
     </div>`;
   }
@@ -1814,8 +1818,8 @@
     const per = (x) => x && x.fl ? `<span title="${dateL(x.fl.from)} to ${dateL(x.fl.to)}">${signed(x.fl.flow, usdS)}</span>` : '<span class="na">—</span>';
     const body = fl.map((x) => `<tr><td class="l"><span class="mdot" style="background:${secColor(x.sector)}"></span>${esc(x.sector)}</td>${x.flows.map((y) => `<td><a href="#etfs/${y.f.ticker}" class="tk-link">${esc(y.f.ticker)}</a> ${per(y)}</td>`).join("")}<td><b>${signed(x.total, usdS)}</b></td><td>${signed(x.pct)}</td><td>${thirteen.has(x.sector) ? signed(thirteen.get(x.sector), usdS) : '<span class="na">—</span>'}</td></tr>`).join("");
     return `<div class="an-grid">
-      ${panelH("w6", "Money into sector ETFs", "SPDR + Vanguard + iShares sector funds, last reported quarter", hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector }))))}
-      ${panelH("w6", "Flow as % of fund assets", "a quarter’s flow ÷ assets at the start", hbars(fl.filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct).map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.pct, color: secColor(x.sector), title: x.sector })), { fmt: (y) => pct(y, 1) }))}
+      ${panelH("w6", "Money into sector ETFs", "SPDR + Vanguard + iShares sector funds, last reported quarter", hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))))}
+      ${panelH("w6", "Flow as % of fund assets", "a quarter’s flow ÷ assets at the start", hbars(fl.filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct).map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.pct, color: secColor(x.sector), title: x.sector, href: secHref(x.sector) })), { fmt: (y) => pct(y, 1) }))}
       ${panelH("w12", "Sector flows, fund by fund", "estimated from each fund’s last two N-PORT reports", `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Sector</th><th scope="col">SPDR</th><th scope="col">Vanguard</th><th scope="col">iShares</th><th scope="col">Total flow</th><th scope="col">% of assets</th><th scope="col">13F net buying, top ${D.meta.topN}</th></tr></thead><tbody>${body}</tbody></table></div>`,
         "Flow = net assets now − net assets a report earlier × the fund’s price change between the two dates, so market moves are taken out and what is left is money investors put in or took out. Vanguard figures cover the whole fund, including its mutual fund share classes. Funds report on their own fiscal quarters, so periods can differ by a month or two (hover a number for its dates). Distributions are not separated, so a flow can be understated by about a quarter’s dividend.")}
     </div>`;
@@ -1882,11 +1886,11 @@
       const p0 = peers[0];
       pts.push(`<li><span>Banks: the Big Three own <b>${pct(p0.ownership, 1, false)}</b> of ${tk(p0.ticker)}, against a median of ${pct(own[Math.floor(own.length / 2)], 1, false)} for the ${peers.length} largest US banks;</span> <span>last quarter they ${p0.qoq && p0.qoq.trade >= 0 ? "bought" : "sold"} ${usd(Math.abs((p0.qoq || {}).trade || 0))} of it.</span></li>`);
     }
-    const secItems = sectorAgg(rows).map((x) => ({ label: SHORT_SECTOR[x.label] || x.label, value: x.trade, color: x.trade >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.label })).sort((a, b) => b.value - a.value);
+    const secItems = sectorAgg(rows).map((x) => ({ label: SHORT_SECTOR[x.label] || x.label, value: x.trade, color: x.trade >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.label, href: secHref(x.label) })).sort((a, b) => b.value - a.value);
     return `<div class="an-grid">
       ${panelH("w12", "Executive brief", `${qlabel(per[n - 1])} 13F · ${esc(MGR_NAME[state.an.view])}`, `<ul class="brief">${pts.join("")}</ul>`)}
       ${panelH("w6", "Where the 13F buying went", `net buying by sector, top ${D.meta.topN}`, hbars(secItems))}
-      ${panelH("w6", "Where ETF money went", "flows into the Big Three’s sector ETFs", fl ? hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector }))) : '<p class="empty-state">Loading ETFs…</p>')}
+      ${panelH("w6", "Where ETF money went", "flows into the Big Three’s sector ETFs", fl ? hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))) : '<p class="empty-state">Loading ETFs…</p>')}
     </div>`;
   }
   function renderAnalytics() {
