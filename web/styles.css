@@ -673,3 +673,13 @@ sup { font-size: 10px; color: var(--muted); }
   .page { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }
+.brief { margin: 0; padding: 0 0 0 18px; display: grid; gap: 10px; font-size: 15px; line-height: 1.5; }
+.brief li::marker { color: var(--accent); }
+.tbl.peers tr.focus td { background: var(--accent-soft); }
+.tbl.peers tr.focus td.fz { box-shadow: inset 3px 0 0 var(--accent); }
+.tk-link { font: 500 12px var(--font-ui); color: var(--ink-2); margin-right: 4px; }
+[dir="rtl"] .brief { padding: 0 18px 0 0; }
+[dir="rtl"] .tbl.peers tr.focus td.fz { box-shadow: inset -3px 0 0 var(--accent); }
+[dir="rtl"] .tk-link { margin-right: 0; margin-left: 4px; }
+.an-p .hb-row { grid-template-columns: 104px minmax(0, 1fr) 82px; }
+@media (max-width: 640px) { .an-p .hb-row { grid-template-columns: 88px minmax(0, 1fr) 70px; } }

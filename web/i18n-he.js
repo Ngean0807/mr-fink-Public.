@@ -256,6 +256,44 @@
     "charts": "גרפים",
     "Analytics view": "תצוגת הניתוח",
     "Sections": "אזורים",
+    "Executive brief": "תקציר מנהלים",
+    "Sector flows (ETFs)": "תזרימים לענפים (קרנות סל)",
+    "Peers": "השוואה למתחרים",
+    "The 13F portfolio is": "תיק ה-13F שווה",
+    "on the quarter.": "ברבעון.",
+    "and prices added": "והמחירים הוסיפו",
+    "Most buying went into": "רוב הקניות הלכו לענף",
+    "the least buying was in": "והכי מעט קניות היו בענף",
+    "the most selling was in": "והכי הרבה מכירות היו בענף",
+    "Largest single buy:": "הקנייה הגדולה ביותר:",
+    "Largest single sale:": "המכירה הגדולה ביותר:",
+    "The top 10 holdings are": "10 האחזקות הגדולות הן",
+    "Through their sector ETFs, the most money went into": "דרך קרנות הסל הענפיות שלהן, הכי הרבה כסף נכנס לענף",
+    "and the most came out of": "והכי הרבה יצא מענף",
+    "and the least into": "והכי מעט נכנס לענף",
+    "Banks: the Big Three own": "בנקים: שלוש הגדולות מחזיקות",
+    "of": "מ-",
+    "Where the 13F buying went": "לאן הלכו הקניות (13F)",
+    "Where ETF money went": "לאן הלך הכסף בקרנות הסל",
+    "flows into the Big Three’s sector ETFs": "כסף שנכנס לקרנות הסל הענפיות של שלוש הגדולות",
+    "Money into sector ETFs": "כסף שנכנס לקרנות סל ענפיות",
+    "SPDR + Vanguard + iShares sector funds, last reported quarter": "קרנות הענפים של SPDR, Vanguard ו-iShares, ברבעון האחרון שדווח",
+    "Flow as % of fund assets": "התזרים כאחוז מנכסי הקרנות",
+    "a quarter’s flow ÷ assets at the start": "תזרים של רבעון ÷ הנכסים בתחילתו",
+    "Sector flows, fund by fund": "תזרימים לפי ענף, קרן אחרי קרן",
+    "estimated from each fund’s last two N-PORT reports": "הערכה לפי שני דוחות ה-N-PORT האחרונים של כל קרן",
+    "Total flow": "סך התזרים",
+    "% of assets": "% מהנכסים",
+    "Flow = net assets now − net assets a report earlier × the fund’s price change between the two dates, so market moves are taken out and what is left is money investors put in or took out. Vanguard figures cover the whole fund, including its mutual fund share classes. Funds report on their own fiscal quarters, so periods can differ by a month or two (hover a number for its dates). Distributions are not separated, so a flow can be understated by about a quarter’s dividend.":
+      "תזרים = הנכסים עכשיו פחות הנכסים בדוח הקודם כפול השינוי במחיר הקרן בין שני התאריכים. כך שינויי השוק יוצאים מהחישוב, ומה שנשאר הוא כסף שמשקיעים הכניסו או הוציאו. בוואנגארד המספרים כוללים את כל הקרן, גם את גרסאות קרן הנאמנות שלה. כל קרן מדווחת לפי הרבעונים שלה, אז התקופות יכולות להיות שונות בחודש או חודשיים (העבירו את העכבר על מספר כדי לראות את התאריכים). חלוקות דיבידנד לא מופרדות, אז התזרים יכול להיות נמוך מהאמיתי בערך בדיבידנד של רבעון.",
+    "Net buying last quarter": "קניות פחות מכירות ברבעון האחרון",
+    "Big Three combined, Δ shares × quarter-end price": "שלוש הגדולות ביחד, שינוי במניות × מחיר בסוף הרבעון",
+    "Largest US banks": "הבנקים הגדולים בארה״ב",
+    "prices live": "מחירים עכשיו",
+    "Bank": "בנק",
+    "Stake = shares held ÷ shares outstanding. Market cap and P/E use the live price with the latest reported shares and earnings. The first row is highlighted for comparison.": "חלק מהחברה = המניות שהן מחזיקות ÷ כל המניות של החברה. שווי השוק ומכפיל הרווח לפי המחיר עכשיו ומספר המניות והרווח האחרונים שדווחו. השורה הראשונה מודגשת להשוואה.",
+    "No peer data yet.": "עוד אין נתוני השוואה.",
+    "go back to Analytics": "לחזור לניתוחים",
     "Activity": "פעילות",
     "Sectors": "ענפים",
     "13F portfolio value": "שווי התיק לפי 13F",
@@ -1070,6 +1108,17 @@
   P("Could not load data/dashboard\\.json \\((.+)\\)\\. Run", (m) => `לא הצלחנו לטעון את הנתונים (${m[1]}). הריצו`);
   P(", then serve the web folder\\.", () => ", ואז הגישו את תיקיית web.");
   // analytics
+  P("\\({N}\\)([.;,]?)", (m, v) => `(${v(m[1])})${m[2]}`);
+  P(", {N} on the quarter\\.", (m, v) => `, ${v(m[1])} ברבעון.`);
+  P("In the top (\\d+), net buying added", (m) => `ב-${m[1]} הגדולות, הקניות פחות המכירות הוסיפו`);
+  P("of the portfolio, against {N} a quarter earlier\\.", (m, v) => `מהתיק, מול ${v(m[1])} רבעון קודם.`);
+  P(", against a median of {N} for the (\\d+) largest US banks;", (m, v) => `, מול חציון של ${v(m[1])} ב-${m[2]} הבנקים הגדולים בארה״ב;`);
+  P("last quarter they (bought|sold) {N} of it\\.", (m, v) => `ברבעון האחרון הן ${m[1] === "bought" ? "קנו" : "מכרו"} ממנה ב-${v(m[2])}.`);
+  P("{Q} 13F", (m, v) => `דוח 13F של ${v(m[1])}`);
+  P("net buying by sector, top (\\d+)", (m) => `קניות פחות מכירות לפי ענף, ${m[1]} הגדולות`);
+  P("13F net buying, top (\\d+)", (m) => `קניות פחות מכירות לפי 13F, ${m[1]} הגדולות`);
+  P("median {N}", (m, v) => `חציון ${v(m[1])}`);
+  P("{D} to {D}", (m, v) => `${v(m[1])} עד ${v(m[2])}`);
   P("13F for {Q} · quarter ended {D}", (m, v) => `דוח 13F של ${v(m[1])} · הרבעון הסתיים ב-${v(m[2])}`);
   P("Net buying, top (\\d+)", (m) => `קניות פחות מכירות, ${m[1]} הגדולות`);
   P("of the top (\\d+)", (m) => `מתוך ${m[1]} הגדולות`);

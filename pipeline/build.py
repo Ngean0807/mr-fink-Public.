@@ -175,6 +175,18 @@ def prune_legacy_cache() -> None:
             f.unlink(missing_ok=True)
 
 
+def peer_row(c: str, meta: dict) -> dict:
+    """One line of a peer-group table: ownership by the Big Three and the company's own numbers."""
+    h = (meta.get("holders") or {}).get("big3") or {}
+    f = meta.get("fundamentals") or {}
+    by = {mid: ((meta.get("holders") or {}).get(mid) or {}).get("ownership") for mid in ("blackrock", "vanguard", "statestreet")}
+    return {"cusip": c, "ticker": meta["ticker"], "name": meta["name"], "ownership": h.get("ownership"), "byManager": by,
+            "qoq": {k: (h.get("qoq") or {}).get(k) for k in ("dSharesPct", "trade", "status")} if h.get("qoq") else None,
+            "yoy": {k: (h.get("yoy") or {}).get(k) for k in ("dSharesPct", "trade")} if h.get("yoy") else None,
+            "value": (h.get("series") or [[None, None]])[-1][1], "sharesOutstanding": f.get("sharesOutstanding"),
+            "revenueTTM": f.get("revenueTTM"), "netIncomeTTM": f.get("netIncomeTTM"), "epsTTM": f.get("epsTTM"), "roe": f.get("roe")}
+
+
 def write_company_pages(lite: dict[str, dict], quotes_now: dict) -> None:
     """One file per Emerging company outside the main data: profile, price history, intraday."""
     folder = OUT.with_name("co")
@@ -236,6 +248,8 @@ def main() -> None:
         candidates += sorted(books[mid][q], key=lambda c: books[mid][q][c][1], reverse=True)[: config.CANDIDATES]
     for book in books_with_big3.values():  # the quarter's largest buys and sells, whole book
         candidates += movers.candidates(book[latest], book.get(prev, {}), k=50)
+    peer_cusips = [c for g in config.PEERS.values() for c in g["cusips"]]
+    candidates += peer_cusips
     print(f"Mapping {len(set(candidates))} CUSIPs via OpenFIGI")
     figi = securities.map_cusips(candidates)
     for c in sorted({c for c in candidates if not figi.get(c)}):
@@ -281,6 +295,24 @@ def main() -> None:
         except Exception as e:
             print(f"  company page skipped for {r['ticker']}: {e}")
     print(f"Emerging: {len(lite)} company pages outside the main data file")
+    # Every company in a view's largest buys and sells, and every peer-group member, also gets a
+    # page, so each ticker shown in Analytics opens one.
+    moves_by_view = {vid: movers.quarter_moves(book, latest, prev, period_list, figi, n=25, universe_now=books_with_big3["big3"][latest])
+                     for vid, book in books_with_big3.items()}
+    extra = {r["cusip"] for mv in moves_by_view.values() for side in ("bought", "sold") for r in mv[side]} | set(peer_cusips)
+    added = 0
+    for c in sorted(extra):
+        if c in sec_meta or c in lite or not figi.get(c):
+            continue
+        row = books_with_big3["big3"][latest].get(c) or books_with_big3["big3"][prev].get(c)
+        if not row:
+            continue
+        try:
+            lite[c] = describe_security(c, figi[c], books, row, period_list, quiet=True)
+            added += 1
+        except Exception as e:
+            print(f"  company page skipped for {figi[c].get('ticker')}: {e}")
+    print(f"Movers and peers: {added} more company pages")
 
     print(f"[{time.time() - t0:,.0f}s] emerging pages described")
     feed_events, stakes_13g, latest_report = feed.build_feed(sec_meta, config.SUBMISSIONS_TTL_HOURS)
@@ -367,10 +399,10 @@ def main() -> None:
         }
         if vid in early:
             out_views[vid]["early"] = early_view(complexes[vid], early[vid], latest, figi, sec_meta)
-        moves = movers.quarter_moves(book, latest, prev, period_list, figi, n=25, universe_now=books_with_big3["big3"][latest])
+        moves = moves_by_view[vid]
         for side in moves.values():
             for r in side:
-                meta = sec_meta.get(r["cusip"])
+                meta = sec_meta.get(r["cusip"]) or lite.get(r["cusip"])
                 r["ticker"] = meta["ticker"] if meta else securities.display_ticker(r["ticker"])
                 if meta:
                     r["name"] = meta["name"]
@@ -397,6 +429,10 @@ def main() -> None:
             "quarters": {mid: {"complete": q, "progress": prog} for mid, (q, prog) in quarters.items()},
             "warnings": warnings,
             "topN": config.TOP_N,
+            # Company pages kept in their own files (data/co/), by ticker: Emerging, movers, peers.
+            "coPages": sorted({m["ticker"] for m in lite.values()}),
+            "peers": {gid: {"name": g["name"], "rows": [peer_row(c, sec_meta.get(c) or lite.get(c)) for c in g["cusips"] if (sec_meta.get(c) or lite.get(c))]}
+                      for gid, g in config.PEERS.items()},
         },
         "views": out_views,
         "securities": sec_meta,
@@ -413,7 +449,7 @@ def main() -> None:
     tickers = sorted({m["ticker"] for m in sec_meta.values()} | {"SPY"})  # SPY: the chart's S&P 500 comparison
     quote_data, price_history = quotes.build(tickers)
     # Emerging names without a full company page still need a price on first paint.
-    light = sorted({r["ticker"] for r in emerging_rows} - set(quote_data["quotes"]))
+    light = sorted(({r["ticker"] for r in emerging_rows} | {m["ticker"] for m in lite.values()}) - set(quote_data["quotes"]))
     quote_data["quotes"].update(quotes.batch_quotes(light))
     # The page ships without intraday series (they are in quotes.json, loaded for 1D/5D charts).
     data["quotes"] = {**quote_data, "quotes": {t: {k: v for k, v in q.items() if k != "intraday"} for t, q in quote_data["quotes"].items()}}
