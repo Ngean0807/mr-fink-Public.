@@ -2,18 +2,11 @@
 
 A wrong number on the site usually comes from a filing the pipeline read in a way nobody
 expected: a complex that filed only part of its quarter, a value reported in thousands instead
-of dollars, a split the detector missed. These checks run on the built data, are published in
-status.json, and each new warning is pushed once to the owner's private channel.
+of dollars, a split the detector missed. These checks run on the built data and are published
+with it (dashboard.json meta.warnings); the Mr. Fink push server announces each new warning to
+subscribers of "site health".
 """
 from __future__ import annotations
-
-import json
-import os
-import urllib.request
-
-from . import config, edgar
-
-STATE = edgar.CACHE_DIR / "audit_seen.json"
 
 
 def check(views: dict, latest: str, period_list: list[str]) -> list[str]:
@@ -44,21 +37,3 @@ def check(views: dict, latest: str, period_list: list[str]) -> list[str]:
                     out.append(f"{v['name']}: {side} {r['ticker']} {r['flow'] / 1e9:+.1f}B in a quarter (check for a split or listing change)")
     return out
 
-
-def notify_new(warnings: list[str], log=print) -> None:
-    """Push warnings not pushed before to the owner's private channel (NTFY_TOPIC)."""
-    topic = os.environ.get("NTFY_TOPIC")
-    seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    fresh = [w for w in warnings if w not in seen]
-    if fresh and topic:
-        body = "\n".join(fresh[:10]) + (f"\n…and {len(fresh) - 10} more" if len(fresh) > 10 else "")
-        req = urllib.request.Request(f"{config.NTFY_SERVER.rstrip('/')}/{topic}", data=body.encode(),
-                                     headers={"Title": "Mr. Fink data check", "Tags": "mag", "Priority": "default"})
-        try:
-            urllib.request.urlopen(req, timeout=20).read()
-        except Exception as e:  # never fail the refresh over an alert
-            log(f"Audit push failed: {e}")
-            return
-    STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(sorted(seen | set(warnings))[-500:]))
-    log(f"Audit: {len(warnings)} warnings, {len(fresh)} new")

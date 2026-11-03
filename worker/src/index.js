@@ -1,8 +1,11 @@
-// Mr. Fink push server (Cloudflare Worker + KV, free tier).
+// Mr. Fink push server (Cloudflare Worker + KV, free tier). Every notification Mr. Fink sends goes
+// through here.
 //
 // Browsers subscribe with their filing types and watchlist; every 5 minutes a cron reads the
 // public site's data (no secrets shared with the site or GitHub) and sends Web Push for new
 // filings. Works with the site closed, on Android, desktop and iPhone (installed app).
+// "health" subscribers also hear when the site stops updating (and recovers) and about each new
+// data-check warning.
 //
 //   GET  /vapid        public key the browser subscribes with
 //   POST /subscribe    { subscription, kinds, tickers }   (also updates preferences)
@@ -11,7 +14,8 @@
 //   GET  /health
 import { generateVapid, sendPush } from "./webpush.js";
 
-const KINDS = new Set(["13f", "13g", "8k", "report", "nport"]);
+const KINDS = new Set(["13f", "13g", "8k", "report", "nport", "health"]);
+const STALE_MIN = 40;          // no fresh data for this long: the refresh is stuck
 const MAX_PER_SUB = 3;         // pushes per subscription per run; the rest are summarised
 const SEEN_MAX = 4000;
 
@@ -66,7 +70,10 @@ export default {
 /** Read the site, find filings not announced before, push each subscriber what they chose. */
 async function checkSite(env) {
   const site = env.SITE_URL.replace(/\/?$/, "/");
-  const status = await (await fetch(site + "data/status.json?t=" + Date.now(), { cf: { cacheTtl: 0 } })).json();
+  let status = null;
+  try { status = await (await fetch(site + "data/status.json?t=" + Date.now(), { cf: { cacheTtl: 0 } })).json(); } catch (e) { /* site down: counts as stale */ }
+  await checkHealth(env, site, status);
+  if (!status) return;
   const lastFp = await env.PUSH.get("fingerprint");
   const coDue = Date.now() - Number((await env.PUSH.get("coCheckedAt")) || 0) > 30 * 60000;
   if (status.fingerprint === lastFp && !coDue) return;
@@ -77,6 +84,7 @@ async function checkSite(env) {
     if (rec) subs.push([k.name, rec]);
   }
   const dash = await (await fetch(site + "data/dashboard.json?t=" + Date.now())).json();
+  await announceWarnings(env, site, subs, (dash.meta && dash.meta.warnings) || []);
   let events = (dash.feed || []).slice();
   // Watched companies outside the main feed (Emerging pages) carry their own filings file.
   if (coDue) {
@@ -110,6 +118,47 @@ async function checkSite(env) {
       if (code === 404 || code === 410) { await env.PUSH.delete(key); break; }  // the browser unsubscribed
     }
   }
+}
+
+/** Pushes to every subscriber who chose "site health". */
+async function pushHealth(env, subs, msg) {
+  const keys = await vapid(env);
+  for (const [key, rec] of subs) {
+    if (!rec.kinds.includes("health")) continue;
+    const code = await sendPush(rec.subscription, msg, keys, env.VAPID_SUBJECT).catch(() => 0);
+    if (code === 404 || code === 410) await env.PUSH.delete(key);
+  }
+}
+async function allSubs(env) {
+  const subs = [];
+  for (const k of (await env.PUSH.list({ prefix: "sub:" })).keys) {
+    const rec = await env.PUSH.get(k.name, "json");
+    if (rec) subs.push([k.name, rec]);
+  }
+  return subs;
+}
+/** The site stopped updating (or came back): one push each way. */
+async function checkHealth(env, site, status) {
+  const at = status && status.checkedAt ? Date.parse(status.checkedAt) : 0;
+  const ageMin = at ? (Date.now() - at) / 60000 : Infinity;
+  const was = (await env.PUSH.get("health:stale")) === "1";
+  if (ageMin > STALE_MIN && !was) {
+    await env.PUSH.put("health:stale", "1");
+    const since = at ? new Date(at).toISOString().slice(11, 16) + " UTC" : "unknown";
+    await pushHealth(env, await allSubs(env), { title: "Mr. Fink stopped updating", body: `No fresh SEC data since ${since}. The refresh may have failed; check GitHub Actions.`, url: site, tag: "health", urgent: true });
+  } else if (ageMin <= STALE_MIN && was) {
+    await env.PUSH.put("health:stale", "0");
+    await pushHealth(env, await allSubs(env), { title: "Mr. Fink is updating again", body: "Fresh SEC data is coming in again.", url: site, tag: "health" });
+  }
+}
+/** Each data-check warning once (the pipeline publishes them with the data). */
+async function announceWarnings(env, site, subs, warnings) {
+  const seen = new Set((await env.PUSH.get("health:warnings", "json")) || []);
+  const fresh = warnings.filter((w) => !seen.has(w));
+  if (!fresh.length) return;
+  await env.PUSH.put("health:warnings", JSON.stringify([...seen, ...fresh].slice(-300)));
+  if (!seen.size && fresh.length > 10) return;  // first run: record, don't flood
+  await pushHealth(env, subs, { title: `Mr. Fink data check: ${fresh.length} new warning${fresh.length === 1 ? "" : "s"}`, body: fresh.slice(0, 3).join("\n") + (fresh.length > 3 ? `\n…and ${fresh.length - 3} more` : ""), url: site, tag: "warnings" });
 }
 
 const MGR = { blackrock: "BlackRock", vanguard: "Vanguard", statestreet: "State Street" };

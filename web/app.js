@@ -1409,7 +1409,7 @@
       p.hidden = !p.hidden;
       e.currentTarget.setAttribute("aria-expanded", String(!p.hidden));
     });
-    wireCopy($("alert-panel"));
+    $("alert-panel").addEventListener("click", (e) => { if (e.target.closest("[data-open-notify]")) { e.stopPropagation(); openNotify(); } });
     app.querySelector("[data-cmp]")?.addEventListener("click", () => {
       state.cmp = !state.cmp;
       try { localStorage.setItem("mrfink.cmp", state.cmp ? "1" : "0"); } catch (e) { /* storage unavailable */ }
@@ -1551,18 +1551,19 @@
     lineChart(host, { series, dates: per.slice(i0), height: 280, fmt: k ? usd : (v) => num(v) + " shares", axisFmt: k ? axisUsd : axisNum });
   }
 
-  // ---------- alerts for one company ----------
-  const companyTopic = (t) => (D.meta.notify && D.meta.notify.companyPrefix ? D.meta.notify.companyPrefix + slugOf(t).replace(/^-+|-+$/g, "") : null);
+  // ---------- alerts for one company: Mr. Fink's own notifications ----------
   function alertPanel(s) {
-    const topic = companyTopic(s.ticker);
-    const server = ((D.meta.notify && D.meta.notify.server) || "https://ntfy.sh").replace(/\/$/, "");
     const on = isWatched(s.ticker);
-    return `<div class="ap-row"><div><b>On your phone, even when the site is closed</b>
-        <p>Every SEC filing by ${esc(s.ticker)} (8-K, 10-Q/10-K, Big Three 13G/13D) is pushed to its own channel. In the free ntfy app (<a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a>) tap +, then paste the channel name.</p></div>
-        ${topic ? `<div class="np-sub"><code>${esc(topic)}</code><button type="button" class="btn" data-copy="${esc(topic)}">Copy</button><a class="btn" href="${esc(server)}/${esc(topic)}" target="_blank" rel="noopener">Open</a></div>` : '<p class="muted">Phone channels are not set up for this site.</p>'}</div>
-      <div class="ap-row"><div><b>In this browser</b>
-        <p>${on ? `${esc(s.ticker)} is in your watchlist, so its new filings show as browser notifications while Mr. Fink is open${nprefs.browser ? "" : " once browser notifications are on (bell, top right)"}.` : `Follow ${esc(s.ticker)} to get a browser notification for each of its filings while Mr. Fink is open.`}</p></div>
-        ${on ? "" : `<button type="button" class="btn primary" data-follow="${esc(s.ticker)}" aria-pressed="false">☆ Follow ${esc(s.ticker)}</button>`}</div>`;
+    const pushOn = !!(nprefs.push && canNotify() && Notification.permission === "granted");
+    const browserOn = !!(nprefs.browser && canNotify() && Notification.permission === "granted");
+    const t = esc(s.ticker);
+    const text = !on ? `Follow ${t} to get a Mr. Fink notification for each of its SEC filings (8-K, 10-Q/10-K, Big Three 13G/13D).`
+      : pushOn ? `${t} is in your watchlist: Mr. Fink notifies you of each new filing, even when the site is closed.`
+      : browserOn ? `${t} is in your watchlist: new filings show as notifications while Mr. Fink is open. Turn on push notifications to get them with the site closed.`
+      : `${t} is in your watchlist. Turn on notifications to hear about each new filing.`;
+    const btn = !on ? `<button type="button" class="btn primary" data-follow="${t}" aria-pressed="false">☆ Follow ${t}</button>`
+      : pushOn ? "" : `<button type="button" class="btn primary" data-open-notify>Turn on notifications</button>`;
+    return `<div class="ap-row"><div><b>Notifications for ${t}</b><p>${text}</p></div>${btn}</div>`;
   }
   /** Watched companies outside the main feed: check their own file for new filings every 5 minutes. */
   let watchCheckAt = 0;
@@ -1955,14 +1956,15 @@
 
   // ---------- live updates ----------
   // ---------- notifications ----------
-  // Two ways to be told about new filings: browser notifications while the site is open in a tab,
-  // or the free ntfy app, subscribed to the public channel of each filing type (works when closed).
+  // Every notification comes from Mr. Fink: push notifications through the Mr. Fink push server
+  // (worker/, works with the site closed) or browser notifications while a tab is open.
   const NKINDS = [
     ["13f", "13F holdings", "BlackRock, Vanguard or State Street files its quarterly holdings"],
     ["13g", "13G / 13D stakes", "A manager reports owning more than 5% of a tracked company"],
     ["8k", "Material 8-K events", "Deals, bankruptcy, delisting, financings or executive changes at tracked companies"],
     ["report", "10-Q / 10-K", "A tracked company files its quarterly or annual report"],
     ["nport", "Fund holdings (N-PORT)", "A flagship index fund (IWM, VTI, SPSM…) publishes its portfolio"],
+    ["health", "Site health", "Mr. Fink stops updating or recovers, or a data check finds something to review (push only)"],
   ];
   const nprefs = (() => {
     try { return JSON.parse(localStorage.getItem("mrfink.notify") || "null"); } catch (e) { return null; }
@@ -1984,16 +1986,6 @@
         };
       } catch (err) { /* some mobile browsers only notify from a service worker */ }
     });
-  }
-  function wireCopy(root) {
-    root.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
-      const v = b.dataset.copy;
-      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(`Copied ${v}`), () => {
-        const code = b.parentElement.querySelector("code");
-        const r = document.createRange(); r.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-        toast("Press copy to copy the selected channel name.");
-      });
-    }));
   }
   // ---------- push notifications through the Mr. Fink push server (worker/) ----------
   let PUSH_URL = null;
@@ -2078,13 +2070,10 @@
     return `<section class="np-sec"><h3>Install as an app</h3><p>An icon on your home screen, full screen without the browser bar, and the last data available offline.</p>${how}</section>`;
   }
   function renderNotifyPanel() {
-    const topics = (D.meta.notify && D.meta.notify.topics) || {};
-    const server = (D.meta.notify && D.meta.notify.server) || "https://ntfy.sh";
     const perm = canNotify() ? Notification.permission : "unsupported";
     const browserState = perm === "unsupported" ? "This browser cannot show notifications."
       : perm === "denied" ? "Notifications are blocked for this site in your browser settings."
       : nprefs.browser && perm === "granted" ? "On. You will be notified while Mr. Fink is open in a tab." : "Off.";
-    const chosen = NKINDS.filter(([k]) => nprefs.kinds.includes(k) && topics[k]);
     $("npanel").innerHTML = `
       <div class="np-head"><h2 id="np-h">Notifications</h2><button type="button" class="btn" id="np-close">Close</button></div>
       <section class="np-sec">
@@ -2098,13 +2087,6 @@
         <div><button type="button" class="btn ${nprefs.browser && perm === "granted" ? "" : "primary"}" id="np-browser" ${perm === "unsupported" || perm === "denied" ? "disabled" : ""}>${nprefs.browser && perm === "granted" ? "Turn off" : "Turn on browser notifications"}</button>
         ${nprefs.browser && perm === "granted" ? '<button type="button" class="btn" id="np-test">Send a test</button>' : ""}</div>
         <p class="np-status">${esc(browserState)}</p>
-      </section>
-      <section class="np-sec">
-        <h3>On your phone, even when the site is closed</h3>
-        <p>1. Install the free ntfy app, no account needed: <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a> · <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a></p>
-        <p>2. Subscribe to the channels you want. In the app tap +, then paste the channel name, or open the link on your phone.</p>
-        ${chosen.length ? chosen.map(([k, l]) => `<div class="np-sub"><span><b>${l}</b><br><code>${esc(topics[k])}</code></span><button type="button" class="btn" data-copy="${esc(topics[k])}">Copy</button><a class="btn" href="${esc(server.replace(/\/$/, ""))}/${esc(topics[k])}" target="_blank" rel="noopener">Open</a></div>`).join("") : '<p class="np-status">Pick at least one filing type above.</p>'}
-        <p class="np-status">Channels carry public SEC filings only. Anyone can subscribe to them.</p>
       </section>
       ${installSection()}`;
     $("np-close").addEventListener("click", closeNotify);
@@ -2126,7 +2108,6 @@
       try { new Notification("Mr. Fink notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
       catch (e) { toast("This browser shows notifications only from installed apps."); }
     });
-    wireCopy($("npanel"));
     wirePush();
     $("np-install")?.addEventListener("click", async () => {
       installPrompt.prompt();
@@ -2207,7 +2188,7 @@
         if (a.matches("[data-follow]")) {
           document.querySelectorAll(".co-acts [data-follow]").forEach((b) => { b.setAttribute("aria-pressed", isWatched(t)); b.textContent = isWatched(t) ? "★ Following" : "☆ Follow"; });
           const panel = $("alert-panel"), s0 = bySlug(state.slug);
-          if (panel && s0) { panel.innerHTML = alertPanel(s0); wireCopy(panel); }
+          if (panel && s0) panel.innerHTML = alertPanel(s0);
           renderChips();
         } else render();
       }

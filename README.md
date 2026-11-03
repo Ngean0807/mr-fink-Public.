@@ -75,34 +75,19 @@ market cap and P/E at the live price) and "Top 30 at today's prices". The Finnhu
 anyone who opens the page; use a free key dedicated to this site. Yahoo Finance data is unofficial
 and for personal use.
 
-### Notifications for every visitor
+### Notifications
 
-The bell in the header opens a notification center. Each visitor picks the filing types they care
-about (13F, 13G/13D, material 8-Ks, 10-Q/10-K, N-PORT) and how to hear about them:
+Every notification comes from Mr. Fink itself, through its push server (`worker/`, a Cloudflare
+Worker). Nothing goes through third-party apps. In the bell panel each visitor picks:
 
-- **In the browser**, with no install: notifications while the site is open in a tab.
-- **On the phone, even when the site is closed**: subscribe in the free ntfy app to the public
-  channel of each type (`mrfink-ngean0807-13f`, `-stakes`, `-8k`, `-reports`, `-funds`). The
-  refresh publishes every new filing to its channel. Channels carry public SEC data only.
+- **Filing types**: 13F holdings, 13G/13D stakes, material 8-K events, 10-Q/10-K reports and fund
+  N-PORT portfolios, plus every company in their watchlist.
+- **Site health** (for the owner): a push when the site stops updating (no fresh data for 40
+  minutes, e.g. a failed refresh) and when it recovers, and one for each new data-check warning.
+- **Where**: push notifications (work with the site closed; on iPhone after installing the app
+  from Safari) or browser notifications while a tab is open.
 
-Fully install-free push to a closed browser needs a server that stores subscriptions, which a
-static GitHub Pages site does not have.
-
-### Owner's phone notifications
-
-Each refresh compares the filing feed with what it has already announced and pushes the new
-ones to a phone through [ntfy](https://ntfy.sh) (free app for iOS and Android, no account):
-
-| Filing | Push |
-| --- | --- |
-| 13F-HR / 13F-HR/A by a manager | high priority: "Vanguard 13F: new holdings for Q3 2026" |
-| Schedule 13G / 13G/A by a manager on a tracked company | "BlackRock owns 8.12% of NVDA" |
-| 10-Q / 10-K by a tracked company | low priority: "NVDA filed its quarterly report (10-Q)" |
-
-Tapping a push opens the company or manager page; the "SEC filing" button opens EDGAR.
-Setup: pick a hard-to-guess topic name, subscribe to it in the ntfy app, and save it as the
-repository secret `NTFY_TOPIC`. Run the workflow manually with "Send a test push" to check.
-`NTFY_KINDS` (e.g. `13f,13g`) narrows what is sent.
+The worker reads the public site data every 5 minutes, so no secret is shared with GitHub.
 
 Setup once: push to GitHub and enable Pages with source "GitHub Actions". The workflow identifies
 itself to SEC with the maintainer's contact; override it with a repository variable

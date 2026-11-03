@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, notify, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -397,7 +397,6 @@ def main() -> None:
             "quarters": {mid: {"complete": q, "progress": prog} for mid, (q, prog) in quarters.items()},
             "warnings": warnings,
             "topN": config.TOP_N,
-            "notify": {"server": config.NTFY_SERVER, "topics": config.public_topics(), "companyPrefix": (config.ticker_topic("x") or "")[:-1] or None},
         },
         "views": out_views,
         "securities": sec_meta,
@@ -425,17 +424,8 @@ def main() -> None:
     print(f"[{time.time() - t0:,.0f}s] quotes")
     write_company_pages(lite, data["quotes"]["quotes"])
     print(f"[{time.time() - t0:,.0f}s] company pages written")
-    # Phone pushes go out only after the new data is written, so the link opens fresh numbers.
-    notify.sync_from_site()
-    notify.notify_new(feed_events)
-    notify.export_state(OUT.with_name("notified.json"))
-    # Each company's own channel: tracked companies' feed filings plus the Emerging pages' filings.
-    notify.sync_tickers_from_site()
-    notify.notify_tickers(feed_events + [e for m in lite.values() for e in m.get("filings", [])])
-    notify.export_ticker_state(OUT.with_name("notified_tickers.json"))
-    if os.environ.get("NTFY_TEST") == "true":
-        notify.send_test()
-    audit.notify_new(warnings)
+    # Notifications go out from the Mr. Fink push server (worker/), which reads this data; the
+    # pipeline itself sends nothing. New audit warnings reach it through status.json.
     try:  # the Big Three's ETFs (prices every run; N-PORT summaries cached per filing)
         etfs.write()
     except Exception as e:
