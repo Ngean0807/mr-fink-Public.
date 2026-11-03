@@ -11,7 +11,7 @@
     "Holdings": "אחזקות",
     "Mr. Fink home": "מסך הבית של Mr. Fink",
     "Search holdings": "חיפוש אחזקות",
-    "Search holdings by ticker or company": "חיפוש לפי סימול או שם חברה (באנגלית)",
+    "Search holdings by ticker or company": "חיפוש חברה (באנגלית)",
     "Notifications": "התראות",
     "Managers": "מנהלות ההשקעות",
     "Largest holdings, live prices": "האחזקות הגדולות, מחירים עכשיו",
@@ -20,7 +20,7 @@
     "Delayed": "בעיכוב",
     "just now": "עכשיו",
     "today": "היום",
-    "EDGAR is re-read on a schedule; the page updates itself when a manager or company files.": "האתר בודק את מאגר הדיווחים של ה-SEC כל כמה דקות, והעמוד מתעדכן לבד כשמנהל השקעות או חברה מדווחים.",
+    "EDGAR is re-read on a schedule; the page updates itself when a manager or company files.": "האתר בודק את מאגר הדיווחים של ה-SEC כל כמה דקות, והעמוד מתעדכן לבד כשמנהלת השקעות או חברה מדווחות.",
     "A saved copy of the data. The hosted version updates itself from EDGAR.": "עותק שמור של הנתונים. הגרסה שבאתר מתעדכנת לבד מה-SEC.",
     "Watchlist": "רשימת מעקב",
     "Emerging": "צומחות",
@@ -47,11 +47,11 @@
     "6M": "חצי שנה",
     "YTD": "מתחילת השנה",
     "Combined": "ביחד",
-    "By manager": "לפי מנהל",
+    "By manager": "לפי מנהלת",
     "Chart series": "מה מוצג בגרף",
     "Time range": "טווח זמן",
     "Price range": "טווח זמן",
-    "net buying": "קנייה נטו",
+    "net buying": "קניות פחות מכירות",
     "price moves": "שינוי מחירים",
     "13F book value": "שווי התיק לפי 13F",
     "13F book value chart": "גרף שווי התיק לפי 13F",
@@ -78,11 +78,11 @@
     "Net of the listing it replaced (for example ADR to ordinary shares)": "אחרי קיזוז נייר הערך שהוחלף (למשל מעבר מ-ADR למניה רגילה)",
     "None this quarter.": "אין ברבעון הזה.",
     "Net flow = change in shares × quarter-end price. Splits are adjusted, listing changes and spin-offs are netted into one line, and companies that left every Big Three book (acquired, delisted) are not counted as sales.":
-      "קנייה או מכירה נטו = השינוי במספר המניות × המחיר בסוף הרבעון. פיצולי מניות מתוקנים, החלפות רישום ופיצולי חברות מאוחדים לשורה אחת, וחברות שיצאו מהתיק של כל שלוש הגדולות (נרכשו או נמחקו מהמסחר) לא נספרות כמכירה.",
+      "קניות פחות מכירות = השינוי במספר המניות × המחיר בסוף הרבעון. פיצולי מניות מתוקנים, החלפות רישום ופיצולי חברות מאוחדים לשורה אחת, וחברות שיצאו מהתיק של כל שלוש הגדולות (נרכשו או נמחקו מהמסחר) לא נספרות כמכירה.",
     "Not counted as sales:": "לא נספרות כמכירה:",
     "left every Big Three book (acquired or delisted).": "יצאו מהתיק של כל שלוש הגדולות (נרכשו או נמחקו מהמסחר).",
     "Show fewer": "פחות",
-    "Compare managers": "השוואה בין המנהלים",
+    "Compare managers": "השוואה בין המנהלות",
     "Latest SEC filings": "הדיווחים האחרונים ל-SEC",
     "Recent filings": "דיווחים אחרונים",
     "Filing type": "סוג הדיווח",
@@ -90,7 +90,7 @@
     "13G/D": "13G/D",
     "No filings in the past year.": "אין דיווחים בשנה האחרונה.",
     "current report": "דיווח מיידי",
-    "13D, active stake": "13D, אחזקה פעילה",
+    "13D, active stake": "13D, אחזקה עם כוונה להשפיע",
     "notice: reported by affiliates": "הודעה: דווח על ידי חברות קשורות",
 
     // holdings table
@@ -101,15 +101,15 @@
     "Today": "היום",
     "13F value": "שווי לפי 13F",
     "% of book": "% מהתיק",
-    "Combined stake": "אחזקת הגדולות",
-    "Stake": "אחזקה",
-    "QoQ shares": "מניות, רבעון",
-    "QoQ net flow": "קנייה נטו, רבעון",
-    "Value, 3Y": "שווי, 3 שנים",
+    "Combined stake": "חלק הגדולות בחברה",
+    "Stake": "חלק מהחברה",
+    "QoQ shares": "שינוי במניות ברבעון",
+    "QoQ net flow": "קניות פחות מכירות ברבעון",
+    "Value, 3Y": "שווי ב-3 שנים",
     "Action": "פעולה",
     "Δ shares %": "שינוי במניות %",
     "Δ shares": "שינוי במניות",
-    "Net flow": "קנייה נטו",
+    "Net flow": "קניות פחות מכירות",
     "Δ value": "שינוי בשווי",
     "Price return": "שינוי במחיר",
     "From": "מאז",
@@ -138,9 +138,9 @@
     "Since first held": "מאז הקנייה הראשונה",
     "n.m.": "לא רלוונטי",
     "n/a": "אין נתון",
-    "split-adj.": "מתוקן לפיצול",
+    "split-adj.": "מתוקן",
     "Stake is shares held ÷ shares outstanding (all share classes, as-converted). QoQ net flow is the change in shares valued at the quarter-end price. Select a company for its full page.":
-      "אחזקה = המניות שהן מחזיקות ÷ כל המניות של החברה (כל סוגי המניות). קנייה נטו מול רבעון קודם = השינוי במספר המניות כפול המחיר בסוף הרבעון. לחצו על חברה כדי לראות את העמוד שלה.",
+      "חלק מהחברה = המניות שהן מחזיקות ÷ כל המניות של החברה (כל סוגי המניות). קניות פחות מכירות ברבעון = השינוי במספר המניות כפול המחיר בסוף הרבעון. לחצו על חברה כדי לראות את העמוד שלה.",
     "Already held when tracking starts in Q1 2017, so the first purchase was earlier.": "כבר הוחזקה כשהמעקב התחיל ברבעון 1 2017, אז הקנייה הראשונה הייתה לפני כן.",
 
     // about
@@ -160,7 +160,7 @@
     "vs S&P 500": "מול S&P 500",
     "13F quarter-end price": "מחיר סוף רבעון לפי 13F",
     "Held in these index funds": "מוחזקת בקרנות המדד האלה",
-    "Form N-PORT, fund by fund": "לפי דוח N-PORT של כל קרן",
+    "Form N-PORT, fund by fund": "לפי דוח האחזקות הרבעוני של כל קרן (N-PORT)",
     "Fund": "קרן",
     "As of": "תאריך",
     "Shares": "מניות",
@@ -169,7 +169,7 @@
     "Value today": "שווי היום",
     "Insider trades": "עסקאות של בעלי עניין",
     "none": "אין",
-    "Net": "נטו",
+    "Net": "קניות פחות מכירות:",
     "Date": "תאריך",
     "Insider": "בעל עניין",
     "Trade": "עסקה",
@@ -181,7 +181,7 @@
     "Big Three ownership": "האחזקה של שלוש הגדולות",
     "Manager": "מנהלת",
     "Rank": "דירוג",
-    "YoY shares": "מניות, שנה",
+    "YoY shares": "שינוי במניות בשנה",
     "Not held": "לא מחזיקה",
     "Latest Schedule 13G stakes": "דיווחי האחזקה האחרונים (13G)",
     "From SEC XBRL filings": "מהדוחות הכספיים שהוגשו ל-SEC",
@@ -247,13 +247,16 @@
     "Real-time": "בזמן אמת",
     "Delayed up to 5 min": "בעיכוב של עד 5 דקות",
     "Remove": "הסרה",
-    "Shares QoQ": "מניות, רבעון",
+    "Shares QoQ": "שינוי במניות ברבעון",
     "Sources:": "מקורות:",
     "Open it on SEC EDGAR": "לפתוח אותו ב-SEC",
     "or": "או",
     "go back to Emerging": "לחזור לצומחות",
     "English": "English",
     "Open": "פתיחה",
+    "10-Q / 10-K": "דוחות רבעוניים ושנתיים (10-Q / 10-K)",
+    ". Once installed, the bell's browser notifications also work on iPhone while the app is open.": ". אחרי ההתקנה, ההתראות של הפעמון יעבדו גם באייפון כשהאפליקציה פתוחה.",
+    "No S&P 500 prices for this range.": "אין מחירים של מדד S&P 500 לטווח הזה.",
     "Phone channels are not set up for this site.": "ערוצי הטלפון לא הוגדרו באתר הזה.",
 
     // emerging
@@ -274,7 +277,7 @@
     "All three buying": "כל השלוש קונות",
     "All small caps, no signal": "כל החברות הקטנות, בלי סינון",
     "All small caps": "כל החברות הקטנות",
-    "Top 25 by stake gain": "25 עם העלייה הגדולה באחזקה",
+    "Top 25 by stake gain": "25 עם העלייה הגדולה בחלק מהחברה",
     "Top 25": "25 המובילות",
     "Verdict:": "השורה התחתונה:",
     "How it was tested": "איך זה נבדק",
@@ -295,16 +298,16 @@
     "A → Z": "מ-A עד Z",
     "Z → A": "מ-Z עד A",
     "Reset filters": "איפוס הסינונים",
-    "Big Three stake": "אחזקת הגדולות",
+    "Big Three stake": "חלק הגדולות בחברה",
     "Today’s change": "השינוי היום",
     "Revenue growth": "צמיחה בהכנסות",
     "Managers buying": "מנהלות שקונות",
     "Ticker": "סימול",
     "Name": "שם",
-    "Δ stake QoQ": "שינוי באחזקה ברבעון",
-    "Δ stake YoY": "שינוי באחזקה בשנה",
+    "Δ stake QoQ": "שינוי בחלק מהחברה, רבעון",
+    "Δ stake YoY": "שינוי בחלק מהחברה, שנה",
     "Buying": "קונות",
-    "Net buying YoY": "קנייה נטו בשנה",
+    "Net buying YoY": "קניות פחות מכירות בשנה",
     "Pattern": "סוג העלייה",
     "Flags": "אזהרות",
     "No company matches these filters. Widen the price range or market cap.": "אין חברה שמתאימה לסינון. הרחיבו את טווח המחיר או את שווי השוק.",
@@ -317,7 +320,7 @@
     "Matching your filters": "מתאימות לסינון שלכם",
     "About the screen": "על הסינון",
     "Patterns": "סוגי עלייה",
-    "Largest stake gains": "העליות הגדולות באחזקה",
+    "Largest stake gains": "העליות הגדולות בחלק מהחברה",
     "Steady accumulation": "צבירה הדרגתית",
     "At least three of the last four quarters each added 0.75 points or more": "לפחות 3 מ-4 הרבעונים האחרונים הוסיפו כל אחד 0.75 נקודות או יותר",
     "Step-up": "קפיצה",
@@ -333,13 +336,13 @@
     "Shares outstanding grew more than 30% in a year": "מספר המניות גדל ביותר מ-30% בשנה",
     "Foreign filer": "חברה זרה",
     "Short public history": "נסחרת זמן קצר",
-    "Check data": "לבדוק נתונים",
+    "Check data": "נתונים לא עקביים",
     "The managers' filings disagree on the quarter-end price": "המנהלות דיווחו על מחירים שונים בסוף הרבעון",
     "Thin trading": "מסחר דליל",
     "Under $1M traded per day on average": "פחות ממיליון דולר ביום בממוצע",
     "Approx. shares": "מספר מניות משוער",
     "Share count taken from the cover page or a neighbouring quarter, not the balance sheet": "מספר המניות נלקח מעמוד השער של הדוח או מרבעון סמוך, לא מהמאזן",
-    "Stake, 2Y": "אחזקה, שנתיים",
+    "Stake, 2Y": "חלק מהחברה ב-2 שנים",
     "Show all": "הכול",
     "Loading ETFs…": "טוען קרנות סל…",
 
@@ -783,7 +786,7 @@
   P("since {Q}", (m, v) => `מאז ${v(m[1])}`);
   P("Top (\\d+), last quarter:", (m) => `${m[1]} הגדולות, ברבעון האחרון:`);
   P("Top (\\d+) at today’s prices:", (m) => `${m[1]} הגדולות לפי המחירים של היום:`);
-  P("{N} added, {N} trimmed", (m, v) => `${v(m[1])} הגדילו, ${v(m[2])} הקטינו`);
+  P("{N} added, {N} trimmed", (m, v) => `ב-${v(m[1])} חברות הגדילו, ב-${v(m[2])} הקטינו`);
   P("vs {D}", (m, v) => `מול ${v(m[1])}`);
   P("vs {Q}", (m, v) => `מול ${v(m[1])}`);
   P("Top (\\d+) company holdings", (m) => `${m[1]} האחזקות הגדולות בחברות`);
@@ -792,12 +795,12 @@
   P("{N} holdings", (m, v) => `${v(m[1])} אחזקות`);
   P("Top (\\d+) value", (m) => `שווי ${m[1]} הגדולות`);
   P("Top (\\d+) share of book", (m) => `חלק ${m[1]} הגדולות מהתיק`);
-  P("Median stake, top (\\d+)", (m) => `אחזקה חציונית, ${m[1]} הגדולות`);
+  P("Median stake, top (\\d+)", (m) => `חלק טיפוסי מהחברה (חציון), ${m[1]} הגדולות`);
   P("Next 13F \\({Q}\\)", (m, v) => `דוח 13F הבא (${v(m[1])})`);
   P("due {D}, in (\\d+) days?", (m, v) => `עד ${v(m[1])}, ${m[2] === "1" ? "מחר" : `בעוד ${m[2]} ימים`}`);
   P("all ([\\d,]+) securities", (m, v) => `כל ${v(m[1])} ניירות הערך`);
   P("top (\\d+)", (m) => `${m[1]} הגדולות`);
-  P("Show top (\\d+)", (m) => `${m[1]} המובילות`);
+  P("Show top (\\d+)", (m) => `הצגת ${m[1]} הראשונות`);
   P("Show (\\d+) more", (m) => `עוד ${m[1]}`);
   P("([\\d,]+) securities", (m, v) => `${v(m[1])} ניירות ערך`);
   P("{N} shares", (m, v) => `${v(m[1])} מניות`);
@@ -825,7 +828,7 @@
     "Mr. Fink הוא פרויקט עצמאי, בלי קשר לבלקרוק או ללארי פינק. תמונת האייקון: לארי פינק, צילום Kena Betancur / הנציבות האירופית,");
 
   // feed
-  P("{T} (quarterly|annual) report", (m) => `${m[1]}: דוח ${m[2] === "annual" ? "שנתי" : "רבעוני"}`);
+  P("{T} (quarterly|annual) report", (m) => `דוח ${m[2] === "annual" ? "שנתי" : "רבעוני"} של ${FSI}${m[1]}${PDI}`);
   P("{X} · period ended {D}", (m, v) => `${v(m[1])} · לתקופה שהסתיימה ב-${v(m[2])}`);
   P("period ended {D}", (m, v) => `לתקופה שהסתיימה ב-${v(m[1])}`);
   P("(BlackRock|Vanguard|State Street) holdings for {Q}", (m, v) => `האחזקות של ${v(m[1])} ל-${v(m[2])}`);
@@ -839,7 +842,7 @@
   P("{T}: (.+)", (m, v) => {
     const parts = m[2].split(", ");
     const h = parts.map((p) => events[p] || eventItem(p));
-    return h.every(Boolean) ? `${m[1]}: ${h.join(", ")}` : null;
+    return h.every(Boolean) ? `${FSI}${m[1]}${PDI}: ${h.join(", ")}` : null;
   });
 
   // home: about list item with registrants (kept close to the English)
@@ -868,15 +871,18 @@
   P("{N} of the way from low to high", (m, v) => `${v(m[1])} מהדרך בין הנמוך לגבוה`);
   P("Quarter ended {D}", (m, v) => `רבעון שהסתיים ב-${v(m[1])}`);
   P("{N} margin", (m, v) => `${v(m[1])} מההכנסות`);
-  P("{N} pts", (m, v) => `${v(m[1])} נק׳`);
+  P("{N} pts", (m, v) => `${v(m[1])} נק׳ אחוז`);
   P("{N} pp", (m, v) => `${v(m[1])} נק׳`);
-  P("Form 4 · last (\\d+) days", (m) => `טופס 4 · ${m[1]} הימים האחרונים`);
+  P("Form 4 · last (\\d+) days", (m) => `דיווחי בעלי עניין (טופס 4) · ${m[1]} הימים האחרונים`);
   P("Form 4", () => "טופס 4");
-  P("(\\d+) trades?, (\\d+) insiders?", (m) => `${m[1]} ${plural(m[1], "עסקה", "עסקאות")}, ${m[2]} ${plural(m[2], "בעל עניין", "בעלי עניין")}`);
-  P("(\\d+) trades?", (m) => `${m[1]} ${plural(m[1], "עסקה", "עסקאות")}`);
+  const count = (n, one, many) => (n === "0" ? "" : n === "1" ? one : `${n} ${many}`);
+  P("(\\d+) trades?, (\\d+) insiders?", (m) => (m[1] === "0" ? "" : `${count(m[1], "עסקה אחת", "עסקאות")}, ${count(m[2], "בעל עניין אחד", "בעלי עניין")}`));
+  P("(\\d+) trades?", (m) => count(m[1], "עסקה אחת", "עסקאות"));
   P("{N} owner", (m, v) => `בעל ${v(m[1])} מהמניות`);
   P("Bought {N} · sold {N}", (m, v) => `קנו ${v(m[1])} · מכרו ${v(m[2])}`);
   P("No open-market purchases or sales by officers, directors or 10% owners in the last (\\d+) days\\.", (m) => `אין קניות או מכירות בבורסה של מנהלים, דירקטורים או בעלי 10% ב-${m[1]} הימים האחרונים.`);
+  P("Open-market purchases and sales only; stock awards, option exercises, tax withholding and gifts are left out\\. (\\d+) recent Form 4 filings are still being read and will appear after the next refreshes\\.", (m) =>
+    `רק קניות ומכירות בבורסה. מניות שקיבלו כשכר, מימוש אופציות, ניכוי מס ומתנות לא נכללים. ${m[1]} דיווחים חדשים (טופס 4) עוד בקריאה, ויופיעו בעדכונים הבאים.`);
   P("(\\d+) recent Form 4 filings are still being read and will appear after the next refreshes\\.", (m) => `${m[1]} דיווחים חדשים (טופס 4) עוד בקריאה, ויופיעו בעדכונים הבאים.`);
   P("{X}: {N} now, {N} a year ago", (m, v) => `${v(m[1])}: ${v(m[2])} היום, ${v(m[3])} לפני שנה`);
   P("{X}: {N} now, not held a year ago", (m, v) => `${v(m[1])}: ${v(m[2])} היום, לא החזיקה לפני שנה`);
@@ -887,8 +893,9 @@
   P("Filed {D}", (m, v) => `דווח ב-${v(m[1])}`);
   P("from {Q}", (m, v) => `מ-${v(m[1])}`);
   P("Share counts split-adjusted for (.+)\\.", (m, v) => {
+    const kind = (r) => (/^1:/.test(r) ? "איחוד" : "פיצול");
     const parts = m[1].split(" and ").map((x) => /^(\d+:\d+) in (Q[1-4] \d{4})$/.exec(x));
-    return parts.every(Boolean) ? `מספרי המניות מתוקנים לפיצול ${parts.map((p) => `${v(p[1])} ב-${v(p[2])}`).join(" ול-")}.` : null;
+    return parts.every(Boolean) ? `מספרי המניות מתוקנים ל${parts.map((p) => `${kind(p[1])} ${iso(p[1])} ב-${v(p[2])}`).join(" ול")}.` : null;
   });
   P("(\\d+)-for-1 split in {Q}; earlier share counts are multiplied by (\\d+)\\.", (m, v) => `פיצול מניות ${m[1]} ל-1 ב-${v(m[2])}. מספרי המניות לפני כן מוכפלים ב-${m[3]}.`);
   P("1-for-(\\d+) reverse split in {Q}; earlier share counts are divided by (\\d+)\\.", (m, v) => `איחוד מניות 1 ל-${m[1]} ב-${v(m[2])}. מספרי המניות לפני כן מחולקים ב-${m[3]}.`);
@@ -918,18 +925,18 @@
   P("up to {N}", (m, v) => `עד ${v(m[1])}`);
   P("up to {N} \\(all\\)", (m, v) => `עד ${v(m[1])} (הכול)`);
   P("Insiders bought \\((\\d+) days\\)", (m) => `בעלי עניין קנו (${m[1]} ימים)`);
-  P("Δ Big Three stake, 1 year", () => "שינוי באחזקת שלוש הגדולות, שנה");
-  P("Δ Big Three stake, 1 quarter", () => "שינוי באחזקת שלוש הגדולות, רבעון");
-  P("Net buying, 1 year", () => "קנייה נטו, שנה");
+  P("Δ Big Three stake, 1 year", () => "שינוי בחלק הגדולות בחברה, שנה");
+  P("Δ Big Three stake, 1 quarter", () => "שינוי בחלק הגדולות בחברה, רבעון");
+  P("Net buying, 1 year", () => "קניות פחות מכירות, שנה");
   P("Insider buying, (\\d+) days", (m) => `קניות בעלי עניין, ${m[1]} ימים`);
-  P("Insiders (\\d+)d", (m) => `בעלי עניין, ${m[1]} י׳`);
+  P("Insiders (\\d+)d", (m) => `בעלי עניין, ${m[1]} יום`);
   P("Listed < (\\d+) yrs", (m) => `נסחרת פחות מ-${m[1]} שנים`);
   P("Share count \\+(\\d+)%", (m) => `מספר המניות ${iso("+" + m[1] + "%")}`);
-  P("Files (.+); fewer disclosures", (m) => `מדווחת בטפסים ${m[1]}, פחות גילוי`);
+  P("Files (.+); fewer disclosures", (m) => `חברה זרה: מדווחת בטפסים ${iso(m[1])}, ולכן מפרסמת פחות מידע`);
   P("Show all (\\d+) companies", (m) => `כל ${m[1]} החברות`);
   P("{N} of {N}", (m, v) => `${v(m[1])} מתוך ${v(m[2])}`);
   P("a year", () => "בשנה");
-  P("Passed: stake up ≥ {N} pp in a year", (m, v) => `עברו: אחזקה עלתה ב-${v(m[1])} נק׳ ומעלה בשנה`);
+  P("Passed: stake up ≥ {N} pp in a year", (m, v) => `עברו: החלק בחברה עלה ב-${v(m[1])} נק׳ אחוז ומעלה בשנה`);
   P("Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end \\(SEC XBRL balance sheet\\), so offerings and splits do not count as buying\\.(.*)", (m) => null);
   P("Backtest {Q}–{Q}: each quarter’s list bought at the first quarter end after its 13F was public, equal weight, rebalanced quarterly", (m, v) =>
     `בדיקה היסטורית ${v(m[1])} עד ${v(m[2])}: הרשימה של כל רבעון נקנתה בסוף הרבעון הראשון אחרי שדוח ה-13F פורסם, סכום שווה לכל מניה, ועדכון כל רבעון`);
@@ -941,12 +948,12 @@
   P("as of {D} · {N} positions ·", (m, v) => `נכון ל-${v(m[1])} · ${v(m[2])} אחזקות ·`);
   P("\\({N} bonds combined\\)", (m, v) => `(${v(m[1])} אג״ח ביחד)`);
   P("\\({N} lines combined\\)", (m, v) => `(${v(m[1])} שורות ביחד)`);
-  P("By issuer: (.+) {N} \\({N} bonds\\)\\. The largest individual bonds:", (m, v) => `לפי גוף מנפיק: ${v(m[1])} ${v(m[2])} (${v(m[3])} אג״ח). האג״ח הגדולות:`);
+  P("By issuer: (.+) {N} \\({N} bonds\\)\\. The largest individual bonds:", (m, v) => `לפי גוף מנפיק: ${m[1] === "United States of America" ? "ממשלת ארה״ב" : v(m[1])} ${v(m[2])} (${v(m[3])} אג״ח). האג״ח הגדולות:`);
   P("{X} · {N} fund size", (m, v) => `${v(m[1])} · גודל הקרן ${v(m[2])}`);
   P("(\\d+)-year return", (m) => (m[1] === "1" ? "תשואה בשנה" : `תשואה ב-${m[1]} שנים`));
   P("{X} ([↑↓])", (m, v) => { const t = v(m[1]); return t.startsWith("\u2068") ? null : `${t} ${m[2]}`; });
   P("Fund size and holdings: (.+)", () => null);
-  P("U\\.S\\. Treasury Bonds ([\\d.]+)% due (\\d{4}-\\d\\d-\\d\\d)", (m) => `אג״ח ממשלת ארה״ב ${iso(m[1] + "%")}, פירעון ${iso(m[2].split("-").reverse().map(Number).join("."))}`);
+  P("U\\.S\\. Treasury Bonds ([\\d.]+)% due (\\d{4}-\\d\\d-\\d\\d)", (m) => `אג״ח ממשלת ארה״ב, ריבית ${iso(m[1] + "%")}, פירעון ${iso(m[2].split("-").reverse().map(Number).join("."))}`);
 
   // watchlist
   P("Since 13F is the price change from the quarter-end price in the latest 13F \\({D}\\)\\. Each company page has a 🔔 Alerts button for its phone channel\\.", (m, v) =>
@@ -961,9 +968,9 @@
 
   // long notes
   P("Every Form 13F-HR from BlackRock \\((\\d+) registrants\\), Vanguard \\((\\d+) advisers; Vanguard Group has reported through affiliates since {Q}\\) and State Street, {Q} to {Q}, read directly from SEC EDGAR\\. Restatements replace the original filing and new-holdings amendments add to it\\. Options and bonds are excluded\\.", (m, v) =>
-    `כל דוחות ה-13F של בלקרוק (${m[1]} גופים מדווחים), ואנגארד (${m[2]} גופים; Vanguard Group מדווחת דרך חברות קשורות מאז ${v(m[3])}) וסטייט סטריט, מ-${v(m[4])} עד ${v(m[5])}, ישירות מה-SEC. דוח מתוקן מחליף את המקורי, ותיקון שמוסיף אחזקות מתווסף אליו. אופציות ואג״ח לא נכללים.`);
+    `דוח 13F הוא דוח שכל מנהלת השקעות גדולה בארה״ב מגישה כל רבעון לרשות ניירות הערך האמריקאית (SEC), עם רשימת המניות שהיא מחזיקה. כאן: כל דוחות ה-13F של בלקרוק (${m[1]} גופים מדווחים), ואנגארד (${m[2]} גופים; Vanguard Group מדווחת דרך חברות קשורות מאז ${v(m[3])}) וסטייט סטריט, מ-${v(m[4])} עד ${v(m[5])}, ישירות מה-SEC. דוח מתוקן מחליף את המקורי, ותיקון שמוסיף אחזקות מתווסף אליו. אופציות ואג״ח לא נכללים.`);
   P("Stake = combined shares held by the three managers ÷ shares outstanding at the quarter end \\(SEC XBRL balance sheet\\), so offerings and splits do not count as buying\\. pp = percentage points\\. “Buying” shows which managers raised their own stake over the year\\. Net buying is the change in shares valued at the quarter-end price\\. Prices and market caps are live\\. 13F reports lag the quarter by up to 45 days\\. Not investment advice\\.", () =>
-    "אחזקה = כל המניות ששלוש המנהלות מחזיקות ביחד ÷ כל המניות של החברה בסוף הרבעון (לפי המאזן), כך שהנפקות ופיצולים לא נספרים כקנייה. נק׳ = נקודות אחוז. ״קונות״ מראה אילו מנהלות הגדילו את האחזקה שלהן במשך השנה. קנייה נטו = השינוי במספר המניות כפול המחיר בסוף הרבעון. המחירים ושווי השוק מתעדכנים עכשיו. דוח 13F מגיע עד 45 יום אחרי סוף הרבעון. זו לא המלצה להשקעה.");
+    "חלק מהחברה = כל המניות ששלוש המנהלות מחזיקות ביחד ÷ כל המניות של החברה בסוף הרבעון (לפי המאזן), כך שהנפקות ופיצולים לא נספרים כקנייה. נק׳ = נקודות אחוז. ״קונות״ מראה אילו מנהלות הגדילו את האחזקה שלהן במשך השנה. קניות פחות מכירות = השינוי במספר המניות כפול המחיר בסוף הרבעון. המחירים ושווי השוק מתעדכנים עכשיו. דוח 13F מגיע עד 45 יום אחרי סוף הרבעון. זו לא המלצה להשקעה.");
   P("{N} in the screen became {N}, against {N} for all small caps that passed the same price and size filters, and {N} for the S&P 500\\. Over (\\d+)-month holds the screen averaged {N} a year against {N} for the small-cap universe and beat it in {N} of (\\d+) quarters: no reliable edge\\. The strongest version \\(top 25 by stake gain\\) did worst, consistent with stocks giving back gains after index inclusion\\.", (m, v) =>
     `${v(m[1])} שהושקעו בסינון הפכו ל-${v(m[2])}, מול ${v(m[3])} בכל החברות הקטנות שעברו את אותו סינון של מחיר וגודל, ו-${v(m[4])} ב-S&P 500. בהחזקה של ${m[5]} חודשים הסינון הניב בממוצע ${v(m[6])} בשנה, מול ${v(m[7])} בכל החברות הקטנות, והיה טוב יותר ב-${v(m[8])} מתוך ${m[9]} רבעונים: אין יתרון קבוע. הגרסה ״הכי חזקה״ (25 עם העלייה הגדולה באחזקה) הצליחה הכי פחות, כמו שקורה כשמניות מאבדות את העלייה אחרי כניסה למדד.`);
   P("Flagship index funds of each manager \\(S&P 500, total market, mid and small cap, Russell 2000\\)\\. Funds report each quarter-end month about 60 days later; dates differ by fiscal calendar\\. “vs prior report” compares shares with the fund’s previous public N-PORT\\.", () =>
@@ -988,11 +995,11 @@
 
   // 13F season (only shown while the managers file a new quarter)
   P("{Q} 13F season:", (m, v) => `עונת דוחות 13F של ${v(m[1])}:`);
-  P("filed {Q} on {D}", (m, v) => `הגישה את ${v(m[1])} ב-${v(m[2])}`);
-  P("{N} of {N} filing entities so far", (m, v) => `${v(m[1])} מתוך ${v(m[2])} גופים דיווחו עד עכשיו`);
-  P("filed {Q} on {D}\\. The main table stays at {Q} until the other managers file\\.", (m, v) => `הגישה את ${v(m[1])} ב-${v(m[2])}. הטבלה הראשית נשארת על ${v(m[3])} עד שהמנהלות האחרות יגישו.`);
+  P("filed {Q} on {D}", (m, v) => `הגישה את הדוח של ${v(m[1])} ב-${v(m[2])}`);
+  P("{N} of {N} filing entities so far", (m, v) => `${v(m[1])} מתוך ${v(m[2])} החברות המדווחות שלה כבר דיווחו`);
+  P("filed {Q} on {D}\\. The main table stays at {Q} until the other managers file\\.", (m, v) => `הגישה את הדוח של ${v(m[1])} ב-${v(m[2])}. הטבלה הראשית נשארת על ${v(m[3])} עד שהמנהלות האחרות יגישו.`);
   P("{N} of {N} filing entities so far for {Q}\\. It moves to the new quarter when every entity has reported(?: \\(waiting for (.+)\\))?\\.", (m, v) =>
-    `${v(m[1])} מתוך ${v(m[2])} גופים דיווחו עד עכשיו על ${v(m[3])}. התצוגה תעבור לרבעון החדש כשכל הגופים ידווחו${m[4] ? ` (מחכים ל-${FSI}${m[4]}${PDI})` : ""}.`);
+    `${v(m[1])} מתוך ${v(m[2])} החברות המדווחות שלה כבר דיווחו על ${v(m[3])}. התצוגה תעבור לרבעון החדש כשכל הגופים ידווחו${m[4] ? ` (מחכים ל-${FSI}${m[4]}${PDI})` : ""}.`);
   P("\\. The tables stay at {Q} until all three have filed, so every view compares the same quarter\\.", (m, v) => `. הטבלאות נשארות על ${v(m[1])} עד שכל השלוש יגישו, כדי שכל התצוגות ישוו את אותו רבעון.`);
   P("\\. The main table stays at {Q} until the other managers file\\.", (m, v) => `. הטבלה הראשית נשארת על ${v(m[1])} עד שהמנהלות האחרות יגישו.`);
   P("(Show|Hide) {Q} holdings", (m, v) => `${m[1] === "Show" ? "הצגת" : "הסתרת"} האחזקות של ${v(m[2])}`);
@@ -1005,7 +1012,7 @@
 
 
   P("No holding matches “(.+)”\\.", (m) => `אין אחזקה שמתאימה ל״${m[1]}״. שמות החברות כתובים באנגלית, למשל Apple.`);
-  P("Downloaded (\\d+) rows", (m) => `הקובץ הורד: ${m[1]} שורות`);
+  P("Downloaded (\\d+) rows", (m) => `הקובץ הורד: ${m[1] === "1" ? "שורה אחת" : m[1] + " שורות"}`);
   P("Copied (.+)", (m) => `הועתק: ${iso(m[1])}`);
   P("Loading {T}…", (m) => `טוען את ${m[1]}…`);
   P("Loading the S&P 500…", () => "טוען את מדד S&P 500…");
@@ -1013,7 +1020,7 @@
   P(", then serve the web folder\\.", () => ", ואז הגישו את תיקיית web.");
   P("New filing: (.+)", (m, v) => `דיווח חדש: ${v(m[1])}`);
   P("New SEC filing: (.+)\\. Data updated\\.", (m, v) => `דיווח חדש ל-SEC: ${v(m[1])}. הנתונים עודכנו.`);
-  P("(Ahead of|Behind) the index by ([\\d.]+) points", (m) => `${m[1] === "Ahead of" ? "טוב מהמדד" : "חלש מהמדד"} ב-${iso(m[2])} נק׳`);
+  P("(Ahead of|Behind) the index by ([\\d.]+) points", (m) => `${m[1] === "Ahead of" ? "טוב מהמדד" : "חלש מהמדד"} ב-${iso(m[2])} נקודות אחוז`);
 
   const iso = (s) => "\u2066" + s + "\u2069";
   const FSI = "\u2068", PDI = "\u2069";
@@ -1027,6 +1034,9 @@
   const ctx = [
     [".ins-sum", { "Bought": "קניות:", "Sold": "מכירות:", "none": "אין" }],
     ["#fin-h", { "Financials": "תוצאות כספיות" }],
+    ["[data-etf-issuer]", { "Vanguard": "Vanguard" }],
+    [".own-table", { "Bought": "קנייה", "Sold": "מכירה", "plan": "לפי תוכנית" }],
+    ["[data-feed]", { "13F": "אחזקות (13F)", "13G/D": "מעל 5% (13G/D)", "N-PORT": "קרנות (N\u2011PORT)", "8-K": "דיווח מיידי (8-K)", "10-Q/K": "דוחות כספיים (10-Q/K)" }],
   ];
   window.MRFINK_I18N = { dict: all, patterns, ctx, keep: () => true };
 })();

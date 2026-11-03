@@ -574,3 +574,4 @@ sup { font-size: 10px; color: var(--muted); }
 [dir="rtl"] .suggest .muted { white-space: nowrap; }
 @media (max-width: 640px) { .lang { width: 34px; height: 34px; font-size: 13px; } }
 [dir="rtl"] .fund-cell { min-width: 160px; }
+[dir="rtl"] :is(.tbl, .own-table, .fin-table) thead th { white-space: normal; min-width: 56px; }

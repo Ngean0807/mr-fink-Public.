@@ -72,7 +72,7 @@
   /** "Q2 2026" -> "רבעון 2 2026", "Q1 ’17" -> "רבעון 1 ’17" */
   function quarter(s) {
     const m = /^Q([1-4]) (\d{4}|’\d\d)$/.exec(s);
-    return m ? `רבעון ${m[1]} ${iso(m[2])}` : null;
+    return m ? `רבעון\u00a0${m[1]}\u00a0${iso(m[2])}` : null;
   }
   /** "4:00 PM" -> "16:00" */
   function clock(s) {
@@ -92,7 +92,7 @@
     s = String(s);
     if (NUMRE.test(s)) {
       const pp = / (pp|pts)$/.exec(s);
-      if (pp) return num(s.slice(0, -pp[0].length)) + " נק׳";
+      if (pp) return num(s.slice(0, -pp[0].length)) + (pp[1] === "pts" ? " נק׳ אחוז" : " נק׳");
       return num(s);
     }
     const d = date(s) || quarter(s) || clock(s);
