@@ -431,6 +431,7 @@ def main() -> None:
             "topN": config.TOP_N,
             # Company pages kept in their own files (data/co/), by ticker: Emerging, movers, peers.
             "coPages": sorted({m["ticker"] for m in lite.values()}),
+            "coNames": {m["ticker"]: m["name"] for m in lite.values()},
             "peers": {gid: {"name": g["name"], "rows": [peer_row(c, sec_meta.get(c) or lite.get(c)) for c in g["cusips"] if (sec_meta.get(c) or lite.get(c))]}
                       for gid, g in config.PEERS.items()},
         },
