@@ -46,6 +46,23 @@ MANAGERS = [
 # before that its subsidiaries filed separately, so the series would not be comparable.
 HISTORY_START = "2017-03-31"
 TOP_N = 50
+# Peer groups shown side by side in Analytics (CUSIPs of the common shares). Each gets a company page.
+PEERS = {
+    "banks": {"name": "Largest US banks", "cusips": [
+        "46625H100",  # JPMorgan Chase
+        "060505104",  # Bank of America
+        "949746101",  # Wells Fargo
+        "172967424",  # Citigroup
+        "38141G104",  # Goldman Sachs
+        "617446448",  # Morgan Stanley
+        "902973304",  # U.S. Bancorp
+        "693475105",  # PNC Financial
+        "808513105",  # Charles Schwab
+        "064058100",  # Bank of New York Mellon
+        "14040H105",  # Capital One
+        "89832Q109",  # Truist
+    ]},
+}
 CANDIDATES = 150         # largest CUSIPs screened per manager before excluding funds/ETFs
 
 # OpenFIGI security types that represent an operating company's equity (funds and ETPs are excluded).
