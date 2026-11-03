@@ -9,11 +9,6 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
-    inputs:
-      test_notification:
-        description: Send a test push to the phone
-        type: boolean
-        default: false
   push:
     branches: [main]
 
@@ -21,7 +16,6 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  actions: read  # the alert job reads the previous run's result
 
 concurrency:
   group: refresh
@@ -48,9 +42,6 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'Mr Fink nissim711@gmail.com' }}
           MRFINK_SUBMISSIONS_TTL: "0"
-          # Phone pushes via ntfy: the topic is a repository secret, never written to the site.
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          NTFY_TEST: ${{ inputs.test_notification }}
         run: python -m pipeline.build
       - name: Price feed and push server config
         # Optional: a free Finnhub key turns on real-time prices (websocket trades) in the browser.
@@ -96,32 +87,3 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-
-  # A push to the owner's phone when a refresh fails after a good one, and when it recovers.
-  # Without this a broken refresh only shows as a site that quietly stops updating.
-  alert:
-    needs: [build, deploy]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Compare with the previous run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          BUILD: ${{ needs.build.result }}
-          DEPLOY: ${{ needs.deploy.result }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          [ -n "$NTFY_TOPIC" ] || exit 0
-          now=success
-          { [ "$BUILD" = failure ] || [ "$DEPLOY" = failure ]; } && now=failure
-          prev=$(gh api "repos/${{ github.repository }}/actions/workflows/refresh.yml/runs?per_page=10&status=completed" \
-            --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }}) | select(.conclusion == \"success\" or .conclusion == \"failure\")][0].conclusion")
-          echo "this run: $now, previous: $prev"
-          if [ "$now" = failure ] && [ "$prev" != failure ]; then
-            curl -s -H "Title: Mr. Fink refresh failed" -H "Priority: high" -H "Tags: warning" -H "Click: $RUN_URL" \
-              -d "The site stopped updating (build: $BUILD, deploy: $DEPLOY). Tap for the log." "https://ntfy.sh/$NTFY_TOPIC"
-          elif [ "$now" = success ] && [ "$prev" = failure ]; then
-            curl -s -H "Title: Mr. Fink refresh recovered" -H "Tags: white_check_mark" -H "Click: $RUN_URL" \
-              -d "Updates are running again." "https://ntfy.sh/$NTFY_TOPIC"
-          fi
