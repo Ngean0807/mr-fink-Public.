@@ -543,6 +543,7 @@
       const cur = state.view === id;
       return `<a class="chip" href="#${id}" ${cur && state.page === "home" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
     }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "")
+      + `<a class="chip chip-an" href="#analytics" ${state.page === "analytics" ? 'aria-current="page"' : ""}><svg class="an-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>Analytics <small>charts</small></a>`
       + `<a class="chip" href="#etfs" ${state.page === "etfs" ? 'aria-current="page"' : ""}><span class="sw" style="background:linear-gradient(90deg,var(--blk) 0 33%,var(--vg) 0 66%,var(--ss) 0)"></span>ETFs <small>iShares · Vanguard · SPDR</small></a>`;
   }
 
@@ -1336,6 +1337,7 @@
             <thead><tr><th class="l" scope="col">Manager</th><th scope="col">13F value</th><th scope="col">Value today</th><th scope="col">Shares</th><th scope="col">Stake</th><th scope="col">Rank</th><th scope="col">QoQ shares</th><th scope="col">YoY shares</th><th scope="col">Since first held</th></tr></thead>
             <tbody>${MGRS.map((id) => ownRow(MGR_NAME[id], dot(id), holder(c, id))).join("")}${ownRow("Big Three", "", b3, ' class="total"')}</tbody>
           </table></div>
+          ${ownersDonut(c)}
           ${latestG.length ? `<div class="g13"><b>Latest Schedule 13G stakes</b>${latestG.map((g) => `<span>${dot(g.manager)}${esc(g.reporter)}: <b>${pct(g.percent, 2, false)}</b> of the class as of ${dateL(g.eventDate)} · <a href="${g.url}" target="_blank" rel="noopener">filed ${dateL(g.filed)}</a></span>`).join("")}</div>` : ""}
         </section>
         ${f.available ? `<section class="section" aria-labelledby="fin-h">
@@ -1646,6 +1648,171 @@
   }
   const exportBtn = (id) => `<button type="button" class="btn export" id="${id}"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zm7-18-5.5 5.5 1.42 1.42L11 5.83V16h2V5.83l3.08 3.09 1.42-1.42L12 2z" transform="rotate(180 12 11)"/></svg>Export to Excel</button>`;
 
+
+  /** Company page: how much of the company the Big Three own, and everyone else. */
+  function ownersDonut(c) {
+    const items = MGRS.map((id) => ({ label: MGR_NAME[id], value: (holder(c, id) || {}).ownership || 0, color: mColor(id) })).filter((x) => x.value > 0);
+    const b3 = items.reduce((a, x) => a + x.value, 0);
+    if (!items.length || b3 <= 0 || b3 > 1) return "";
+    return `<div class="owners"><b class="owners-h">Who owns the company</b><span class="note">share of all shares outstanding</span>${donut(items.concat([{ label: "All other holders", value: 1 - b3, color: "#dadce0" }]), { center: pct(b3, 1, false), sub: "Big Three", fmt: () => "" })}</div>`;
+  }
+  // ---------- analytics: the Big Three's books in charts (all from the live 13F data) ----------
+  const AN_TABS = [["overview", "Overview"], ["activity", "Activity"], ["sectors", "Sectors"], ["managers", "Managers"]];
+  state.an = { view: "big3", tab: "overview" };
+  const SHORT_SECTOR = { "Information Technology": "Technology", "Communication Services": "Communications", "Consumer Discretionary": "Discretionary", "Consumer Staples": "Staples" };
+  const secOf = (r) => (sec(r.cusip) || {}).sector || "Other";
+  /** Top-50 rows grouped by sector: value now and a quarter ago, net trading, number of names. */
+  function sectorAgg(rows) {
+    const m = new Map();
+    for (const r of rows) {
+      const k = secOf(r);
+      const g = m.get(k) || { label: k, value: 0, prev: 0, trade: 0, n: 0 };
+      g.value += r.value;
+      g.prev += r.value - ((r.qoq && r.qoq.dValue) || 0);
+      g.trade += (r.qoq && r.qoq.trade) || 0;
+      g.n += 1;
+      m.set(k, g);
+    }
+    return [...m.values()].sort((a, b) => b.value - a.value);
+  }
+  const secColor = (k) => SECTOR_COLOR[k] || "#9aa0a6";
+  /** Donut with a legend. items: [{label, value, color, href?}] */
+  function donut(items, { center = "", sub = "", fmt = usd } = {}) {
+    const tot = items.reduce((a, x) => a + Math.max(0, x.value), 0) || 1;
+    const R = 80, r = 52, C = 100;
+    let a0 = -Math.PI / 2;
+    const arcs = items.filter((x) => x.value > 0).map((x) => {
+      const a1 = a0 + (x.value / tot) * Math.PI * 2 - 0.0001;
+      const large = a1 - a0 > Math.PI ? 1 : 0;
+      const p = (rad, ang) => `${(C + rad * Math.cos(ang)).toFixed(2)},${(C + rad * Math.sin(ang)).toFixed(2)}`;
+      const d = `M${p(R, a0)}A${R},${R} 0 ${large} 1 ${p(R, a1)}L${p(r, a1)}A${r},${r} 0 ${large} 0 ${p(r, a0)}Z`;
+      a0 = a1 + 0.0001;
+      return `<path d="${d}" fill="${x.color}"><title>${esc(x.label)}: ${pct(x.value / tot, 1, false)}</title></path>`;
+    }).join("");
+    const legend = items.map((x) => {
+      const nm = x.href ? `<a href="${x.href}">${esc(x.label)}</a>` : esc(x.label);
+      return `<div class="dl-row"><i style="background:${x.color}"></i><span class="dl-nm">${nm}</span><b>${pct(x.value / tot, 1, false)}</b><span class="muted">${fmt(x.value)}</span></div>`;
+    }).join("");
+    return `<div class="donut"><svg viewBox="0 0 200 200" role="img" aria-label="${esc(sub)}: ${esc(center)}">${arcs}<text x="100" y="98" text-anchor="middle" class="dn-c">${esc(center)}</text><text x="100" y="118" text-anchor="middle" class="dn-s">${esc(sub)}</text></svg><div class="dl">${legend}</div></div>`;
+  }
+  /** Horizontal bars. items: [{label, value, href?, color?, title?}]; signed values draw both ways from zero. */
+  function hbars(items, { fmt = usdS, color = "var(--accent)" } = {}) {
+    const max = Math.max(...items.map((x) => Math.abs(x.value)), 1e-9);
+    const signed = items.some((x) => x.value < 0) && items.some((x) => x.value > 0);
+    return `<div class="hb">${items.map((x) => {
+      const w = (Math.abs(x.value) / max) * (signed ? 50 : 100);
+      const left = signed ? (x.value < 0 ? 50 - w : 50) : 0;
+      const lab = x.href ? `<a href="${x.href}">${esc(x.label)}</a>` : esc(x.label);
+      return `<div class="hb-row"${x.title ? ` title="${esc(x.title)}"` : ""}><span class="hb-k">${lab}</span><span class="hb-t${signed ? " mid" : ""}"><i style="left:${left.toFixed(2)}%;width:${Math.max(0.5, w).toFixed(2)}%;background:${x.color || color}"></i></span><b class="hb-n">${fmt(x.value)}</b></div>`;
+    }).join("")}</div>`;
+  }
+  const panelH = (cls, title, note, body, foot = "") => `<section class="an-p ${cls}"><div class="an-h"><h2>${title}</h2>${note ? `<span class="note">${note}</span>` : ""}</div><div class="an-b">${body}</div>${foot ? `<p class="foot an-f">${foot}</p>` : ""}</section>`;
+  const linkOf = (t) => (t && (bySlug(slugOf(t)) || emergingAll().some((x) => x.ticker === t)) ? `#t-${slugOf(t)}` : null);
+  function anKpis(v) {
+    const rows = v.rows, n = v.totals.length, last = v.totals[n - 1], prev = v.totals[n - 2];
+    const top10 = rows.slice(0, 10).reduce((a, r) => a + r.value, 0);
+    const flow = rows.reduce((a, r) => a + ((r.qoq && r.qoq.trade) || 0), 0);
+    const added = rows.filter((r) => r.qoq && ["added", "new"].includes(r.qoq.status)).length;
+    const trimmed = rows.filter((r) => r.qoq && ["trimmed", "exited"].includes(r.qoq.status)).length;
+    const secs = sectorAgg(rows), s50 = rows.reduce((a, r) => a + r.value, 0);
+    const k = [
+      ["13F portfolio value", usd(last), `${signed(last / prev - 1)} vs ${qlabel(D.meta.periods[n - 2])}`],
+      ["Positions", v.positions.toLocaleString("en-US"), "securities in the filings"],
+      ["Top 10 weight", pct(top10 / last, 1, false), "of the whole portfolio"],
+      [`Net buying, top ${D.meta.topN}`, `<span class="${flow >= 0 ? "txt-up" : "txt-down"}">${usdS(flow)}</span>`, "Δ shares × quarter-end price"],
+      ["Added / trimmed", `<span class="pair"><span class="txt-up">${added}</span><span class="muted">/</span><span class="txt-down">${trimmed}</span></span>`, `of the top ${D.meta.topN}`],
+      ["Largest sector", esc(SHORT_SECTOR[secs[0].label] || secs[0].label), `${pct(secs[0].value / s50, 1, false)} of the top ${D.meta.topN}`],
+    ];
+    return `<div class="kpis">${k.map(([l, val, sub]) => `<div class="kpi"><span class="kl">${l}</span><span class="kv2">${val}</span><span class="ks">${sub}</span></div>`).join("")}</div>`;
+  }
+  function anOverview(v) {
+    const rows = v.rows, n = v.totals.length, total = v.totals[n - 1];
+    const secs = sectorAgg(rows);
+    const top = secs.slice(0, 7), rest = secs.slice(7).reduce((a, x) => a + x.value, 0);
+    const dItems = top.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label) })).concat(rest ? [{ label: "Other sectors", value: rest, color: "#bdc1c6" }] : []);
+    const prevV = rows.reduce((a, r) => a + r.value - ((r.qoq && r.qoq.dValue) || 0), 0);
+    const flow = rows.reduce((a, r) => a + ((r.qoq && r.qoq.trade) || 0), 0);
+    const pe = rows.reduce((a, r) => a + ((r.qoq && r.qoq.priceEffect) || 0), 0);
+    const now = rows.reduce((a, r) => a + r.value, 0);
+    const per = D.meta.periods;
+    return `<div class="an-grid">
+      ${panelH("w12", "13F portfolio value", `${qlabel(per[0])} to ${qlabel(per[n - 1])}, every reported position`, '<div class="chart" id="an-total"></div>')}
+      ${panelH("w6", "Sector mix", `top ${D.meta.topN} holdings by market value`, donut(dItems, { center: usd(secs.reduce((a, x) => a + x.value, 0)), sub: `top ${D.meta.topN}` }))}
+      ${panelH("w6", "Top 10 holdings", `${pct(rows.slice(0, 10).reduce((a, r) => a + r.value, 0) / total, 1, false)} of the portfolio`, hbars(rows.slice(0, 10).map((r) => { const c = sec(r.cusip); return { label: c.ticker, value: r.value, href: `#t-${slugOf(c.ticker)}`, color: secColor(c.sector), title: niceName(c.name) }; }), { fmt: usd }))}
+      ${panelH("w12", `What moved the top ${D.meta.topN} last quarter`, `${qlabel(per[n - 2])} to ${qlabel(per[n - 1])}`,
+        `<div class="bridge4"><div><span class="kl">Value ${qlabel(per[n - 2])}</span><b>${usd(prevV)}</b></div><div><span class="kl">Net buying</span><b class="${flow >= 0 ? "txt-up" : "txt-down"}">${usdS(flow)}</b></div><div><span class="kl">Price effect</span><b class="${pe >= 0 ? "txt-up" : "txt-down"}">${usdS(pe)}</b></div><div><span class="kl">Value ${qlabel(per[n - 1])}</span><b>${usd(now)}</b></div></div>`,
+        "Net buying = change in shares × quarter-end price. Price effect = the change in price on the shares held a quarter earlier.")}
+    </div>`;
+  }
+  function anActivity(v) {
+    const rows = v.rows;
+    const fromMoves = !!v.moves;
+    const buys = fromMoves ? v.moves.bought.slice(0, 10).map((r) => ({ label: r.ticker, value: r.flow, href: linkOf(r.ticker), title: niceName(r.name) }))
+      : rows.filter((r) => r.qoq && r.qoq.trade > 0).sort((a, b) => b.qoq.trade - a.qoq.trade).slice(0, 10).map((r) => ({ label: sec(r.cusip).ticker, value: r.qoq.trade, href: linkOf(sec(r.cusip).ticker) }));
+    const sells = fromMoves ? v.moves.sold.slice(0, 10).map((r) => ({ label: r.ticker, value: r.flow, href: linkOf(r.ticker), title: niceName(r.name) }))
+      : rows.filter((r) => r.qoq && r.qoq.trade < 0).sort((a, b) => a.qoq.trade - b.qoq.trade).slice(0, 10).map((r) => ({ label: sec(r.cusip).ticker, value: r.qoq.trade, href: linkOf(sec(r.cusip).ticker) }));
+    const st = (k) => rows.filter((r) => r.qoq && (Array.isArray(k) ? k.includes(r.qoq.status) : r.qoq.status === k)).length;
+    const counts = [["Added", st(["added", "new"]), "var(--pos-line)"], ["Trimmed", st(["trimmed", "exited"]), "var(--neg-line)"], ["Unchanged", st("unchanged"), "#bdc1c6"]].filter((x) => x[1]).map(([label, value, color]) => ({ label, value, color }));
+    const movers = rows.filter((r) => r.qoq && r.qoq.dSharesPct != null).sort((a, b) => Math.abs(b.qoq.dSharesPct) - Math.abs(a.qoq.dSharesPct)).slice(0, 10)
+      .map((r) => { const c = sec(r.cusip); return { label: c.ticker, value: r.qoq.dSharesPct, href: `#t-${slugOf(c.ticker)}`, color: r.qoq.dSharesPct >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: niceName(c.name) }; });
+    const scope = fromMoves ? `whole portfolio, ${v.positions.toLocaleString("en-US")} securities` : `top ${D.meta.topN}`;
+    return `<div class="an-grid">
+      ${panelH("w6", "Largest buys", `net buying last quarter · ${scope}`, hbars(buys, { color: "var(--pos-line)" }))}
+      ${panelH("w6", "Largest sells", `net selling last quarter · ${scope}`, hbars(sells.map((x) => ({ ...x, value: Math.abs(x.value) })), { color: "var(--neg-line)", fmt: (x) => usdS(-x) }))}
+      ${panelH("w5", "Position actions", `top ${D.meta.topN} holdings`, donut(counts, { center: String(rows.length), sub: "positions", fmt: (x) => `${x} names` }))}
+      ${panelH("w7", "Biggest share-count changes", `top ${D.meta.topN}, shares vs the previous quarter`, hbars(movers, { fmt: (x) => pct(x, 2) }))}
+    </div>`;
+  }
+  function anSectors(v) {
+    const secs = sectorAgg(v.rows), tot = secs.reduce((a, x) => a + x.value, 0), ptot = secs.reduce((a, x) => a + x.prev, 0);
+    const per = D.meta.periods, n = per.length;
+    const body = secs.map((x) => {
+      const w = x.value / tot, pw = x.prev / ptot;
+      return `<tr><td class="l"><span class="mdot" style="background:${secColor(x.label)}"></span>${esc(x.label)}</td><td>${x.n}</td><td>${usd(x.value)}</td><td>${pct(w, 1, false)}</td><td>${pct(pw, 1, false)}</td><td>${signed(w - pw, (y) => pct(y, 2))}</td><td>${signed(x.trade, usdS)}</td></tr>`;
+    }).join("");
+    return `<div class="an-grid">
+      ${panelH("w6", "Allocation by sector", `top ${D.meta.topN} holdings`, donut(secs.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label) })), { center: String(secs.length), sub: "sectors" }))}
+      ${panelH("w6", "Net buying by sector", "last quarter", hbars(secs.map((x) => ({ label: SHORT_SECTOR[x.label] || x.label, value: x.trade, color: secColor(x.label), title: x.label })).sort((a, b) => b.value - a.value)))}
+      ${panelH("w12", "Sector table", "weights compare quarter-end values", `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Sector</th><th scope="col">Companies</th><th scope="col">Value</th><th scope="col">Weight</th><th scope="col">Weight ${qlabel(per[n - 2])}</th><th scope="col">Δ weight</th><th scope="col">Net buying</th></tr></thead><tbody>${body}</tbody></table></div>`)}
+    </div>`;
+  }
+  function anManagers() {
+    const per = D.meta.periods, n = per.length;
+    const last = MGRS.map((id) => ({ id, v: D.views[id].totals[n - 1], p: D.views[id].totals[n - 2] }));
+    const sum = last.reduce((a, x) => a + x.v, 0);
+    const body = last.map(({ id, v, p }) => {
+      const vw = D.views[id], t10 = vw.rows.slice(0, 10).reduce((a, r) => a + r.value, 0), fl = vw.rows.reduce((a, r) => a + ((r.qoq && r.qoq.trade) || 0), 0);
+      const src = (vw.sources || []).slice().sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+      return `<tr><td class="l"><a href="#analytics/${id}">${dot(id)}<b>${MGR_NAME[id]}</b></a></td><td>${usd(v)}</td><td>${signed(v / p - 1)}</td><td>${vw.positions.toLocaleString("en-US")}</td><td>${pct(t10 / v, 1, false)}</td><td>${signed(fl, usdS)}</td><td class="l">${src ? `<a href="${src.url}" target="_blank" rel="noopener">${dateL(src.filed)}</a>${vw.sources.length > 1 ? ` <small class="muted">+${vw.sources.length - 1} filers</small>` : ""}` : "—"}</td></tr>`;
+    }).join("");
+    return `<div class="an-grid">
+      ${panelH("w8", "13F portfolio value by manager", `${qlabel(per[0])} to ${qlabel(per[n - 1])}`, `<div class="legend">${MGRS.map((id) => `<span><i style="background:${mColor(id)}"></i>${MGR_NAME[id]}</span>`).join("")}</div><div class="chart" id="an-mgrs"></div>`)}
+      ${panelH("w4", "Share of the Big Three", qlabel(per[n - 1]), donut(last.map(({ id, v }) => ({ label: MGR_NAME[id], value: v, color: mColor(id), href: `#analytics/${id}` })), { center: usd(sum), sub: "combined" }))}
+      ${panelH("w12", "Manager comparison", "", `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Manager</th><th scope="col">13F value</th><th scope="col">Quarter change</th><th scope="col">Positions</th><th scope="col">Top 10 weight</th><th scope="col">Net buying, top ${D.meta.topN}</th><th class="l" scope="col">Latest filing</th></tr></thead><tbody>${body}</tbody></table></div>`)}
+    </div>`;
+  }
+  function renderAnalytics() {
+    const a = state.an, v = D.views[a.view];
+    const per = D.meta.periods, n = per.length;
+    const body = { overview: anOverview, activity: anActivity, sectors: anSectors, managers: anManagers }[a.tab](v);
+    $("app").innerHTML = `<div class="main an-main">
+      <div class="hero">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#analytics">Analytics</a><span aria-hidden="true">›</span><span>${esc(MGR_NAME[a.view])}</span></nav>
+        <h1>${a.view === "big3" ? "BlackRock, Vanguard &amp; State Street" : esc(v.name)}</h1>
+        <p class="hero-sub">13F for ${qlabel(D.meta.latest)} · quarter ended ${dateL(D.meta.latest)}</p>
+      </div>
+      <div class="tabs an-mgr" role="group" aria-label="Manager">${VIEWS.map((id) => `<button type="button" class="chip" data-an-view="${id}" aria-pressed="${a.view === id}">${id === "big3" ? "" : dot(id)}${MGR_NAME[id]}</button>`).join("")}</div>
+      ${anKpis(v)}
+      <div class="tabs" role="group" aria-label="Analytics view">${AN_TABS.map(([k, l]) => `<button type="button" class="tab" data-an-tab="${k}" aria-pressed="${a.tab === k}">${l}</button>`).join("")}</div>
+      ${body}
+      <p class="foot">From the managers’ Form 13F filings on SEC EDGAR, the same data as the rest of Mr. Fink, updated with every new filing. ${D.meta.topN} = the largest company holdings; ETFs and funds are left out. Not investment advice.</p>
+    </div>`;
+    const app = $("app");
+    app.querySelectorAll("[data-an-view]").forEach((b) => b.addEventListener("click", () => { location.hash = `analytics/${b.dataset.anView}${a.tab === "overview" ? "" : "/" + a.tab}`; }));
+    app.querySelectorAll("[data-an-tab]").forEach((b) => b.addEventListener("click", () => { location.hash = `analytics/${a.view}${b.dataset.anTab === "overview" ? "" : "/" + b.dataset.anTab}`; }));
+    if ($("an-total")) lineChart($("an-total"), { series: [{ name: "13F portfolio value", color: a.view === "big3" ? "var(--accent)" : mColor(a.view), values: v.totals }], dates: per, height: 260 });
+    if ($("an-mgrs")) lineChart($("an-mgrs"), { series: MGRS.map((id) => ({ name: MGR_NAME[id], color: mColor(id), values: D.views[id].totals })), dates: per, height: 260 });
+  }
   // ---------- watchlist page ----------
   /** Followed companies, as rows with a cusip (full record when loaded, else the Emerging row). */
   function watchItems() {
@@ -1912,18 +2079,22 @@
   // ---------- routing ----------
   function render() {
     hideTip();
+    const tb = state.page === "home" || state.page === "company" ? "home" : state.page;
+    document.querySelectorAll("#tabbar [data-tb]").forEach((x) => { if (x.dataset.tb === tb) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
     renderChips();
     renderTape();
     if (state.page === "company") renderCompany();
     else if (state.page === "emerging") renderEmerging();
     else if (state.page === "watch") renderWatch();
     else if (state.page === "etfs") renderEtfs();
+    else if (state.page === "analytics") renderAnalytics();
     else renderHome();
     syncSubscriptions();
     renderLive();
   }
   const pageKey = () => (state.page === "home" ? "home:" + state.view : state.page === "company" ? "co:" + state.slug : state.page);
   function route() {
+    if ($("npanel") && !$("npanel").hidden) { $("npanel").hidden = true; $("bell").setAttribute("aria-expanded", "false"); }
     const h = decodeURIComponent(location.hash.replace("#", ""));
     const before = state.page + state.slug;
     const leaving = pageKey();
@@ -1938,6 +2109,12 @@
     } else if (h === "watchlist") {
       state.page = "watch";
       state.slug = null;
+    } else if (h === "analytics" || h.startsWith("analytics/")) {
+      state.page = "analytics";
+      state.slug = null;
+      const [, v, t] = h.split("/");
+      state.an.view = VIEWS.includes(v) ? v : state.an.view || "big3";
+      state.an.tab = AN_TABS.some(([k]) => k === t) ? t : "overview";
     } else if (h === "etfs" || h.startsWith("etfs/")) {
       state.page = "etfs";
       state.slug = null;

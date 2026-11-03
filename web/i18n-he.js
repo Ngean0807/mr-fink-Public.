@@ -251,6 +251,57 @@
     "or": "או",
     "go back to Emerging": "לחזור לצומחות",
     "English": "English",
+    // analytics
+    "Analytics": "ניתוחים",
+    "charts": "גרפים",
+    "Analytics view": "תצוגת הניתוח",
+    "Sections": "אזורים",
+    "Activity": "פעילות",
+    "Sectors": "ענפים",
+    "13F portfolio value": "שווי התיק לפי 13F",
+    "Positions": "אחזקות",
+    "Top 10 weight": "משקל 10 הגדולות",
+    "Added / trimmed": "הגדילו / הקטינו",
+    "Largest sector": "הענף הגדול",
+    "securities in the filings": "ניירות ערך בדוחות",
+    "of the whole portfolio": "מכל התיק",
+    "Δ shares × quarter-end price": "שינוי במניות × מחיר בסוף הרבעון",
+    "Technology": "טכנולוגיה",
+    "Communications": "תקשורת",
+    "Discretionary": "צריכה (לא חיונית)",
+    "Staples": "צריכה בסיסית",
+    "Sector mix": "התפלגות לפי ענף",
+    "Other sectors": "ענפים אחרים",
+    "Top 10 holdings": "10 האחזקות הגדולות",
+    "Net buying": "קניות פחות מכירות",
+    "Price effect": "השפעת המחיר",
+    "Net buying = change in shares × quarter-end price. Price effect = the change in price on the shares held a quarter earlier.": "קניות פחות מכירות = השינוי במספר המניות × המחיר בסוף הרבעון. השפעת המחיר = השינוי במחיר על המניות שהוחזקו רבעון קודם.",
+    "Largest buys": "הקניות הגדולות",
+    "Largest sells": "המכירות הגדולות",
+    "Position actions": "מה עשו עם האחזקות",
+    "positions": "אחזקות",
+    "Biggest share-count changes": "השינויים הגדולים במספר המניות",
+    "Allocation by sector": "חלוקה לפי ענף",
+    "sectors": "ענפים",
+    "Net buying by sector": "קניות פחות מכירות לפי ענף",
+    "last quarter": "ברבעון האחרון",
+    "Sector table": "טבלת ענפים",
+    "weights compare quarter-end values": "המשקלות לפי השווי בסוף כל רבעון",
+    "Companies": "חברות",
+    "Weight": "משקל",
+    "Δ weight": "שינוי במשקל",
+    "13F portfolio value by manager": "שווי התיק לפי 13F, לפי מנהלת",
+    "Share of the Big Three": "החלק של כל אחת משלוש הגדולות",
+    "combined": "ביחד",
+    "Manager comparison": "השוואה בין המנהלות",
+    "Latest filing": "הדוח האחרון",
+    "Who owns the company": "מי מחזיק בחברה",
+    "share of all shares outstanding": "חלק מכל המניות של החברה",
+    "All other holders": "כל שאר המחזיקים",
+    // notifications
+    "Site health": "תקינות האתר",
+    "Mr. Fink stops updating or recovers, or a data check finds something to review (push only)": "Mr. Fink מפסיק להתעדכן או חוזר לעבוד, או שבדיקת נתונים מצאה משהו לבדוק (רק בהתראות שמגיעות גם כשהאתר סגור)",
+    "Turn on notifications": "הפעלת התראות",
     "Open": "פתיחה",
     "10-Q / 10-K": "דוחות רבעוניים ושנתיים (10-Q / 10-K)",
     ". Once installed, the bell's browser notifications also work on iPhone while the app is open.": ". אחרי ההתקנה, ההתראות של הפעמון יעבדו גם באייפון כשהאפליקציה פתוחה.",
@@ -991,7 +1042,7 @@
   P("• Benchmarks: the same small-cap universe without the stake test \\(isolates the signal from the small-cap effect\\), IWM and SPY price returns from Yahoo Finance\\.(?: Insider buying cannot be backtested: Form 4 data is collected for the last 90 days only\\.)?", (m) =>
     "• השוואה: אותן חברות קטנות בלי סינון האחזקה (כדי להפריד בין הסינון לבין ההשפעה של חברות קטנות), ותשואת המחיר של IWM ו-SPY מ-Yahoo Finance." + (m[0].includes("Insider") ? " אי אפשר לבדוק לאחור קניות של בעלי עניין: נתוני טופס 4 נאספים רק ל-90 הימים האחרונים." : ""));
   P("S&P 500 \\(SPY\\)", () => "מדד S&P 500 (SPY)");
-  P("(?:{T}|S&P 500|13F book value|Revenue|Net income|Shares held|Value held|Price)(?:,? (?:{T}|S&P 500|Russell 2000|All small caps|All three buying|Top 25|This screen|BlackRock|Vanguard|State Street))* chart", () => "גרף");
+  P("(?:{T}|S&P 500|13F book value|13F portfolio value|Revenue|Net income|Shares held|Value held|Price)(?:,? (?:{T}|S&P 500|Russell 2000|All small caps|All three buying|Top 25|This screen|BlackRock|Vanguard|State Street))* chart", () => "גרף");
 
   // 13F season (only shown while the managers file a new quarter)
   P("{Q} 13F season:", (m, v) => `עונת דוחות 13F של ${v(m[1])}:`);
@@ -1018,6 +1069,33 @@
   P("Loading the S&P 500…", () => "טוען את מדד S&P 500…");
   P("Could not load data/dashboard\\.json \\((.+)\\)\\. Run", (m) => `לא הצלחנו לטעון את הנתונים (${m[1]}). הריצו`);
   P(", then serve the web folder\\.", () => ", ואז הגישו את תיקיית web.");
+  // analytics
+  P("13F for {Q} · quarter ended {D}", (m, v) => `דוח 13F של ${v(m[1])} · הרבעון הסתיים ב-${v(m[2])}`);
+  P("Net buying, top (\\d+)", (m) => `קניות פחות מכירות, ${m[1]} הגדולות`);
+  P("of the top (\\d+)", (m) => `מתוך ${m[1]} הגדולות`);
+  P("{N} of the top (\\d+)", (m, v) => `${v(m[1])} מתוך ${m[2]} הגדולות`);
+  P("{Q} to {Q}, every reported position", (m, v) => `${v(m[1])} עד ${v(m[2])}, כל האחזקות שדווחו`);
+  P("{Q} to {Q}", (m, v) => `${v(m[1])} עד ${v(m[2])}`);
+  P("top (\\d+) holdings by market value", (m) => `${m[1]} האחזקות הגדולות, לפי שווי`);
+  P("top (\\d+) holdings", (m) => `${m[1]} האחזקות הגדולות`);
+  P("{N} of the portfolio", (m, v) => `${v(m[1])} מהתיק`);
+  P("What moved the top (\\d+) last quarter", (m) => `מה הזיז את ${m[1]} הגדולות ברבעון האחרון`);
+  P("Value {Q}", (m, v) => `שווי ${v(m[1])}`);
+  P("Weight {Q}", (m, v) => `משקל ${v(m[1])}`);
+  P("net (buying|selling) last quarter", (m) => (m[1] === "buying" ? "קניות ברבעון האחרון" : "מכירות ברבעון האחרון"));
+  P("whole portfolio, ([\\d,]+) securities", (m, v) => `כל התיק, ${v(m[1])} ניירות ערך`);
+  P("top (\\d+), shares vs the previous quarter", (m) => `${m[1]} הגדולות, מניות מול הרבעון הקודם`);
+  P("(\\d+) names", (m) => `${m[1]} חברות`);
+  P("\\+(\\d+) filers", (m) => `ועוד ${m[1]} גופים מדווחים`);
+  P("From the managers’ Form 13F filings on SEC EDGAR, the same data as the rest of Mr\\. Fink, updated with every new filing\\. (\\d+) = the largest company holdings; ETFs and funds are left out\\. Not investment advice\\.", (m) =>
+    `מדוחות ה-13F שהמנהלות מגישות ל-SEC, אותם נתונים כמו בשאר Mr. Fink, ומתעדכן עם כל דוח חדש. ${m[1]} = האחזקות הגדולות בחברות, בלי קרנות סל וקרנות. זו לא המלצה להשקעה.`);
+  P("{X}: {N}", (m, v) => { const t = v(m[1]); return t.startsWith("⁨") ? null : `${t}: ${v(m[2])}`; });
+  // notifications for one company
+  P("Notifications for {T}", (m) => `התראות על ${m[1]}`);
+  P("Follow {T} to get a Mr\\. Fink notification for each of its SEC filings \\(8-K, 10-Q/10-K, Big Three 13G/13D\\)\\.", (m) => `הוסיפו את ${m[1]} למעקב כדי לקבל מ-Mr. Fink התראה על כל דיווח שלה ל-SEC (8-K, 10-Q/10-K ודיווחי 13G/13D של שלוש הגדולות).`);
+  P("{T} is in your watchlist: Mr\\. Fink notifies you of each new filing, even when the site is closed\\.", (m) => `${m[1]} ברשימת המעקב: Mr. Fink ישלח לכם התראה על כל דיווח חדש, גם כשהאתר סגור.`);
+  P("{T} is in your watchlist: new filings show as notifications while Mr\\. Fink is open\\. Turn on push notifications to get them with the site closed\\.", (m) => `${m[1]} ברשימת המעקב: דיווחים חדשים יופיעו כהתראות כש-Mr. Fink פתוח. הפעילו התראות כדי לקבל אותן גם כשהאתר סגור.`);
+  P("{T} is in your watchlist\\. Turn on notifications to hear about each new filing\\.", (m) => `${m[1]} ברשימת המעקב. הפעילו התראות כדי לשמוע על כל דיווח חדש.`);
   P("New filing: (.+)", (m, v) => `דיווח חדש: ${v(m[1])}`);
   P("New SEC filing: (.+)\\. Data updated\\.", (m, v) => `דיווח חדש ל-SEC: ${v(m[1])}. הנתונים עודכנו.`);
   P("(Ahead of|Behind) the index by ([\\d.]+) points", (m) => `${m[1] === "Ahead of" ? "טוב מהמדד" : "חלש מהמדד"} ב-${iso(m[2])} נקודות אחוז`);
