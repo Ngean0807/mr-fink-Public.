@@ -568,3 +568,9 @@ sup { font-size: 10px; color: var(--muted); }
   [dir="rtl"] .follow, [dir="rtl"] .co-acts { margin-right: 0; }
 }
 [dir="rtl"] .ranges { flex-wrap: wrap; }
+[dir="rtl"] td:has(> b + small) { unicode-bidi: isolate; }
+[dir="rtl"] td:has(> b + small) > small { margin-right: 6px; }
+[dir="rtl"] .back svg { transform: scaleX(-1); }
+[dir="rtl"] .suggest .muted { white-space: nowrap; }
+@media (max-width: 640px) { .lang { width: 34px; height: 34px; font-size: 13px; } }
+[dir="rtl"] .fund-cell { min-width: 160px; }

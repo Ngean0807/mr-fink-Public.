@@ -50,6 +50,7 @@
   // ---------- value formatters ----------
   const MON = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
   const MON_HE = ["", "ינו׳", "פבר׳", "מרץ", "אפר׳", "מאי", "יוני", "יולי", "אוג׳", "ספט׳", "אוק׳", "נוב׳", "דצמ׳"];
+  const MONTH_HE = ["", "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
   const UNIT = { K: "אלף", M: "מיליון", B: "מיליארד", T: "טריליון" };
   const iso = (s) => LRI + s + PDI;
   /** "$389B" -> "$389 מיליארד", "+17.4%" stays, isolated left to right so signs stay in place. */
@@ -63,7 +64,7 @@
     let m = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{4})$/.exec(s);
     if (m) return iso(`${m[2]}.${MON[m[1]]}.${m[3]}`);
     m = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2})$/.exec(s);
-    if (m) return iso(`${m[2]}.${MON[m[1]]}`);
+    if (m) return `${m[2]} ב${MONTH_HE[MON[m[1]]]}`;
     m = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ’(\d\d)$/.exec(s);
     if (m) return `${MON_HE[MON[m[1]]]} ${m[2]}`;
     return null;
@@ -102,6 +103,15 @@
     return FSI + s + PDI;
   }
 
+  const HEB = /[\u0590-\u05FF]/;
+  /** Final touches on a Hebrew sentence: form codes such as 8-K kept left to right (else they show
+   *  as K-8), and no hyphen between a one-letter prefix and a Hebrew word ("ברבעון", not "ב-רבעון"). */
+  function polish(s) {
+    return s
+      .replace(/(?<![A-Za-z0-9\u2066])(\d+-[A-Z][A-Z0-9]*(?:\/[A-Z0-9-]+)*)(?![\w\u2069])/g, LRI + "$1" + PDI)
+      .replace(/(^|[\s(״"])([בלמהוכש])-(?=[\u2066-\u2069]?[\u0590-\u05FF])/g, "$1$2");
+  }
+
   // ---------- translation of one string ----------
   const cache = new Map();
   function tr(s, inner) {
@@ -122,6 +132,7 @@
       const done = parts.map((p) => (p === "" ? "" : tr(p, true) ?? (I.keep(p) ? FSI + p + PDI : null)));
       if (done.every((x) => x != null) && done.some((x, i) => x !== FSI + parts[i] + PDI)) out = done.join(" · ");
     }
+    if (out != null && HEB.test(out)) out = polish(out);
     if (cache.size > 20000) cache.clear();
     cache.set(s, out);
     return out;
@@ -137,6 +148,8 @@
     if (!val || seen.get(n) === val || !LATIN.test(val)) return;
     const p = n.parentElement;
     if (!p || SKIP.test(p.tagName) || p.closest("[translate=no]")) { seen.set(n, val); return; }
+    // An <option> without a value submits its text: keep the English as the value before translating it.
+    if (p.tagName === "OPTION" && !p.hasAttribute("value")) p.setAttribute("value", val.trim());
     const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(val);
     const core = m[2].replace(/\s+/g, " ");
     let t = null;
