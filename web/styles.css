@@ -576,3 +576,6 @@ sup { font-size: 10px; color: var(--muted); }
 [dir="rtl"] .fund-cell { min-width: 160px; }
 [dir="rtl"] :is(.tbl, .own-table, .fin-table) thead th { white-space: normal; min-width: 56px; }
 [dir="rtl"] .fund-cell .fund-name { white-space: normal; }
+[dir="rtl"] .suggest .muted { white-space: normal; }
+[dir="rtl"] .pn.off { display: inline-block; transform: scaleX(-1); }
+[dir="rtl"] .fund-cell .mdot { margin-left: 0; margin-right: 8px; }

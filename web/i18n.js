@@ -11,7 +11,7 @@
   const KEY = "mrfink.lang";
   let lang = "en";
   try { lang = localStorage.getItem(KEY) === "he" ? "he" : "en"; } catch (e) { /* storage unavailable */ }
-  window.MRFINK_LANG = lang;
+  window.MRFINK_LANG = "en";  // becomes "he" only once Hebrew is really applied (below)
 
   // ---------- the switch ----------
   function addToggle() {
@@ -22,12 +22,13 @@
     b.id = "lang";
     b.className = "lang";
     b.setAttribute("translate", "no");
-    b.textContent = lang === "he" ? "EN" : "עב";
-    b.title = lang === "he" ? "English" : "עברית";
-    b.setAttribute("aria-label", lang === "he" ? "Switch to English" : "החלפה לעברית");
-    b.lang = lang === "he" ? "en" : "he";
+    const he = window.MRFINK_LANG === "he";
+    b.textContent = he ? "EN" : "עב";
+    b.title = he ? "English" : "עברית";
+    b.setAttribute("aria-label", he ? "Switch to English" : "החלפה לעברית");
+    b.lang = he ? "en" : "he";
     b.addEventListener("click", () => {
-      try { localStorage.setItem(KEY, lang === "he" ? "en" : "he"); } catch (e) { /* storage unavailable */ }
+      try { localStorage.setItem(KEY, he ? "en" : "he"); } catch (e) { /* storage unavailable */ }
       location.reload();
     });
     bar.insertBefore(b, bar.firstChild);
@@ -35,6 +36,7 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addToggle);
   else addToggle();
   if (lang !== "he" || !window.MRFINK_I18N) return;  // no dictionary: stay in plain English
+  window.MRFINK_LANG = "he";
 
   document.documentElement.lang = "he";
   document.documentElement.dir = "rtl";
@@ -92,7 +94,7 @@
     s = String(s);
     if (NUMRE.test(s)) {
       const pp = / (pp|pts)$/.exec(s);
-      if (pp) return num(s.slice(0, -pp[0].length)) + (pp[1] === "pts" ? " נק׳ אחוז" : " נק׳");
+      if (pp) return num(s.slice(0, -pp[0].length)) + " נק׳ אחוז";
       return num(s);
     }
     const d = date(s) || quarter(s) || clock(s);
@@ -108,7 +110,7 @@
    *  as K-8), and no hyphen between a one-letter prefix and a Hebrew word ("ברבעון", not "ב-רבעון"). */
   function polish(s) {
     return s
-      .replace(/(?<![A-Za-z0-9\u2066])(\d+-[A-Z][A-Z0-9]*(?:\/[A-Z0-9-]+)*)(?![\w\u2069])/g, LRI + "$1" + PDI)
+      .replace(/(?<![A-Za-z0-9\u2066])(\d+-[A-Z][A-Z0-9]*(?:\/[A-Z0-9-]+)*)(?![\w\u2069])/g, (f) => LRI + f.replace(/-/g, "-\u2060") + PDI)
       .replace(/(^|[\s(״"])([בלמהוכש])-(?=[\u2066-\u2069]?[\u0590-\u05FF])/g, "$1$2");
   }
 
@@ -156,7 +158,7 @@
     const core = m[2].replace(/\s+/g, " ");
     let t = null;
     // A few words read differently depending on where they stand (I.ctx: [selector, {English: Hebrew}]).
-    for (const [sel, map] of I.ctx || []) if (map[core] && p.closest(sel)) { t = map[core]; break; }
+    for (const [sel, map] of I.ctx || []) if (map[core] && p.closest(sel)) { t = HEB.test(map[core]) ? polish(map[core]) : map[core]; break; }
     if (t == null && core && I.role && p.matches(I.roleSel)) t = I.role(core);
     if (t == null && core) t = tr(core);
     // Charts are drawn left to right: a Hebrew label inside one is kept together as a right-to-left unit.

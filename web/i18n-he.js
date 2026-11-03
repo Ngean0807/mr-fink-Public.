@@ -11,7 +11,7 @@
     "Holdings": "אחזקות",
     "Mr. Fink home": "מסך הבית של Mr. Fink",
     "Search holdings": "חיפוש אחזקות",
-    "Search holdings by ticker or company": "חיפוש חברה (באנגלית)",
+    "Search holdings by ticker or company": "חיפוש (באנגלית)",
     "Notifications": "התראות",
     "Managers": "מנהלות ההשקעות",
     "Largest holdings, live prices": "האחזקות הגדולות, מחירים עכשיו",
@@ -272,7 +272,7 @@
     "Russell 2000": "ראסל 2000",
     "This screen": "הסינון הזה",
     "All three managers buying": "כל שלוש המנהלות קונות",
-    "All three buying": "כל השלוש קונות",
+    "All three buying": "שלושתן קונות",
     "All small caps, no signal": "כל החברות הקטנות, בלי סינון",
     "All small caps": "כל החברות הקטנות",
     "Top 25 by stake gain": "25 עם העלייה הגדולה בחלק מהחברה",
@@ -391,7 +391,7 @@
     "Best year first": "התשואה השנתית הגבוהה קודם",
     "Worst year first": "התשואה השנתית הנמוכה קודם",
     "Select Sector SPDR · Vanguard sector · iShares U.S. sector. Tap a fund for its full name and largest holdings. “Best year” ranks sectors by the three funds’ average 1-year return.":
-      "\u2068Select Sector SPDR\u2069 · \u2068Vanguard sector\u2069 · \u2068iShares U.S. sector\u2069. לחצו על קרן כדי לראות את השם המלא שלה ואת האחזקות הגדולות. ״השנה הטובה ביותר״ מסדר את הענפים לפי התשואה הממוצעת של שלוש הקרנות בשנה האחרונה.",
+      "קרנות הענפים של SPDR, Vanguard ו-iShares. לחצו על קרן כדי לראות את השם המלא שלה ואת האחזקות הגדולות. ״השנה הטובה ביותר״ מסדר את הענפים לפי התשואה הממוצעת של שלוש הקרנות בשנה האחרונה.",
     "Largest holdings": "האחזקות הגדולות",
     "Each bond is listed separately with its coupon and maturity. Cash collateral and money-market sweep vehicles are left out.": "כל אג״ח מופיעה בנפרד, עם הריבית ומועד הפירעון שלה. מזומן וקרנות כספיות לא נכללים.",
     "Holdings of one issuer are added together (for a bond fund, every bond of that issuer; for Alphabet, both share classes). Cash collateral and money-market sweep vehicles are left out.":
@@ -743,6 +743,8 @@
       const pre = /^(svp|evp|sr\. vp|vp)\s*-\s*(.+)$/i.exec(p);
       if (pre) k = pre[2].toLowerCase();
       const h = ROLE[k] || ROLE[k + "."] || (/^interim /.test(k) && ROLE[k.slice(8)] ? ROLE[k.slice(8)] + " זמני" : null);
+      const head = !h && /^(ceo|cfo|coo|president|evp|svp|vp)\b[\s-]*(.+)$/i.exec(p);
+      if (head) { out.push(`${ROLE[head[1].toLowerCase()]} (${FSI}${head[2]}${PDI})`); continue; }
       if (!h) { if (!out.length) return null; unknown = true; continue; }  // must start like a title
       out.push(pre ? `${ROLE[pre[1].toLowerCase()]}, ${h}` : h);
     }
@@ -870,7 +872,7 @@
   P("Quarter ended {D}", (m, v) => `רבעון שהסתיים ב-${v(m[1])}`);
   P("{N} margin", (m, v) => `${v(m[1])} מההכנסות`);
   P("{N} pts", (m, v) => `${v(m[1])} נק׳ אחוז`);
-  P("{N} pp", (m, v) => `${v(m[1])} נק׳`);
+  P("{N} pp", (m, v) => `${v(m[1])} נק׳ אחוז`);
   P("Form 4 · last (\\d+) days", (m) => `דיווחי בעלי עניין (טופס 4) · ${m[1]} הימים האחרונים`);
   P("Form 4", () => "טופס 4");
   const count = (n, one, many) => (n === "0" ? "" : n === "1" ? one : `${n} ${many}`);
@@ -880,8 +882,8 @@
   P("Bought {N} · sold {N}", (m, v) => `קנו ${v(m[1])} · מכרו ${v(m[2])}`);
   P("No open-market purchases or sales by officers, directors or 10% owners in the last (\\d+) days\\.", (m) => `אין קניות או מכירות בבורסה של מנהלים, דירקטורים או בעלי 10% ב-${m[1]} הימים האחרונים.`);
   P("Open-market purchases and sales only; stock awards, option exercises, tax withholding and gifts are left out\\. (\\d+) recent Form 4 filings are still being read and will appear after the next refreshes\\.", (m) =>
-    `רק קניות ומכירות בבורסה. מניות שקיבלו כשכר, מימוש אופציות, ניכוי מס ומתנות לא נכללים. ${m[1]} דיווחים חדשים (טופס 4) עוד בקריאה, ויופיעו בעדכונים הבאים.`);
-  P("(\\d+) recent Form 4 filings are still being read and will appear after the next refreshes\\.", (m) => `${m[1]} דיווחים חדשים (טופס 4) עוד בקריאה, ויופיעו בעדכונים הבאים.`);
+    `רק קניות ומכירות בבורסה. מניות שקיבלו כשכר, מימוש אופציות, ניכוי מס ומתנות לא נכללים. ${m[1] === "1" ? "דיווח חדש אחד (טופס 4) עוד בקריאה, ויופיע" : m[1] + " דיווחים חדשים (טופס 4) עוד בקריאה, ויופיעו"} בעדכונים הבאים.`);
+  P("(\\d+) recent Form 4 filings are still being read and will appear after the next refreshes\\.", (m) => `${m[1] === "1" ? "דיווח חדש אחד (טופס 4) עוד בקריאה, ויופיע" : m[1] + " דיווחים חדשים (טופס 4) עוד בקריאה, ויופיעו"} בעדכונים הבאים.`);
   P("{X}: {N} now, {N} a year ago", (m, v) => `${v(m[1])}: ${v(m[2])} היום, ${v(m[3])} לפני שנה`);
   P("{X}: {N} now, not held a year ago", (m, v) => `${v(m[1])}: ${v(m[2])} היום, לא החזיקה לפני שנה`);
   P("{N} owned by the Big Three", (m, v) => `${v(m[1])} בידי שלוש הגדולות`);
@@ -913,8 +915,8 @@
   P("Small companies trading at {N}–{N} where BlackRock, Vanguard and State Street together own a growing share of the company", (m, v) =>
     `חברות קטנות שנסחרות ב-${v(m[1])} עד ${v(m[2])}, שבלקרוק, ואנגארד וסטייט סטריט מחזיקות בהן יחד חלק שהולך וגדל`);
   P("companies match · 13F data as of {D}", (m, v) => `חברות מתאימות · נתוני 13F נכון ל-${v(m[1])}`);
-  P("Since the last 13F deadline \\({D}\\), the median stock on this list moved", (m, v) => `מאז המועד האחרון לדוח 13F (${v(m[1])}), המניה החציונית ברשימה זזה`);
-  P("\\((\\d+) with price history\\), against", (m) => `(${m[1]} עם היסטוריית מחירים), מול`);
+  P("Since the last 13F deadline \\({D}\\), the median stock on this list moved", (m, v) => `מאז המועד האחרון לדוח 13F (${v(m[1])}), המחיר של המניה החציונית ברשימה השתנה ב-`);
+  P("\\((\\d+) with price history\\), against", (m) => `(${m[1]} מניות עם היסטוריית מחירים), מול`);
   P("for the Big Three top (\\d+)\\. One period is not a backtest, but it is the honest test of following these filings\\.", (m) => `ל-${m[1]} האחזקות הגדולות של שלוש הגדולות. תקופה אחת היא לא בדיקה היסטורית, אבל זו הבדיקה הכנה של מעקב אחרי הדוחות האלה.`);
   P("Micro · under {N}", (m, v) => `זעירות · עד ${v(m[1])}`);
   P("Small · {N}–{N}", (m, v) => `קטנות · ${v(m[1])} עד ${v(m[2])}`);
@@ -998,7 +1000,7 @@
   P("filed {Q} on {D}\\. The main table stays at {Q} until the other managers file\\.", (m, v) => `הגישה את הדוח של ${v(m[1])} ב-${v(m[2])}. הטבלה הראשית נשארת על ${v(m[3])} עד שהמנהלות האחרות יגישו.`);
   P("{N} of {N} filing entities so far for {Q}\\. It moves to the new quarter when every entity has reported(?: \\(waiting for (.+)\\))?\\.", (m, v) =>
     `${v(m[1])} מתוך ${v(m[2])} החברות המדווחות שלה כבר דיווחו על ${v(m[3])}. התצוגה תעבור לרבעון החדש כשכל הגופים ידווחו${m[4] ? ` (מחכים ל-${FSI}${m[4]}${PDI})` : ""}.`);
-  P("\\. The tables stay at {Q} until all three have filed, so every view compares the same quarter\\.", (m, v) => `. הטבלאות נשארות על ${v(m[1])} עד שכל השלוש יגישו, כדי שכל התצוגות ישוו את אותו רבעון.`);
+  P("\\. The tables stay at {Q} until all three have filed, so every view compares the same quarter\\.", (m, v) => `. הטבלאות נשארות על ${v(m[1])} עד ששלושתן יגישו, כדי שכל התצוגות ישוו את אותו רבעון.`);
   P("\\. The main table stays at {Q} until the other managers file\\.", (m, v) => `. הטבלה הראשית נשארת על ${v(m[1])} עד שהמנהלות האחרות יגישו.`);
   P("(Show|Hide) {Q} holdings", (m, v) => `${m[1] === "Show" ? "הצגת" : "הסתרת"} האחזקות של ${v(m[2])}`);
   P("for {Q}\\. It moves to the new quarter when every entity has reported(?: \\(waiting for (.+)\\))?\\.", (m, v) => `ל-${v(m[1])}. התצוגה תעבור לרבעון החדש כשכל הגופים ידווחו${m[2] ? ` (מחכים ל-${m[2]})` : ""}.`);

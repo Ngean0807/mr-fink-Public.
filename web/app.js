@@ -427,7 +427,7 @@
       el("line", { x1: m.l, x2: plotR, y1: y(t), y2: y(t), class: "gridline" }, ax);
       el("text", { x: W - m.r, y: y(t) + 4, "text-anchor": "end" }, ax).textContent = axisFmt(t);
     });
-    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((plotR - m.l) / 72))));
+    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((plotR - m.l) / (window.MRFINK_LANG === "he" ? 100 : 72)))));
     for (let i = n - 1; i >= 0; i -= every) {
       el("text", { x: x(i), y: H - 8, "text-anchor": i === n - 1 ? "end" : "middle" }, ax).textContent = xLabel(i);
     }
