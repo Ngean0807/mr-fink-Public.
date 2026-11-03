@@ -301,6 +301,7 @@
     const list = [];
     if (state.page === "company") { const s = bySlug(state.slug); if (s) list.push(s.ticker); }
     if (state.page === "etfs") return etfVisible().map((r) => r.ticker).slice(0, WS_LIMIT);
+    if (state.page === "analytics") return [...new Set([...peerRows("banks").map((r) => r.ticker), ...[...document.querySelectorAll("#app [data-live]")].map((n) => n.dataset.t).filter(Boolean)])].slice(0, WS_LIMIT);
     const tableRows = state.page === "emerging" ? emergingSorted() : state.page === "watch" ? watchItems() : view().rows;
     const tk = (r) => emSec(r).ticker;
     list.push(...tableRows.slice(0, 12).map(tk));  // the price strip
@@ -352,7 +353,8 @@
       const r = await fetch("data/quotes.json?t=" + Date.now(), { cache: "no-store" });
       if (!r.ok) return;
       const data = await r.json();
-      for (const [t, q] of Object.entries(data.quotes || {})) setQuote(t, q);
+      // In real-time mode this is the fallback: never replace a newer streamed price with an older quote.
+      for (const [t, q] of Object.entries(data.quotes || {})) if (!(Q[t] && Q[t].time && q.time && q.time <= Q[t].time)) setQuote(t, q);
     } catch (e) { /* keep last prices */ }
   }
 
@@ -532,7 +534,7 @@
     const rows = (state.page === "emerging" ? emergingSorted() : state.page === "watch" && watch.length ? watchItems() : state.page === "etfs" && ETF ? etfVisible() : view().rows).slice(0, 12);
     $("tape").innerHTML = rows.map((r) => {
       const s = emSec(r);
-      return `<a class="tape-item" href="#t-${slugOf(s.ticker)}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
+      return `<a class="tape-item" href="${state.page === "etfs" ? `#etfs/${s.ticker}` : `#t-${slugOf(s.ticker)}`}"><span class="tape-t">${esc(s.ticker)}</span>${live("px", s.ticker)}${live("pill", s.ticker)}</a>`;
     }).join("");
   }
   function renderChips() {
@@ -567,17 +569,23 @@
     let sel = -1;
     function results() {
       const t = q.value.trim().toLowerCase();
+      const norm = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const tn = norm(t);
       const held = (s) => { const v = holder(s.cusip, "big3"); return v ? lastOf(v)[1] : 0; };
+      const known = new Set([...Object.values(D.securities).map((s) => s.ticker), ...emergingAll().map((r) => r.ticker)]);
+      const extra = Object.entries(D.meta.coNames || {}).filter(([tk]) => !known.has(tk)).map(([tk, name]) => ({ s: { ticker: tk, name }, held: -1 }));
+      if (!ETF && !etfFailed) loadEtfs();
+      const funds = ETF ? ETF.funds.map((f) => ({ s: { ticker: f.ticker, name: f.name, href: `#etfs/${f.ticker}`, manager: f.manager }, held: -2 })) : [];
       const list = Object.values(D.securities).map((s) => ({ s, held: held(s) }))
-        .concat(emergingAll().filter((r) => !D.securities[r.cusip]).map((r) => ({ s: r, held: r.value })))
-        .filter(({ s }) => !t || s.ticker.toLowerCase().startsWith(t) || niceName(s.name).toLowerCase().includes(t));
+        .concat(emergingAll().filter((r) => !D.securities[r.cusip]).map((r) => ({ s: r, held: r.value })), extra, funds)
+        .filter(({ s }) => !t || (tn && norm(s.ticker).startsWith(tn)) || niceName(s.name).toLowerCase().includes(t));
       list.sort((a, b) => b.held - a.held);
       return list.slice(0, 8);
     }
     function draw() {
       const r = results();
       box.innerHTML = r.length
-        ? r.map(({ s, held }, i) => `<a href="#t-${slugOf(s.ticker)}" role="option" aria-selected="${i === sel}">${tkChip(s)}<span class="nm">${esc(niceName(s.name))}</span><span class="muted">${held ? usd(held) + " held" : ""}</span></a>`).join("")
+        ? r.map(({ s, held }, i) => `<a href="${s.href || `#t-${slugOf(s.ticker)}`}" role="option" aria-selected="${i === sel}">${s.href ? `<span class="tk" style="background:${mColor(s.manager)}">${esc(s.ticker)}</span>` : tkChip(s)}<span class="nm">${esc(niceName(s.name))}</span><span class="muted">${held > 0 ? usd(held) + " held" : held === -2 ? "ETF" : ""}</span></a>`).join("")
         : `<div class="empty">No holding matches “${esc(q.value)}”. Mr. Fink covers the Big Three’s largest company holdings.</div>`;
       box.hidden = false;
       q.setAttribute("aria-expanded", "true");
@@ -589,7 +597,7 @@
       const r = results();
       if (e.key === "ArrowDown") { sel = Math.min(r.length - 1, sel + 1); draw(); e.preventDefault(); }
       else if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); draw(); e.preventDefault(); }
-      else if (e.key === "Enter") { const pick = r[Math.max(0, sel)]; if (pick) { location.hash = "t-" + slugOf(pick.s.ticker); q.value = ""; close(); q.blur(); } }
+      else if (e.key === "Enter") { const pick = r[Math.max(0, sel)]; if (pick) { location.hash = pick.s.href ? pick.s.href.slice(1) : "t-" + slugOf(pick.s.ticker); q.value = ""; close(); q.blur(); } }
       else if (e.key === "Escape") { close(); q.blur(); }
     });
     box.addEventListener("click", () => { q.value = ""; close(); });
@@ -937,7 +945,7 @@
     t.classList.toggle("grouped", !!grp);
     t.innerHTML = thead + tbody;
     t.style.minWidth = state.tab === "overview" ? "1040px" : "1240px";
-    $("count").textContent = q ? `${rows.length} of ${v.rows.length} holdings` : `${v.rows.length} holdings`;
+    $("count").textContent = state.filter.trim() ? `${rows.length} of ${v.rows.length} holdings` : `${v.rows.length} holdings`;
     $("foot").innerHTML = {
       overview: "Stake is shares held ÷ shares outstanding (all share classes, as-converted). QoQ net flow is the change in shares valued at the quarter-end price. Select a company for its full page.",
       analytics: "Added or trimmed means the share count moved by more than 0.5%. For index funds that mostly reflects fund flows and index changes rather than stock picking. Share counts are split-adjusted. Price return is the change in the quarter-end price implied by the filings (value ÷ shares) and excludes dividends and spin-offs. <sup>*</sup> Already held when tracking starts in Q1 2017, so the first purchase was earlier.",
@@ -1006,7 +1014,7 @@
       const p = pxOf(t) || r.price;
       const mcap = r.sharesOutstanding * p;
       const flags = liveFlags(r);
-      return p >= f.pmin && p <= f.pmax && mcap >= f.mcapMin && mcap <= f.mcap
+      return p >= f.pmin && p <= f.pmax && mcap >= f.mcapMin && (f.mcap >= 1e10 || mcap <= f.mcap)
         && (f.pattern === "all" || r.pattern === f.pattern)
         && !(f.hideDeals && flags.includes("pending-deal"))
         && !(f.hideThin && flags.includes("thin"))
@@ -1029,7 +1037,7 @@
     flowYoY: (r) => r.flowYoY,
     pattern: (r) => r.pattern,
     rev: (r) => (emSec(r).fundamentals || {}).revenueGrowth,
-    ins: (r) => (r.insiders ? r.insiders.bought - r.insiders.sold : null),
+    ins: (r) => (r.insiders && (r.insiders.bought || r.insiders.sold) ? r.insiders.bought - r.insiders.sold : null),
   };
   const MC_STEPS = [[0, "$0"], [5e7, "$50M"], [1e8, "$100M"], [3e8, "$300M"], [5e8, "$500M"], [1e9, "$1B"], [2e9, "$2B"], [3e9, "$3B"], [5e9, "$5B"], [1e10, "$10B"]];
   const MC_PRESETS = [["all", 0, 1e10, "All sizes"], ["micro", 0, 3e8, "Micro · under $300M"], ["small", 3e8, 2e9, "Small · $300M–$2B"], ["mid", 2e9, 1e10, "Mid · $2B–$10B"]];
@@ -1183,7 +1191,7 @@
           <label>Price <input id="em-pmin" type="number" min="0" step="1" value="${f.pmin}"> – <input id="em-pmax" type="number" min="1" step="1" value="${f.pmax}"></label>
           <span class="mc-presets" role="group" aria-label="Company size">${MC_PRESETS.map(([k, lo, hi, l]) => `<button type="button" class="chip" data-mc="${k}" aria-pressed="${f.mcapMin === lo && f.mcap === hi}">${l}</button>`).join("")}</span>
           <label>Market cap <select id="em-mcmin" aria-label="Minimum market cap">${MC_STEPS.filter(([v]) => v < 1e10).map(([v, l]) => `<option value="${v}" ${f.mcapMin === v ? "selected" : ""}>${v ? "from " + l : "no minimum"}</option>`).join("")}</select>
-            – <select id="em-mcmax" aria-label="Maximum market cap">${MC_STEPS.filter(([v]) => v > 0).map(([v, l]) => `<option value="${v}" ${f.mcap === v ? "selected" : ""}>${v === 1e10 ? "up to $10B (all)" : "up to " + l}</option>`).join("")}</select></label>
+            – <select id="em-mcmax" aria-label="Maximum market cap">${MC_STEPS.filter(([v]) => v > 0).map(([v, l]) => `<option value="${v}" ${f.mcap === v ? "selected" : ""}>${v === 1e10 ? "no maximum" : "up to " + l}</option>`).join("")}</select></label>
           <label class="chk"><input id="em-deals" type="checkbox" ${f.hideDeals ? "checked" : ""}> Hide pending deals</label>
           <label class="chk"><input id="em-thin" type="checkbox" ${f.hideThin ? "checked" : ""}> Hide thin trading</label>
           <label class="chk"><input id="em-three" type="checkbox" ${f.allThree ? "checked" : ""}> All three buying</label>
@@ -1502,7 +1510,11 @@
     const { base } = pricePoints(t);
     const p = pxOf(t);
     if (!base) return `<span class="figure-value">${live("px", t)}</span>${live("pillLg", t)}<span class="muted">today</span>`;
-    return `<span class="figure-value">${live("px", t)}</span>${pill(p / base - 1)}<span class="figure-chg ${p >= base ? "txt-up" : "txt-down"}">${p >= base ? "+" : "-"}${price(Math.abs(p - base)).slice(1)}</span><span class="muted">${label}</span>`;
+    const pts = pricePoints(t).pts;
+    const span = state.pxRange === "Max" ? Infinity : state.pxRange === "YTD" ? null : (PX_RANGES.find(([k]) => k === state.pxRange) || [0, 0])[1];
+    const short = pts.length && (state.pxRange === "Max" || (span && pts[0][0] - (Date.now() - span * 86400000) > 7 * 86400000));
+    const label2 = short ? `since ${dateL(new Date(pts[0][0]).toISOString().slice(0, 10))}` : label;
+    return `<span class="figure-value">${live("px", t)}</span>${pill(p / base - 1)}<span class="figure-chg ${p >= base ? "txt-up" : "txt-down"}">${p >= base ? "+" : "-"}${price(Math.abs(p - base)).slice(1)}</span><span class="muted">${label2}</span>`;
   }
   function drawCoChart(s) {
     const host = $("co-chart");
@@ -1577,7 +1589,7 @@
     try { seen = JSON.parse(localStorage.getItem("mrfink.watchSeen") || "{}"); } catch (e) { seen = {}; }
     const tracked = new Set(Object.values(D.securities).filter((x) => !x.lite).map((x) => x.ticker));
     const fresh = [];
-    for (const t of watch.filter((x) => !tracked.has(x) && emergingAll().some((r) => r.ticker === x))) {
+    for (const t of watch.filter((x) => !tracked.has(x) && (emergingAll().some((r) => r.ticker === x) || (D.meta.coPages || []).includes(x)))) {
       try {
         const r = await fetch(`data/co/${slugOf(t)}.json?t=${Date.now()}`, { cache: "no-store" });
         if (!r.ok) continue;
@@ -1813,7 +1825,7 @@
   }
   function anFlows(v) {
     const fl = etfSectorFlows();
-    if (!fl) return '<p class="empty-state">Loading ETFs…</p>';
+    if (!fl) return etfMissing();
     const thirteen = new Map(sectorAgg(v.rows).map((x) => [x.label, x.trade]));
     const per = (x) => x && x.fl ? `<span title="${dateL(x.fl.from)} to ${dateL(x.fl.to)}">${signed(x.fl.flow, usdS)}</span>` : '<span class="na">—</span>';
     const body = fl.map((x) => `<tr><td class="l"><span class="mdot" style="background:${secColor(x.sector)}"></span>${esc(x.sector)}</td>${x.flows.map((y) => `<td><a href="#etfs/${y.f.ticker}" class="tk-link">${esc(y.f.ticker)}</a> ${per(y)}</td>`).join("")}<td><b>${signed(x.total, usdS)}</b></td><td>${signed(x.pct)}</td><td>${thirteen.has(x.sector) ? signed(thirteen.get(x.sector), usdS) : '<span class="na">—</span>'}</td></tr>`).join("");
@@ -1890,13 +1902,13 @@
     return `<div class="an-grid">
       ${panelH("w12", "Executive brief", `${qlabel(per[n - 1])} 13F · ${esc(MGR_NAME[state.an.view])}`, `<ul class="brief">${pts.join("")}</ul>`)}
       ${panelH("w6", "Where the 13F buying went", `net buying by sector, top ${D.meta.topN}`, hbars(secItems))}
-      ${panelH("w6", "Where ETF money went", "flows into the Big Three’s sector ETFs", fl ? hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))) : '<p class="empty-state">Loading ETFs…</p>')}
+      ${panelH("w6", "Where ETF money went", "flows into the Big Three’s sector ETFs", fl ? hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))) : etfMissing())}
     </div>`;
   }
   function renderAnalytics() {
     const a = state.an, v = D.views[a.view];
     const per = D.meta.periods, n = per.length;
-    if (!ETF && ["brief", "flows"].includes(a.tab)) loadEtfs().then(() => { if (state.page === "analytics") render(); });
+    if (["brief", "flows"].includes(a.tab)) needEtf("analytics");
     const body = { brief: anBrief, overview: anOverview, activity: anActivity, sectors: anSectors, flows: anFlows, peers: anPeers, managers: anManagers }[a.tab](v);
     $("app").innerHTML = `<div class="main an-main">
       <div class="hero">
@@ -1921,6 +1933,9 @@
   function watchItems() {
     return watch.map((t) => {
       const s = bySlug(slugOf(t)) || emergingAll().find((r) => r.ticker === t);
+      if (!s && (D.meta.coPages || []).includes(t)) {
+        loadCompany(slugOf(t)).then((ok) => { if (ok && ["watch", "home"].includes(state.page)) render(); }).catch(() => {});
+      }
       return s || null;
     }).filter(Boolean);
   }
@@ -1978,15 +1993,23 @@
   const ISSUER = { blackrock: "iShares", vanguard: "Vanguard", statestreet: "SPDR" };
   function loadEtfs() {
     if (!etfLoad) {
-      etfLoad = fetch("data/etfs.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => {
+      etfLoad = fetch("data/etfs.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status)))).then((d) => {
         ETF = d;
         // Seed prices so the page is complete before the live feed ticks.
         for (const f of (d && d.funds) || []) if (f.price && !(Q[f.ticker] && Q[f.ticker].price)) Q[f.ticker] = { ...(Q[f.ticker] || {}), price: f.price, prevClose: f.prevClose, time: f.time };
         return d;
-      }).catch(() => null);
+      }).catch(() => { etfLoad = null; return null; });
     }
     return etfLoad;
   }
+  /** ETF data for a page: true when ready; otherwise starts one load and re-renders that page when it ends. */
+  let etfFailed = false;
+  function needEtf(page) {
+    if (ETF) return true;
+    if (!etfFailed && !etfLoad) loadEtfs().then((d) => { if (!d) etfFailed = true; if (["etfs", "analytics", "emerging"].includes(state.page)) { render(); syncSubscriptions(); } });
+    return false;
+  }
+  const etfMissing = () => (etfFailed ? '<p class="empty-state">ETF data could not be loaded. <button type="button" class="btn" data-etf-retry>Try again</button></p>' : '<p class="empty-state">Loading ETFs…</p>');
   state.etf = { issuer: "all", cat: "", q: "", sort: "netAssets", dir: -1, sectorSort: "name", open: null };
   try { const saved = JSON.parse(localStorage.getItem("mrfink.etf") || "null"); if (saved) Object.assign(state.etf, saved, { open: null, secOpen: null }); } catch (e) { /* storage unavailable */ }
   const saveEtf = () => { try { const { open, secOpen, ...rest } = state.etf; localStorage.setItem("mrfink.etf", JSON.stringify(rest)); } catch (e) { /* storage unavailable */ } };
@@ -2005,6 +2028,7 @@
         if (x == null && y == null) return 0;
         if (x == null) return 1;
         if (y == null) return -1;
+        if (typeof x === "string" && typeof y === "string") return x.localeCompare(y, "en", { sensitivity: "base" }) * e.dir;
         return (x < y ? -1 : x > y ? 1 : 0) * e.dir;
       });
   }
@@ -2025,21 +2049,20 @@
   }
   function renderEtfs() {
     saveEtf();
-    if (!ETF) {
-      $("app").innerHTML = '<div class="main"><p class="empty-state">Loading ETFs…</p></div>';
-      loadEtfs().then(() => { if (state.page === "etfs") { render(); syncSubscriptions(); } });
+    if (!needEtf("etfs")) {
+      $("app").innerHTML = `<div class="main">${etfMissing()}</div>`;
       return;
     }
     const e = state.etf;
     const cats = [...new Set(etfCore().map((f) => f.category))];
     const rows = etfVisible();
     const ret = (x) => (x == null ? '<span class="na">—</span>' : pill(x, { sm: true }));
-    const body = rows.map((f) => `<tr data-etf="${f.ticker}" class="${e.open === f.ticker ? "open" : ""}">
+    const body = rows.map((f) => `<tr data-etf="${f.ticker}" tabindex="0" aria-expanded="${e.open === f.ticker}" class="${e.open === f.ticker ? "open" : ""}">
         <td class="l fz fz-em"><span class="co">${etfChip(f)}<span class="co-nm"><b>${esc(f.name)}</b><small>${esc(ISSUER[f.manager])} · ${esc(f.category)}</small></span></span></td>
         <td>${live("px", f.ticker)}</td><td>${live("pill", f.ticker)}</td><td>${ret(f.ytd)}</td><td>${ret(f.ret1y)}</td>
         <td>${spark(f.spark || [], f.ret1y >= 0 ? "var(--pos-line)" : "var(--neg-line)")}</td>
         <td>${f.netAssets ? usd(f.netAssets) : '<span class="na">—</span>'}</td>
-      </tr>${e.open === f.ticker ? `<tr class="etf-detail"><td colspan="7" class="l etf-wrap">${etfTop(f)}</td></tr>` : ""}`).join("");
+      </tr>${e.open === f.ticker ? `<tr class="etf-detail"><td colspan="7" class="l etf-wrap">${etfTop(f)}</td></tr>` : ""}`).join("") || '<tr><td colspan="7" class="l empty-state">No fund matches. Try a ticker such as VTI or a word from the name.</td></tr>';
     const secEntries = Object.entries(ETF.sectors);
     if (e.sectorSort !== "name") {
       const avg1y = (by) => { const v = Object.values(by).map((t) => (etfByTicker(t) || {}).ret1y).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : -Infinity; };
@@ -2093,7 +2116,11 @@
       e.sort = k;
       render();
     }));
-    app.querySelectorAll("tr[data-etf]").forEach((tr) => tr.addEventListener("click", () => { e.open = e.open === tr.dataset.etf ? null : tr.dataset.etf; render(); }));
+    app.querySelectorAll("tr[data-etf]").forEach((tr) => {
+      const toggle = () => { e.open = e.open === tr.dataset.etf ? null : tr.dataset.etf; render(); };
+      tr.addEventListener("click", toggle);
+      tr.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(); } });
+    });
     app.querySelectorAll("[data-etf-sec]").forEach((b) => b.addEventListener("click", () => { e.secOpen = e.secOpen === b.dataset.etfSec ? null : b.dataset.etfSec; render(); }));
     if (etfWant) {
       openEtf(etfWant);
@@ -2116,7 +2143,7 @@
   /** On Emerging, the three issuers' ETFs for the sector being filtered. */
   function sectorEtfCard(sector) {
     if (!sector) return "";
-    if (!ETF) { loadEtfs().then(() => { if (state.page === "emerging") render(); }); return ""; }
+    if (!needEtf("emerging")) return "";
     const by = ETF.sectors[sector];
     if (!by) return "";
     return `<div class="sector-etfs"><b>${esc(sector)} ETFs from the Big Three:</b> ${["statestreet", "vanguard", "blackrock"].map((m) => {
@@ -2127,6 +2154,8 @@
 
   // ---------- company navigation: back to the list, previous / next in it ----------
   function originList() {
+    if (state.from === "analytics") return { hash: listHash || "analytics", label: "Analytics", tickers: [] };
+    if (state.from === "etfs") return { hash: listHash || "etfs", label: "ETFs", tickers: [] };
     if (state.from === "emerging") return { hash: "emerging", label: "Emerging", tickers: emergingSorted().slice(0, state.em.limit).map((r) => r.ticker) };
     if (state.from === "watch") return { hash: "watchlist", label: "Watchlist", tickers: watch.slice() };
     return { hash: state.view, label: MGR_NAME[state.view], tickers: homeSorted().map((r) => sec(r.cusip).ticker) };
@@ -2143,6 +2172,8 @@
   // Back returns to the list where it was left (scroll position), not to its top.
   const scrollMem = {};
   let arrivedFromList = false;
+  let listHash = "";       // the exact list or tab a company was opened from
+  let replacing = false;   // previous / next replace the history entry
 
   /** Price change of the company against the S&P 500 (SPY) over the selected range, both from 0%. */
   function drawCompare(host, s, pts, intraday) {
@@ -2196,14 +2227,18 @@
     renderLive();
   }
   const pageKey = () => (state.page === "home" ? "home:" + state.view : state.page === "company" ? "co:" + state.slug : state.page);
+  let lastHash = "";
   function route() {
+    const prevHash = lastHash;
+    lastHash = location.hash.slice(1);
     if ($("npanel") && !$("npanel").hidden) { $("npanel").hidden = true; $("bell").setAttribute("aria-expanded", "false"); }
     const h = decodeURIComponent(location.hash.replace("#", ""));
     const before = state.page + state.slug;
     const leaving = pageKey();
     if (state.page !== "company") scrollMem[leaving] = window.scrollY;
     if (h.startsWith("t-")) {
-      if (state.page !== "company") { state.from = state.page; arrivedFromList = true; }
+      if (state.page !== "company") { state.from = state.page; arrivedFromList = true; listHash = prevHash; }
+      else if (!replacing) arrivedFromList = false;  // a link from one company to another: Back goes to the list itself
       state.page = "company";
       state.slug = h.slice(2);
     } else if (h === "emerging" && D.emerging) {
@@ -2232,6 +2267,7 @@
     const back = leaving.startsWith("co:") && state.page !== "company" ? scrollMem[pageKey()] : null;
     window.scrollTo(0, back || 0);
     if (state.page !== "company") arrivedFromList = false;
+    replacing = false;
   }
 
   // ---------- live updates ----------
@@ -2261,7 +2297,7 @@
         n.onclick = () => {
           window.focus();
           const t = (e.tickers || [])[0];
-          if (t && bySlug(slugOf(t))) location.hash = "t-" + slugOf(t);
+          if (t && coPage(t)) location.hash = "t-" + slugOf(t);
           else location.hash = e.manager || "big3";
         };
       } catch (err) { /* some mobile browsers only notify from a service worker */ }
@@ -2415,7 +2451,7 @@
   function setupNotify() {
     $("bell").addEventListener("click", () => ($("npanel").hidden ? openNotify() : closeNotify()));
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("npanel").hidden) closeNotify(); });
-    document.addEventListener("click", (e) => { if (!$("npanel").hidden && !e.target.closest("#npanel, #bell")) closeNotify(); });
+    document.addEventListener("click", (e) => { if (!$("npanel").hidden && document.contains(e.target) && !e.target.closest("#npanel, #bell")) closeNotify(); });
     $("bell-dot").hidden = !(nprefs.browser && canNotify() && Notification.permission === "granted");
   }
 
@@ -2452,6 +2488,9 @@
     window.addEventListener("hashchange", route);
     if (HOSTED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* offline mode unavailable */ });
     document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-etf-retry]")) { etfFailed = false; render(); return; }
+      const same = e.target.closest('a[href^="#"]');
+      if (same && same.getAttribute("href") === location.hash && !same.matches("[data-back], [data-replace]")) { window.scrollTo({ top: 0, behavior: "smooth" }); }
       const a = e.target.closest("[data-back], [data-replace], [data-follow], [data-unwatch]");
       if (!a) return;
       if (a.matches("[data-back]")) {
@@ -2460,6 +2499,7 @@
       } else if (a.matches("[data-replace]")) {
         // Previous / next replace the history entry, so Back still returns to the list.
         e.preventDefault();
+        replacing = true;
         location.replace(a.getAttribute("href"));
       } else {
         e.preventDefault();
@@ -2482,7 +2522,7 @@
       fetch("data/config.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
         PUSH_URL = (cfg && cfg.pushUrl) || null;
         if (!$("npanel").hidden) renderNotifyPanel();
-        if (cfg && cfg.finnhubKey) startRealtime(cfg.finnhubKey);
+        if (cfg && cfg.finnhubKey) { startRealtime(cfg.finnhubKey); setInterval(pollQuotes, POLL_MS * 5); }
         else { priceMode = "delayed"; setInterval(pollQuotes, POLL_MS); }
         flush();
       });

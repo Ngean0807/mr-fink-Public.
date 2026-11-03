@@ -294,6 +294,11 @@
     "Stake = shares held ÷ shares outstanding. Market cap and P/E use the live price with the latest reported shares and earnings. The first row is highlighted for comparison.": "חלק מהחברה = המניות שהן מחזיקות ÷ כל המניות של החברה. שווי השוק ומכפיל הרווח לפי המחיר עכשיו ומספר המניות והרווח האחרונים שדווחו. השורה הראשונה מודגשת להשוואה.",
     "No peer data yet.": "עוד אין נתוני השוואה.",
     "go back to Analytics": "לחזור לניתוחים",
+    "no maximum": "בלי מקסימום",
+    "ETF data could not be loaded.": "לא הצלחנו לטעון את נתוני קרנות הסל.",
+    "Try again": "לנסות שוב",
+    "No fund matches. Try a ticker such as VTI or a word from the name.": "אין קרן שמתאימה. נסו סימול כמו VTI או מילה מהשם (באנגלית).",
+    "ETF": "קרן סל",
     "Activity": "פעילות",
     "Sectors": "ענפים",
     "13F portfolio value": "שווי התיק לפי 13F",
@@ -1118,6 +1123,7 @@
   P("net buying by sector, top (\\d+)", (m) => `קניות פחות מכירות לפי ענף, ${m[1]} הגדולות`);
   P("13F net buying, top (\\d+)", (m) => `קניות פחות מכירות לפי 13F, ${m[1]} הגדולות`);
   P("median {N}", (m, v) => `חציון ${v(m[1])}`);
+  P("since {D}", (m, v) => `מאז ${v(m[1])}`);
   P("{D} to {D}", (m, v) => `${v(m[1])} עד ${v(m[2])}`);
   P("13F for {Q} · quarter ended {D}", (m, v) => `דוח 13F של ${v(m[1])} · הרבעון הסתיים ב-${v(m[2])}`);
   P("Net buying, top (\\d+)", (m) => `קניות פחות מכירות, ${m[1]} הגדולות`);
@@ -1162,6 +1168,7 @@
     ["#fin-h", { "Financials": "תוצאות כספיות" }],
     [".range, .ranges, th, dt", { "YTD": "מתחילת השנה", "ROE": "תשואה על ההון" }],
     ["[data-etf-issuer]", { "Vanguard": "Vanguard" }],
+    [".suggest", { "ETF": "קרן סל" }],
     [".own-table", { "Bought": "קנייה", "Sold": "מכירה", "plan": "לפי תוכנית" }],
     ["[data-feed]", { "13F": "אחזקות (13F)", "13G/D": "מעל 5% (13G/D)", "N-PORT": "קרנות (N\u2011PORT)", "8-K": "דיווח מיידי (8-K)", "10-Q/K": "דוחות כספיים (10-Q/K)" }],
   ];

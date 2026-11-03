@@ -1,6 +1,6 @@
 // Mr. Fink service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
-const CACHE = "mrfink-v5";
+const CACHE = "mrfink-v6";
 const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,7 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(e.request).then((res) => {
       // Keep the shell and the main data files for offline use (not the 600 company files).
-      if (res.ok && (SHELL.some((p) => url.pathname.endsWith(p.replace("./", "/"))) || /\/data\/(dashboard|quotes|status)\.json$/.test(url.pathname))) {
+      if (res.ok && (SHELL.some((p) => url.pathname.endsWith(p.replace("./", "/"))) || /\/data\/(dashboard|quotes|status|etfs|history|backtest)\.json$/.test(url.pathname))) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(key, copy));
       }
