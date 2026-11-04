@@ -52,7 +52,7 @@ def map_cusips(cusips: list[str]) -> dict[str, dict | None]:
 
 FUND_WORDS = re.compile(r"\b(ETF|FUND|FD|TRUST|TR|INDEX|ISHARES|SPDR|PORTFOLIO|SELECT SECTOR)\b")
 SUFFIX_WORDS = ["INC", "CORP", "CORPORATION", "CO", "COMPANY", "PLC", "PUBLIC", "LTD", "LIMITED", "NV", "N V", "SA", "AG",
-                "HLDGS", "HOLDINGS", "INTL", "INTERNATIONAL", "IRELAND", "THE", "NEW", "DE"]
+                "HLDGS", "HLDNGS", "HOLDINGS", "GROUP", "INTL", "INTERNATIONAL", "IRELAND", "THE", "NEW", "DE"]
 SUFFIXES = re.compile(r"\b(" + "|".join(SUFFIX_WORDS) + r")\b")
 
 
@@ -76,9 +76,19 @@ def fallback_map(issuer: str) -> dict | None:
     target = _norm(issuer)
     if not target:
         return None
+    hit = lambda ticker, info: {"ticker": ticker.replace("-", "/"), "name": info["title"].upper(), "type": "Common Stock", "figi": None, "matchedBy": "sec-name"}
     for ticker, info in _TICKERS.items():
         if _norm(info["title"]) == target:
-            return {"ticker": ticker.replace("-", "/"), "name": info["title"].upper(), "type": "Common Stock", "figi": None, "matchedBy": "sec-name"}
+            return hit(ticker, info)
+    # The 13F name can be shorter than the SEC title ("ROYAL CARIBBEAN GROUP" for Royal Caribbean
+    # Cruises Ltd): accept a title that starts with it, only when one company fits.
+    if len(target.split()) >= 2 and len(target) >= 10:
+        fits: dict[str, tuple] = {}
+        for ticker, info in _TICKERS.items():  # the SEC lists a company's main ticker first
+            if _norm(info["title"]).startswith(target + " "):
+                fits.setdefault(info["cik"], (ticker, info))
+        if len(fits) == 1:
+            return hit(*next(iter(fits.values())))
     return None
 
 
