@@ -1770,7 +1770,7 @@
   function notBought(m) {
     const a = m.actions || [];
     if (!a.length) return "";
-    return `<span>Not counted as buying, shares received rather than bought:</span> ${a.map((x) => `${tkA(x.ticker)} <span>${x.kind === "merger" ? `in the merger with ${esc(niceName(x.fromName))}` : `spun off from ${esc(niceName(x.fromName))}`}</span>`).join(", ")}.`;
+    return `<span>Not counted as buying, shares received rather than bought:</span> ${a.map((x) => `${tkA(x.ticker)} <span>${x.kind === "merger" ? "in the merger with" : "spun off from"} ${esc(niceName(x.fromName))}${x.fromTicker ? ` (${esc(x.fromTicker)})` : ""}</span>`).join(", ")}.`;
   }
   /** Companies that left every Big Three book (acquired for cash, delisted), left out of the largest sells. */
   function notSold(m) {

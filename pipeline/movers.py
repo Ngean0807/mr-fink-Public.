@@ -44,8 +44,10 @@ def candidates(now: dict, prev: dict, k: int = 120) -> list[str]:
 
 
 def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], figi: dict, n: int = 25,
-                  universe_now: dict | None = None) -> dict:
-    """{"bought": [...], "sold": [...]}: the n largest net buys and sells of operating companies."""
+                  universe_now: dict | None = None, mergers: dict | None = None) -> dict:
+    """{"bought": [...], "sold": [...]}: the n largest net buys and sells of operating companies.
+    mergers: {acquired CUSIP: acquirer CUSIP} found on the combined book; a single manager's book
+    uses those pairs only, since one book is too small to match a merger by size alone."""
     now, before = book.get(latest, {}), book.get(prev, {})
     linked: dict[str, str] = {}  # new CUSIP -> the CUSIP it replaced
     for c in candidates(now, before):
@@ -105,7 +107,7 @@ def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], fi
     # A company that left every Big Three book (acquired for cash, delisted) was not sold by choice.
     gone = [r for r in rows if r["status"] == "exited" and r["flow"] and universe_now is not None and not universe_now.get(r["cusip"])]
     gone_ids = {r["cusip"] for r in gone}
-    actions = corporate_actions(rows, gone, now, before)
+    actions = corporate_actions(rows, gone, now, before, mergers)
     acted = {a["cusip"] for a in actions}
     bought = sorted((r for r in rows if r["flow"] > 0 and r["cusip"] not in acted), key=lambda r: -r["flow"])[:n]
     sold = sorted((r for r in rows if r["flow"] < 0 and r["cusip"] not in gone_ids), key=lambda r: r["flow"])[:n]
@@ -117,7 +119,7 @@ COMMON_WORDS = {"FIRST", "UNITED", "GENERAL", "NATIONAL", "AMERICAN", "GLOBAL", 
                 "INTL", "THE", "US", "U", "S", "NORTH", "SOUTHERN", "WESTERN", "EASTERN", "CENTRAL", "PACIFIC", "ATLANTIC"}
 
 
-def corporate_actions(rows: list[dict], gone: list[dict], now: dict, before: dict) -> list[dict]:
+def corporate_actions(rows: list[dict], gone: list[dict], now: dict, before: dict, mergers: dict | None = None) -> list[dict]:
     """Shares received rather than bought, kept out of the largest buys:
     - spin-off: a new position whose issuer family (first name word) is a company held in both quarters
       and worth at most a third of it (FedEx Freight out of FedEx);
@@ -144,6 +146,10 @@ def corporate_actions(rows: list[dict], gone: list[dict], now: dict, before: dic
         target = -g["flow"]
         best = None
         for r in rows:
+            if mergers is not None:  # pairs already matched on the combined book
+                if mergers.get(g["cusip"]) == r["cusip"] and r["cusip"] not in used and r["flow"] > 0:
+                    best = r
+                continue
             if r["cusip"] in used or r["status"] is not None or r["flow"] <= 0 or not r["dSharesPct"] or r["dSharesPct"] < 0.25:
                 continue
             if 0.4 * target <= r["flow"] <= 1.4 * target and (best is None or abs(r["flow"] - target) < abs(best["flow"] - target)):

@@ -311,8 +311,12 @@ def main() -> None:
     print(f"Emerging: {len(lite)} company pages outside the main data file")
     # Every company in a view's largest buys and sells, and every peer-group member, also gets a
     # page, so each ticker shown in Analytics opens one.
-    moves_by_view = {vid: movers.quarter_moves(book, latest, prev, period_list, figi, n=25, universe_now=books_with_big3["big3"][latest])
-                     for vid, book in books_with_big3.items()}
+    u_now = books_with_big3["big3"][latest]
+    moves_by_view = {"big3": movers.quarter_moves(books_with_big3["big3"], latest, prev, period_list, figi, n=25, universe_now=u_now)}
+    pairs = {a["fromCusip"]: a["cusip"] for a in moves_by_view["big3"]["actions"] if a["kind"] == "merger"}
+    for vid, book in books_with_big3.items():
+        if vid != "big3":
+            moves_by_view[vid] = movers.quarter_moves(book, latest, prev, period_list, figi, n=25, universe_now=u_now, mergers=pairs)
     extra = {r["cusip"] for mv in moves_by_view.values() for side in ("bought", "sold", "gone", "actions") for r in mv[side]} | set(peer_cusips)
     added = 0
     for c in sorted(extra):
@@ -423,6 +427,8 @@ def main() -> None:
                 src = r.get("fromCusip") and (sec_meta.get(r["fromCusip"]) or lite.get(r["fromCusip"]))
                 if src:  # the company the shares came from, named as on its own page
                     r["fromName"], r["fromTicker"] = src["name"], src["ticker"]
+                elif r.get("fromCusip") and figi.get(r["fromCusip"]):
+                    r["fromTicker"] = securities.display_ticker(figi[r["fromCusip"]]["ticker"])
         out_views[vid]["moves"] = moves
 
     warnings = audit.check(out_views, latest, period_list)

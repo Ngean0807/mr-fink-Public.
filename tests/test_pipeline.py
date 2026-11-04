@@ -165,6 +165,20 @@ class MoversRealCasesTest(unittest.TestCase):
         flows = [abs(r["flow"]) for r in m["bought"] + m["sold"]]
         self.assertTrue(all(f < 2e9 for f in flows), m)   # no $15B "sale" and "purchase"
 
+    def test_manager_book_uses_merger_pairs_from_the_combined_book(self):
+        from pipeline import movers
+        per = ["2026-03-31", "2026-06-30"]
+        book = {"2026-03-31": {"CTRA00001": [100, 10_000, "COTERRA ENERGY INC", "COM"], "DVN000001": [100, 20_000, "DEVON ENERGY CORP", "COM"],
+                               "CRWV00001": [100, 25_000, "COREWEAVE INC", "COM"]},
+                "2026-06-30": {"DVN000001": [150, 30_000, "DEVON ENERGY CORP", "COM"], "CRWV00001": [140, 35_000, "COREWEAVE INC", "COM"]}}
+        figi = {c: {"type": "Common Stock", "ticker": c[:4]} for c in ("CTRA00001", "DVN000001", "CRWV00001")}
+        args = (book, "2026-06-30", "2026-03-31", per, figi)
+        m = movers.quarter_moves(*args, universe_now=book["2026-06-30"], mergers={"CTRA00001": "DVN000001"})
+        self.assertEqual([(a["cusip"], a["kind"]) for a in m["actions"]], [("DVN000001", "merger")])
+        self.assertEqual([r["cusip"] for r in m["bought"]], ["CRWV00001"])   # same size, but real buying
+        m = movers.quarter_moves(*args, universe_now=book["2026-06-30"], mergers={})
+        self.assertEqual(m["actions"], [])
+
 
 class AuditTest(unittest.TestCase):
     def test_flags_a_half_filed_book_and_a_missed_split(self):
