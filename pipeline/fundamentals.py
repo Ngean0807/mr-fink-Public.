@@ -232,10 +232,10 @@ def analyze(cik: str, ticker: str, price: float | None, price_date: str, sic: in
 
     rev_concepts = (["RevenuesNetOfInterestExpense"] + REVENUE) if 6000 <= sic <= 6799 else REVENUE
     rev_q = discrete_quarters(flow_points(cf, rev_concepts))
-    if not rev_q:
-        return {"available": False, "reason": "No US-GAAP revenue facts (foreign filer or non-standard taxonomy)."}
     rev_ttm = ttm_series(rev_q)
     ni_ttm = ttm_series(discrete_quarters(flow_points(cf, NET_INCOME)))
+    if not rev_q and not ni_ttm:
+        return {"available": False, "reason": "No US-GAAP revenue facts (foreign filer or non-standard taxonomy)."}
     oi_ttm = ttm_series(discrete_quarters(flow_points(cf, OPERATING_INCOME)))
     gp_q = discrete_quarters(flow_points(cf, GROSS_PROFIT))
     if not gp_q or max(gp_q) < max(rev_q):  # GrossProfit tag abandoned (e.g. Costco after 2019)
@@ -253,9 +253,15 @@ def analyze(cik: str, ticker: str, price: float | None, price_date: str, sic: in
     ocf_ttm = ttm_series(discrete_quarters(flow_points(cf, OPERATING_CF)))
     capex_ttm = ttm_series(discrete_quarters(flow_points(cf, CAPEX)))
 
-    if not rev_ttm:
+    if not rev_ttm and not ni_ttm:
         return {"available": False, "reason": "Not enough quarterly history to build trailing-twelve-month figures."}
-    asof = max(rev_ttm)
+    # The latest trailing twelve months of either revenue or earnings. Some banks (BNY, Truist) stopped
+    # tagging quarterly revenue years ago but report earnings every quarter: their earnings, EPS and
+    # ROE stay current, and revenue-based figures are left out rather than shown from an old year.
+    asof = max(list(rev_ttm) + list(ni_ttm))
+    if (_d(price_date) - _d(asof)).days > 456:
+        return {"available": False, "reason": "No financial statements in the last year in the SEC's XBRL data."}
+    ttm_keys = sorted(set(rev_ttm) | set(ni_ttm))
 
     def at(series):
         return series.get(asof)
@@ -270,7 +276,7 @@ def analyze(cik: str, ticker: str, price: float | None, price_date: str, sic: in
     fcf = ocf - capex if ocf is not None and capex is not None else None
 
     equity_now = instant_at(cf, EQUITY, asof)
-    year_ago = [k for k in rev_ttm if abs(_d(k).toordinal() - (_d(asof).toordinal() - 365)) <= 20]
+    year_ago = [k for k in ttm_keys if abs(_d(k).toordinal() - (_d(asof).toordinal() - 365)) <= 20]
     equity_prev = instant_at(cf, EQUITY, year_ago[0]) if year_ago else None
     avg_equity = (equity_now + equity_prev) / 2 if equity_now and equity_prev else equity_now
 
@@ -295,7 +301,7 @@ def analyze(cik: str, ticker: str, price: float | None, price_date: str, sic: in
         so = (asof, net_income / eps * ratio)
     eps_cls = eps / ratio if eps is not None else None
     mcap = price * so[1] if price and so else None
-    val_ends = [k for k in rev_ttm if k <= price_date]
+    val_ends = [k for k in ttm_keys if k <= price_date]
     val_asof = max(val_ends) if val_ends else asof
     val_eps = eps_ttm.get(val_asof)
     val_eps = val_eps / ratio if val_eps is not None else None
@@ -305,9 +311,10 @@ def analyze(cik: str, ticker: str, price: float | None, price_date: str, sic: in
 
     # Recent quarters of revenue and net income for the detail charts.
     ni_q = discrete_quarters(flow_points(cf, NET_INCOME))
-    recent = list(rev_q)[-12:]
+    recent_from = date.fromordinal(_d(asof).toordinal() - 3 * 365).isoformat()
+    recent = [k for k in sorted(set(rev_q) | set(ni_q)) if k >= recent_from][-12:]
     quarterly = [
-        {"end": k, "revenue": rev_q[k]["val"], "netIncome": ni_q[k]["val"] if k in ni_q else None}
+        {"end": k, "revenue": rev_q[k]["val"] if k in rev_q else None, "netIncome": ni_q[k]["val"] if k in ni_q else None}
         for k in recent
     ]
     rev_ttm_hist = [{"end": k, "value": v} for k, v in list(rev_ttm.items())[-12:]]
@@ -351,3 +358,45 @@ def analyze(cik: str, ticker: str, price: float | None, price_date: str, sic: in
             result[k] = None
         result["financialsNote"] = True
     return result
+
+
+_cover_budget = 40
+
+
+def cover_shares(cik: str) -> tuple[str, float] | None:
+    """Shares outstanding from the cover page of the company's latest 10-Q or 10-K, read straight
+    from the filing (inline XBRL). The SEC's processed company facts can lag a filing by months."""
+    import re
+    try:
+        sub = edgar.cached_json(f"https://data.sec.gov/submissions/CIK{int(cik):010d}.json", ttl_hours=24)
+    except Exception:
+        return None
+    r = sub.get("filings", {}).get("recent", {})
+    for i, form in enumerate(r.get("form", [])):
+        if form not in ("10-Q", "10-K"):
+            continue
+        acc, doc = r["accessionNumber"][i], r["primaryDocument"][i]
+        key = f"cover_{acc}.json.gz"
+        cached = edgar.load_artifact(key)
+        if cached is None:
+            global _cover_budget
+            if _cover_budget <= 0:  # a few filings per run; the rest on later refreshes
+                return None
+            _cover_budget -= 1
+            try:
+                html = edgar.cached_bytes(f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/{doc}", ttl_hours=24 * 365).decode("utf-8", "ignore")
+            except Exception:
+                return None
+            total, when = 0.0, None
+            for m in re.finditer(r"<ix:nonFraction[^>]*name=\"dei:EntityCommonStockSharesOutstanding\"[^>]*>([\d,.]+)</ix:nonFraction>", html):
+                tag = m.group(0)
+                scale = re.search(r'scale="(-?\d+)"', tag)
+                total += float(m.group(1).replace(",", "")) * 10 ** int(scale.group(1) if scale else 0)
+                ctx = re.search(r'contextRef="([^"]+)"', tag)
+                if ctx and when is None:
+                    d = re.search(r'<xbrli:context id="' + re.escape(ctx.group(1)) + r'".*?<xbrli:instant>(\d{4}-\d\d-\d\d)</xbrli:instant>', html, re.S)
+                    when = d.group(1) if d else None
+            cached = {"shares": total or None, "date": when or r["filingDate"][i]}
+            edgar.save_artifact(key, cached)
+        return (cached["date"], cached["shares"]) if cached.get("shares") else None
+    return None

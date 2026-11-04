@@ -76,8 +76,14 @@
     "Listing change": "החלפת רישום",
     "Net of the listing it replaced (for example ADR to ordinary shares)": "אחרי קיזוז נייר הערך שהוחלף (למשל מעבר מ-ADR למניה רגילה)",
     "None this quarter.": "אין ברבעון הזה.",
-    "Net flow = change in shares × quarter-end price. Splits are adjusted, listing changes and spin-offs are netted into one line, and companies that left every Big Three book (acquired, delisted) are not counted as sales.":
-      "קניות פחות מכירות = השינוי במספר המניות × המחיר בסוף הרבעון. פיצולי מניות מתוקנים, החלפות רישום ופיצולי חברות מאוחדים לשורה אחת, וחברות שיצאו מהתיק של כל שלוש הגדולות (נרכשו או נמחקו מהמסחר) לא נספרות כמכירה.",
+    "Net flow = change in shares × quarter-end price. Splits are adjusted, listing changes and spin-offs are netted into one line, shares received in a stock merger or spin-off are not counted as buying, and companies that left every Big Three book (acquired, delisted) are not counted as sales.":
+      "קניות פחות מכירות = השינוי במספר המניות × המחיר בסוף הרבעון. פיצולי מניות מתוקנים, החלפות רישום ופיצולי חברות מאוחדים לשורה אחת, מניות שהתקבלו במיזוג במניות או בפיצול חברה לא נספרות כקנייה, וחברות שיצאו מהתיק של כל שלוש הגדולות (נרכשו או נמחקו מהמסחר) לא נספרות כמכירה.",
+    "Not counted as buying, shares received rather than bought:": "לא נספרות כקנייה, מניות שהתקבלו ולא נקנו:",
+    "SPDR, Vanguard and iShares sector funds": "קרנות הענפים של SPDR, Vanguard ו-iShares",
+    "latest reports": "הדוחות האחרונים",
+    "the quarter’s flow ÷ the funds’ latest reported net assets": "התזרים ברבעון ÷ הנכסים האחרונים שהקרנות דיווחו",
+    "Flow = money investors put into a fund minus what they took out (shares created and dividends reinvested, minus shares redeemed), as the fund reports it month by month on Form N-PORT, added up over the same calendar quarter for every fund. Hover a number for the money in and out. Vanguard figures cover the whole fund, including its mutual fund share classes.":
+      "תזרים = הכסף שמשקיעים הכניסו לקרן פחות מה שהוציאו (יחידות שנוצרו ודיבידנדים שהושקעו מחדש, פחות יחידות שנפדו), כפי שכל קרן מדווחת חודש אחרי חודש בדוח N-PORT, מחובר על פני אותו רבעון קלנדרי לכל הקרנות. העבירו את העכבר על מספר כדי לראות כמה נכנס וכמה יצא. בוואנגארד המספרים כוללים את כל הקרן, גם את גרסאות קרן הנאמנות שלה.",
     "Not counted as sales:": "לא נספרות כמכירה:",
     "left every Big Three book (acquired or delisted).": "יצאו מהתיק של כל שלוש הגדולות (נרכשו או נמחקו מהמסחר).",
     "Show fewer": "פחות",
@@ -1115,10 +1121,27 @@
   // analytics
   P("\\({N}\\)([.;,]?)", (m, v) => `(${v(m[1])})${m[2]}`);
   P(", {N} on the quarter\\.", (m, v) => `, ${v(m[1])} ברבעון.`);
-  P("In the top (\\d+), net buying added", (m) => `ב-${m[1]} הגדולות, הקניות פחות המכירות הוסיפו`);
+  P("In the top (\\d+), (estimated )?net buying added", (m) => `ב-${m[1]} הגדולות, הקניות פחות המכירות${m[2] ? " (הערכה)" : ""} הוסיפו`);
+  P("Within the top (\\d+), most buying went into", (m) => `בתוך ${m[1]} הגדולות, רוב הקניות הלכו לענף`);
+  P("in the merger with {X}", (m, v) => `במיזוג עם ${v(m[1])}`);
+  P("spun off from {X}", (m, v) => `שפוצלה מ-${v(m[1])}`);
+  P("(?:In {Q}, t|T)hrough (their|its (iShares|Vanguard|SPDR)) sector ETFs, the most money went into", (m, v) =>
+    `${m[1] ? `ב-${v(m[1])}, ` : ""}דרך קרנות הסל הענפיות ${m[2] === "their" ? "שלהן" : `שלה (${m[3]})`}, הכי הרבה כסף נכנס לענף`);
+  P("Banks: (BlackRock|Vanguard|State Street) owns", (m, v) => `בנקים: ${v(m[1])} מחזיקה`);
+  P("(iShares|Vanguard|SPDR) sector funds", (m) => `קרנות הענפים של ${m[1]}`);
+  P("{Q}, as reported by each fund", (m, v) => `${v(m[1])}, כפי שכל קרן דיווחה`);
+  P("The ETF figures are for {Q}, the latest quarter every fund has reported; the 13F column is for {Q}\\.", (m, v) => `נתוני קרנות הסל הם ל-${v(m[1])}, הרבעון האחרון שכל הקרנות כבר דיווחו עליו; עמודת ה-13F היא ל-${v(m[2])}.`);
+  P("In {N}", (m, v) => `נכנסו ${v(m[1])}`);
+  P("out {N}", (m, v) => `יצאו ${v(m[1])}`);
+  P("(BlackRock|Vanguard|State Street) stake", (m, v) => `החלק של ${v(m[1])} בחברה`);
+  P("(BlackRock|Vanguard|State Street), Δ shares × quarter-end price", (m, v) => `${v(m[1])}, שינוי במניות × מחיר בסוף הרבעון`);
+  P("Stake = shares held at the end of {Q} ÷ the latest shares outstanding the company reported\\. QoQ and YoY are the (Big Three’s combined|BlackRock’s|Vanguard’s|State Street’s) changes in shares\\. Market cap and P/E use the live price with the latest reported shares and earnings\\. The first row is highlighted for comparison\\.", (m, v) => {
+    const who = { "Big Three’s combined": "של שלוש הגדולות ביחד", "BlackRock’s": "של בלקרוק", "Vanguard’s": "של ואנגארד", "State Street’s": "של סטייט סטריט" }[m[2]];
+    return `חלק בחברה = המניות שהוחזקו בסוף ${v(m[1])} ÷ מספר המניות האחרון שהחברה דיווחה. השינוי ברבעון ובשנה הוא השינוי במספר המניות ${who}. שווי השוק ומכפיל הרווח לפי המחיר עכשיו ומספר המניות והרווח האחרונים שדווחו. השורה הראשונה מודגשת להשוואה.`;
+  });
   P("of the portfolio, against {N} a quarter earlier\\.", (m, v) => `מהתיק, מול ${v(m[1])} רבעון קודם.`);
   P(", against a median of {N} for the (\\d+) largest US banks;", (m, v) => `, מול חציון של ${v(m[1])} ב-${m[2]} הבנקים הגדולים בארה״ב;`);
-  P("last quarter they (bought|sold) {N} of it\\.", (m, v) => `ברבעון האחרון הן ${m[1] === "bought" ? "קנו" : "מכרו"} ממנה ב-${v(m[2])}.`);
+  P("last quarter (they|it) (bought|sold) {N} of it\\.", (m, v) => `ברבעון האחרון ${m[1] === "they" ? "הן" : "היא"} ${m[2] === "bought" ? (m[1] === "they" ? "קנו" : "קנתה") : (m[1] === "they" ? "מכרו" : "מכרה")} ממנה ב-${v(m[3])}.`);
   P("{Q} 13F", (m, v) => `דוח 13F של ${v(m[1])}`);
   P("net buying by sector, top (\\d+)", (m) => `קניות פחות מכירות לפי ענף, ${m[1]} הגדולות`);
   P("13F net buying, top (\\d+)", (m) => `קניות פחות מכירות לפי 13F, ${m[1]} הגדולות`);
@@ -1142,8 +1165,8 @@
   P("top (\\d+), shares vs the previous quarter", (m) => `${m[1]} הגדולות, מניות מול הרבעון הקודם`);
   P("(\\d+) names", (m) => `${m[1]} חברות`);
   P("\\+(\\d+) filers", (m) => `ועוד ${m[1]} גופים מדווחים`);
-  P("From the managers’ Form 13F filings on SEC EDGAR, the same data as the rest of Mr\\. Fink, updated with every new filing\\. (\\d+) = the largest company holdings; ETFs and funds are left out\\. Not investment advice\\.", (m) =>
-    `מדוחות ה-13F שהמנהלות מגישות ל-SEC, אותם נתונים כמו בשאר Mr. Fink, ומתעדכן עם כל דוח חדש. ${m[1]} = האחזקות הגדולות בחברות, בלי קרנות סל וקרנות. זו לא המלצה להשקעה.`);
+  P("From the managers’ Form 13F filings on SEC EDGAR \\(options positions are left out\\), the same data as the rest of Mr\\. Fink, updated with every new filing\\. Top (\\d+) = the (\\d+) largest company holdings; ETFs and funds are left out\\. Sector ETF flows come from each fund’s Form N-PORT\\. Not investment advice\\.", (m) =>
+    `מדוחות ה-13F שהמנהלות מגישות ל-SEC (בלי פוזיציות אופציות), אותם נתונים כמו בשאר Mr. Fink, ומתעדכן עם כל דוח חדש. ${m[1]} הגדולות = ${m[2]} האחזקות הגדולות בחברות, בלי קרנות סל וקרנות. התזרימים לקרנות הסל הענפיות לקוחים מדוח N-PORT של כל קרן. זו לא המלצה להשקעה.`);
   P("{X}: {N}", (m, v) => { const t = v(m[1]); return t.startsWith("⁨") ? null : `${t}: ${v(m[2])}`; });
   // notifications for one company
   P("Notifications for {T}", (m) => `התראות על ${m[1]}`);

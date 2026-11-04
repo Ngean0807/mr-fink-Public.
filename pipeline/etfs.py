@@ -2,7 +2,9 @@
 
 Fund size and largest holdings come from each fund's latest Form N-PORT on SEC EDGAR (the fund
 series, so all share classes together); prices and returns from Yahoo Finance. SPY, MDY and GLD
-are unit or grantor trusts that do not file N-PORT, so they show market data only.
+are unit or grantor trusts that do not file N-PORT, so they show market data only. For the sector
+funds, money in and out comes from the flows each fund reports month by month on N-PORT, added up
+over one calendar quarter that every fund has reported.
 Writes web/data/etfs.json, loaded by the ETF page and the Emerging sector card.
 """
 from __future__ import annotations
@@ -203,54 +205,67 @@ def summary(f: dict) -> dict:
     return out
 
 
-def net_assets(f: dict) -> float | None:
-    """A fund's net assets in one N-PORT report (read from the report's header, kept per filing)."""
-    key = f"nport_na_{f['accession']}.json.gz"
+def _month_back(ym: str, k: int) -> str:
+    y, m = int(ym[:4]), int(ym[5:7]) - k
+    while m < 1:
+        y, m = y - 1, m + 12
+    return f"{y:04d}-{m:02d}"
+
+
+def month_flows(f: dict) -> dict:
+    """The fund's own reported flows for the three months of one N-PORT report (Part B, items
+    B.6: shares sold, reinvested and redeemed), {"YYYY-MM": {"in": sold + reinvested, "out": redeemed}}."""
+    key = f"nport_mflow_{f['accession']}.json.gz"
     cached = edgar.load_artifact(key)
     if cached is not None:
-        return cached.get("netAssets")
-    full = edgar.load_artifact(f"nport_summary4_{f['accession']}.json.gz")
-    if full is not None:
-        na = full.get("netAssets")
-    else:
-        na = None
-        for _, el in ET.iterparse(io.BytesIO(edgar.fetch(f["xml"])), events=("end",)):
-            tag = el.tag.rsplit("}", 1)[-1]
-            if tag == "netAssets" and el.text:
-                na = float(el.text.strip())
-                break
-            if tag == "invstOrSec":  # the header comes first; past it there is no total
-                break
-    edgar.save_artifact(key, {"netAssets": na})
-    return na
-
-
-def close_on(hist: dict, day_iso: str) -> float | None:
-    """The last daily close on or before a date (history as quotes.history returns it)."""
-    if not hist or not hist.get("c"):
-        return None
-    target = date.fromisoformat(day_iso).toordinal() - date(1970, 1, 1).toordinal()
-    day, best = hist["d0"], None
-    for gap, c in zip([0] + hist["dd"], hist["c"]):
-        day += gap
-        if day > target:
+        return cached
+    out, period = {}, None
+    for _, el in ET.iterparse(io.BytesIO(edgar.fetch(f["xml"])), events=("end",)):
+        tag = el.tag.rsplit("}", 1)[-1]
+        if tag == "repPdDate" and el.text:
+            period = el.text.strip()
+        m = re.fullmatch(r"mon([123])Flow", tag)
+        if m and period:
+            try:
+                a = {k: float(el.get(k) or 0) for k in ("sales", "reinvestment", "redemption")}
+            except ValueError:
+                continue
+            out[_month_back(period[:7], 3 - int(m.group(1)))] = {"in": a["sales"] + a["reinvestment"], "out": a["redemption"]}
+        if tag == "invstOrSec":  # the flows are in the header, before the holdings
             break
-        best = c / 100
-    return best
+    edgar.save_artifact(key, out)
+    return out
 
 
-def flow(t: str, fs: list[dict], hist: dict) -> dict | None:
-    """Money that came into (or left) a fund between its last two reports, apart from price moves:
-    net assets now minus net assets then grown by the fund's own price change."""
-    if len(fs) < 2:
+def quarter_flows(rows: list[dict]) -> str | None:
+    """Puts every fund's reported flows for one common calendar quarter in row["flow"], the latest
+    quarter all of them cover (funds report on their own fiscal quarters). Returns its end month."""
+    have = [r for r in rows if r.get("months")]
+    if not have:
         return None
-    now, then = fs[0], fs[1]
-    na_now, na_then = net_assets(now), net_assets(then)
-    p_now, p_then = close_on(hist, now["period"]), close_on(hist, then["period"])
-    if not (na_now and na_then and p_now and p_then):
+    latest = max(max(r["months"]) for r in have)
+    q = None
+    for k in range(0, 12):  # calendar quarter ends: March, June, September, December
+        end = _month_back(latest, k)
+        if int(end[5:7]) % 3:
+            continue
+        months = [_month_back(end, 2), _month_back(end, 1), end]
+        if sum(all(m in r["months"] for m in months) for r in have) >= 0.9 * len(have):
+            q = (end, months)
+            break
+    if not q:
         return None
-    f = na_now - na_then * (p_now / p_then)
-    return {"from": then["period"], "to": now["period"], "netAssetsPrev": na_then, "flow": f, "flowPct": f / na_then}
+    end, months = q
+    for r in rows:
+        mf = r.get("months") or {}
+        if all(m in mf for m in months):
+            fin = sum(mf[m]["in"] for m in months)
+            fout = sum(mf[m]["out"] for m in months)
+            r["flow"] = {"from": months[0], "to": end, "in": fin, "out": fout, "flow": fin - fout,
+                         "flowPct": (fin - fout) / r["netAssets"] if r.get("netAssets") else None, "reported": True}
+        else:
+            r["flow"] = None
+    return end
 
 
 def _returns(hist: dict) -> tuple[float | None, float | None, list[float]]:
@@ -295,10 +310,14 @@ def build(log=print) -> dict:
                         row["fundName"] = s["name"]
                         if cat.startswith("Sector:"):  # the fund's own name, as a broker lists it
                             row["name"] = etf_name(s["name"], m)
-                    try:
-                        row["flow"] = flow(t, fs, quotes.history(t))
-                    except Exception as e:
-                        log(f"  flow unavailable for {t}: {e}")
+                    if cat.startswith("Sector:"):
+                        try:
+                            months = {}
+                            for f in reversed(fs[:3]):  # newer reports (and amendments) win
+                                months.update(month_flows(f))
+                            row["months"] = months
+                        except Exception as e:
+                            log(f"  flows unavailable for {t}: {e}")
             except Exception as e:
                 log(f"  N-PORT unavailable for {t}: {e}")
         elif t in SSGA_DAILY:
@@ -316,7 +335,11 @@ def build(log=print) -> dict:
         row.update(price=q.get("price"), prevClose=q.get("prevClose"), time=q.get("time"))
         out.append(row)
         time.sleep(0.1)
-    data = {"asOf": datetime.now(timezone.utc).isoformat(timespec="seconds"), "funds": out,
+    sector_rows = [r for r in out if r["category"].startswith("Sector:")]
+    flow_q = quarter_flows(sector_rows)
+    for r in sector_rows:
+        r.pop("months", None)
+    data = {"asOf": datetime.now(timezone.utc).isoformat(timespec="seconds"), "funds": out, "flowQuarter": flow_q,
             "sectors": {s: dict(zip(("statestreet", "vanguard", "blackrock"), ts)) for s, ts in SECTORS.items()}}
     log(f"ETFs: {len(out)} funds, {sum(1 for r in out if r.get('netAssets'))} with N-PORT data")
     return data

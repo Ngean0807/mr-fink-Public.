@@ -105,9 +105,53 @@ def quarter_moves(book: dict, latest: str, prev: str, period_list: list[str], fi
     # A company that left every Big Three book (acquired for cash, delisted) was not sold by choice.
     gone = [r for r in rows if r["status"] == "exited" and r["flow"] and universe_now is not None and not universe_now.get(r["cusip"])]
     gone_ids = {r["cusip"] for r in gone}
-    bought = sorted((r for r in rows if r["flow"] > 0), key=lambda r: -r["flow"])[:n]
+    actions = corporate_actions(rows, gone, now, before)
+    acted = {a["cusip"] for a in actions}
+    bought = sorted((r for r in rows if r["flow"] > 0 and r["cusip"] not in acted), key=lambda r: -r["flow"])[:n]
     sold = sorted((r for r in rows if r["flow"] < 0 and r["cusip"] not in gone_ids), key=lambda r: r["flow"])[:n]
-    return {"bought": bought, "sold": sold, "gone": sorted(gone, key=lambda r: r["flow"])[:8]}
+    return {"bought": bought, "sold": sold, "gone": sorted(gone, key=lambda r: r["flow"])[:8], "actions": actions}
+
+
+# First words too common to tie two companies together (First Solar is no spin-off of First Horizon).
+COMMON_WORDS = {"FIRST", "UNITED", "GENERAL", "NATIONAL", "AMERICAN", "GLOBAL", "NEW", "BANK", "INTERNATIONAL",
+                "INTL", "THE", "US", "U", "S", "NORTH", "SOUTHERN", "WESTERN", "EASTERN", "CENTRAL", "PACIFIC", "ATLANTIC"}
+
+
+def corporate_actions(rows: list[dict], gone: list[dict], now: dict, before: dict) -> list[dict]:
+    """Shares received rather than bought, kept out of the largest buys:
+    - spin-off: a new position whose issuer family (first name word) is a company held in both quarters
+      and worth at most a third of it (FedEx Freight out of FedEx);
+    - stock merger: a held company whose share count jumped by roughly the value of a company that left
+      every Big Three book the same quarter (Devon receiving Coterra holders)."""
+    out = []
+    held_both = {}
+    for c, row in now.items():
+        if c in before:
+            w = _key(row[2]).split()
+            if w and len(w[0]) >= 4 and w[0] not in COMMON_WORDS:
+                held_both.setdefault(w[0], []).append((c, row))
+    for r in rows:
+        if r["status"] != "new" or r["flow"] <= 0:
+            continue
+        w = _key(r["name"]).split()
+        parents = held_both.get(w[0], []) if w else []
+        parents = [(c, row) for c, row in parents if c != r["cusip"] and r["value"] <= row[1] / 3]
+        if parents:
+            c, row = max(parents, key=lambda x: x[1][1])
+            out.append({"cusip": r["cusip"], "ticker": r["ticker"], "kind": "spinoff", "fromCusip": c, "fromName": row[2].title(), "flow": r["flow"]})
+    used = {a["cusip"] for a in out}
+    for g in sorted(gone, key=lambda r: r["flow"]):
+        target = -g["flow"]
+        best = None
+        for r in rows:
+            if r["cusip"] in used or r["status"] is not None or r["flow"] <= 0 or not r["dSharesPct"] or r["dSharesPct"] < 0.25:
+                continue
+            if 0.4 * target <= r["flow"] <= 1.4 * target and (best is None or abs(r["flow"] - target) < abs(best["flow"] - target)):
+                best = r
+        if best:
+            used.add(best["cusip"])
+            out.append({"cusip": best["cusip"], "ticker": best["ticker"], "kind": "merger", "fromCusip": g["cusip"], "fromTicker": g["ticker"], "fromName": g["name"], "flow": best["flow"]})
+    return out
 
 
 ADR_WORDS = {"SPONSORED", "SPON", "ADR", "ADS", "AMERICAN", "DEPOSITARY", "DEPOSITORY", "SHARES", "SHS", "RECEIPTS", "EACH", "REPSTG", "REP"}
