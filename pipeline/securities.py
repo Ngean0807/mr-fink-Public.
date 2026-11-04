@@ -51,13 +51,20 @@ def map_cusips(cusips: list[str]) -> dict[str, dict | None]:
 
 
 FUND_WORDS = re.compile(r"\b(ETF|FUND|FD|TRUST|TR|INDEX|ISHARES|SPDR|PORTFOLIO|SELECT SECTOR)\b")
-SUFFIXES = re.compile(r"\b(INC|CORP|CORPORATION|CO|COMPANY|PLC|LTD|LIMITED|NV|N V|SA|AG|HLDGS|HOLDINGS|INTL|INTERNATIONAL|IRELAND|THE|NEW|DE)\b")
+SUFFIX_WORDS = ["INC", "CORP", "CORPORATION", "CO", "COMPANY", "PLC", "PUBLIC", "LTD", "LIMITED", "NV", "N V", "SA", "AG",
+                "HLDGS", "HOLDINGS", "INTL", "INTERNATIONAL", "IRELAND", "THE", "NEW", "DE"]
+SUFFIXES = re.compile(r"\b(" + "|".join(SUFFIX_WORDS) + r")\b")
 
 
 def _norm(name: str) -> str:
     n = re.sub(r"[^A-Z0-9 ]", " ", name.upper())
     n = SUFFIXES.sub(" ", n)
-    return " ".join(n.split())
+    words = n.split()
+    # 13F issuer names are cut at a fixed width: drop a last word that is a cut-off suffix
+    # ("JOHNSON CONTROLS INTERNATION", "CLEARWATER ANALYTICS HLDGS I").
+    if len(words) > 1 and any(w.startswith(words[-1]) and w != words[-1] for w in SUFFIX_WORDS if " " not in w):
+        words = words[:-1]
+    return " ".join(words)
 
 
 def fallback_map(issuer: str) -> dict | None:
