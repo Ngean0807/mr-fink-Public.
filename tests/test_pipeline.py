@@ -208,3 +208,12 @@ class NportSearchErrorTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 nport.filings("S000006414", ttl_hours=24)
         self.assertEqual(len(forgotten), 1)
+
+
+class NameFallbackTest(unittest.TestCase):
+    def test_cut_off_and_plc_names_normalise_like_the_sec_titles(self):
+        from pipeline import securities
+        self.assertEqual(securities._norm("JOHNSON CONTROLS INTERNATION"), securities._norm("Johnson Controls International plc"))
+        self.assertEqual(securities._norm("CRH PLC"), securities._norm("CRH PUBLIC LTD CO"))
+        self.assertEqual(securities._norm("CLEARWATER ANALYTICS HLDGS I"), "CLEARWATER ANALYTICS")
+        self.assertEqual(securities._norm("LINDE PLC"), "LINDE")
