@@ -139,6 +139,15 @@ def add_fundamentals(meta: dict, latest: str, version: str | None) -> None:
         # New holding-company registrant with no reporting history yet: use the predecessor's filings.
         meta["fundamentals"] = fundamentals.analyze(pred_cik, meta["ticker"], meta["price"], latest, meta.get("sic", 0), "pred")
         meta["fundamentalsCik"] = pred_cik
+    f = meta.get("fundamentals") or {}
+    if f.get("available") and (f.get("sharesAsOf") or "") < latest:
+        # The SEC's company facts can lag the latest 10-Q by months (Citigroup in 2026): when its
+        # share count predates the 13F quarter end, take the cover-page count straight from that
+        # filing if it is newer and near the 13F date.
+        cov = fundamentals.cover_shares(meta.get("fundamentalsCik") or meta["cik"])
+        if cov and cov[0] > (f.get("sharesAsOf") or "") and 0 <= (date.fromisoformat(cov[0]) - date.fromisoformat(latest)).days <= 75:
+            f["sharesOutstanding"], f["sharesAsOf"] = cov[1], cov[0]
+            f["marketCap"] = meta["price"] * cov[1] if meta.get("price") else f.get("marketCap")
 
 
 def early_view(cx: dict, period: str, prev: str, figi: dict, sec_meta: dict) -> dict:
@@ -177,12 +186,17 @@ def prune_legacy_cache() -> None:
 
 def peer_row(c: str, meta: dict) -> dict:
     """One line of a peer-group table: ownership by the Big Three and the company's own numbers."""
-    h = (meta.get("holders") or {}).get("big3") or {}
+    holders = meta.get("holders") or {}
+    h = holders.get("big3") or {}
     f = meta.get("fundamentals") or {}
-    by = {mid: ((meta.get("holders") or {}).get(mid) or {}).get("ownership") for mid in ("blackrock", "vanguard", "statestreet")}
-    return {"cusip": c, "ticker": meta["ticker"], "name": meta["name"], "ownership": h.get("ownership"), "byManager": by,
-            "qoq": {k: (h.get("qoq") or {}).get(k) for k in ("dSharesPct", "trade", "status")} if h.get("qoq") else None,
-            "yoy": {k: (h.get("yoy") or {}).get(k) for k in ("dSharesPct", "trade")} if h.get("yoy") else None,
+    mids = ("blackrock", "vanguard", "statestreet")
+    qoq = lambda x: {k: (x.get("qoq") or {}).get(k) for k in ("dSharesPct", "trade", "status")} if x.get("qoq") else None
+    yoy = lambda x: {k: (x.get("yoy") or {}).get(k) for k in ("dSharesPct", "trade")} if x.get("yoy") else None
+    return {"cusip": c, "ticker": meta["ticker"], "name": meta["name"], "ownership": h.get("ownership"),
+            "byManager": {mid: (holders.get(mid) or {}).get("ownership") for mid in mids},
+            "qoq": qoq(h), "yoy": yoy(h),
+            # each manager's own changes, for the manager views
+            "qoqBy": {mid: qoq(holders.get(mid) or {}) for mid in mids}, "yoyBy": {mid: yoy(holders.get(mid) or {}) for mid in mids},
             "value": (h.get("series") or [[None, None]])[-1][1], "sharesOutstanding": f.get("sharesOutstanding"),
             "revenueTTM": f.get("revenueTTM"), "netIncomeTTM": f.get("netIncomeTTM"), "epsTTM": f.get("epsTTM"), "roe": f.get("roe")}
 
@@ -299,7 +313,7 @@ def main() -> None:
     # page, so each ticker shown in Analytics opens one.
     moves_by_view = {vid: movers.quarter_moves(book, latest, prev, period_list, figi, n=25, universe_now=books_with_big3["big3"][latest])
                      for vid, book in books_with_big3.items()}
-    extra = {r["cusip"] for mv in moves_by_view.values() for side in ("bought", "sold") for r in mv[side]} | set(peer_cusips)
+    extra = {r["cusip"] for mv in moves_by_view.values() for side in ("bought", "sold", "gone", "actions") for r in mv[side]} | set(peer_cusips)
     added = 0
     for c in sorted(extra):
         if c in sec_meta or c in lite or not figi.get(c):
@@ -400,12 +414,15 @@ def main() -> None:
         if vid in early:
             out_views[vid]["early"] = early_view(complexes[vid], early[vid], latest, figi, sec_meta)
         moves = moves_by_view[vid]
-        for side in moves.values():
+        for side in (moves["bought"], moves["sold"], moves["gone"], moves["actions"]):
             for r in side:
                 meta = sec_meta.get(r["cusip"]) or lite.get(r["cusip"])
                 r["ticker"] = meta["ticker"] if meta else securities.display_ticker(r["ticker"])
                 if meta:
                     r["name"] = meta["name"]
+                src = r.get("fromCusip") and (sec_meta.get(r["fromCusip"]) or lite.get(r["fromCusip"]))
+                if src:  # the company the shares came from, named as on its own page
+                    r["fromName"], r["fromTicker"] = src["name"], src["ticker"]
         out_views[vid]["moves"] = moves
 
     warnings = audit.check(out_views, latest, period_list)

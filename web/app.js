@@ -789,8 +789,8 @@
           <div class="card-head"><h2 id="mv-h">Biggest moves last quarter</h2><span class="feed-meta">${v.moves ? `all ${v.positions.toLocaleString("en-US")} securities` : `top ${D.meta.topN}`}</span></div>
           <div class="tabs" role="group" aria-label="Direction">${[["bought", "Bought"], ["sold", "Sold"]].map(([k, l]) => `<button type="button" class="tab" data-movers="${k}" aria-pressed="${state.movers === k}">${l}</button>`).join("")}</div>
           <div class="list">${v.moves ? wholeBookMoves(v) : movers.map((r) => { const c = sec(r.cusip); return `<a href="#t-${slugOf(c.ticker)}">${tkChip(c)}<span class="nm"><b>${esc(niceName(c.name))}</b><small>${numS(r.qoq.dShares)} shares</small></span><span class="rt"><b class="${r.qoq.trade >= 0 ? "txt-up" : "txt-down"}">${usdS(r.qoq.trade)}</b>${pill(r.qoq.dSharesPct, { sm: true })}</span></a>`; }).join("") || '<div class="item"><span></span><span class="nm"><small>None this quarter.</small></span><span></span></div>'}</div>
-          <p class="foot mv-gone">Net flow = change in shares × quarter-end price. Splits are adjusted, listing changes and spin-offs are netted into one line, and companies that left every Big Three book (acquired, delisted) are not counted as sales.</p>
-          ${v.moves && state.movers === "sold" && (v.moves.gone || []).length ? `<p class="foot mv-gone">Not counted as sales: ${v.moves.gone.map((r) => `<b>${esc(r.ticker)}</b>`).join(", ")} left every Big Three book (acquired or delisted).</p>` : ""}
+          <p class="foot mv-gone">Net flow = change in shares × quarter-end price. Splits are adjusted, listing changes and spin-offs are netted into one line, shares received in a stock merger or spin-off are not counted as buying, and companies that left every Big Three book (acquired, delisted) are not counted as sales.</p>
+          ${v.moves && (state.movers === "sold" ? notSold(v.moves) : notBought(v.moves)) ? `<p class="foot mv-gone">${state.movers === "sold" ? notSold(v.moves) : notBought(v.moves)}</p>` : ""}
           ${v.moves ? `<button type="button" class="more" data-moves-more>${state.movesMore ? "Show fewer" : `Show top ${v.moves[state.movers].length}`}</button>` : ""}
         </section>
         <section class="card" aria-labelledby="cmp-h">
@@ -1689,10 +1689,12 @@
     return [...m.values()].sort((a, b) => b.value - a.value);
   }
   const secColor = (k) => SECTOR_COLOR[k] || "#9aa0a6";
-  // Each sector opens its Select Sector SPDR fund (holdings, and the three issuers' funds side by side).
-  const SECTOR_ETF = { "Information Technology": "XLK", "Communication Services": "XLC", "Consumer Discretionary": "XLY", "Consumer Staples": "XLP", "Energy": "XLE",
-    "Financials": "XLF", "Health Care": "XLV", "Industrials": "XLI", "Materials": "XLB", "Real Estate": "XLRE", "Utilities": "XLU" };
-  const secHref = (k) => (SECTOR_ETF[k] ? `#etfs/${SECTOR_ETF[k]}` : null);
+  // Each sector opens a sector fund: the Select Sector SPDR, or in a manager view that issuer's own.
+  // [SPDR (State Street), Vanguard, iShares (BlackRock)], as in pipeline/etfs.py
+  const SECTOR_ETF = { "Information Technology": ["XLK", "VGT", "IYW"], "Communication Services": ["XLC", "VOX", "IYZ"], "Consumer Discretionary": ["XLY", "VCR", "IYC"],
+    "Consumer Staples": ["XLP", "VDC", "IYK"], "Energy": ["XLE", "VDE", "IYE"], "Financials": ["XLF", "VFH", "IYF"], "Health Care": ["XLV", "VHT", "IYH"],
+    "Industrials": ["XLI", "VIS", "IYJ"], "Materials": ["XLB", "VAW", "IYM"], "Real Estate": ["XLRE", "VNQ", "IYR"], "Utilities": ["XLU", "VPU", "IDU"] };
+  const secHref = (k) => (SECTOR_ETF[k] ? `#etfs/${SECTOR_ETF[k][{ vanguard: 1, blackrock: 2 }[state.an.view] || 0]}` : null);
   /** Donut with a legend. items: [{label, value, color, href?}] */
   function donut(items, { center = "", sub = "", fmt = usd } = {}) {
     const tot = items.reduce((a, x) => a + Math.max(0, x.value), 0) || 1;
@@ -1746,7 +1748,8 @@
   function anOverview(v) {
     const rows = v.rows, n = v.totals.length, total = v.totals[n - 1];
     const secs = sectorAgg(rows);
-    const top = secs.slice(0, 7), rest = secs.slice(7).reduce((a, x) => a + x.value, 0);
+    const shown = secs.length === 8 ? 8 : 7;  // a single sector left over is named, not "Other sectors"
+    const top = secs.slice(0, shown), rest = secs.slice(shown).reduce((a, x) => a + x.value, 0);
     const dItems = top.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label), href: secHref(x.label) })).concat(rest ? [{ label: "Other sectors", value: rest, color: "#bdc1c6" }] : []);
     const prevV = rows.reduce((a, r) => a + r.value - ((r.qoq && r.qoq.dValue) || 0), 0);
     const flow = rows.reduce((a, r) => a + ((r.qoq && r.qoq.trade) || 0), 0);
@@ -1762,6 +1765,18 @@
         "Net buying = change in shares × quarter-end price. Price effect = the change in price on the shares held a quarter earlier.")}
     </div>`;
   }
+  const tkA = (t) => { const h = linkOf(t); return h ? `<a href="${h}"><b>${esc(t)}</b></a>` : `<b>${esc(t)}</b>`; };
+  /** Shares received rather than bought (a stock merger, a spin-off), left out of the largest buys. */
+  function notBought(m) {
+    const a = m.actions || [];
+    if (!a.length) return "";
+    return `<span>Not counted as buying, shares received rather than bought:</span> ${a.map((x) => `${tkA(x.ticker)} <span>${x.kind === "merger" ? `in the merger with ${esc(niceName(x.fromName))}` : `spun off from ${esc(niceName(x.fromName))}`}</span>`).join(", ")}.`;
+  }
+  /** Companies that left every Big Three book (acquired for cash, delisted), left out of the largest sells. */
+  function notSold(m) {
+    const g = m.gone || [];
+    return g.length ? `<span>Not counted as sales:</span> ${g.map((r) => tkA(r.ticker)).join(", ")} <span>left every Big Three book (acquired or delisted).</span>` : "";
+  }
   function anActivity(v) {
     const rows = v.rows;
     const fromMoves = !!v.moves;
@@ -1775,8 +1790,8 @@
       .map((r) => { const c = sec(r.cusip); return { label: c.ticker, value: r.qoq.dSharesPct, href: `#t-${slugOf(c.ticker)}`, color: r.qoq.dSharesPct >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: niceName(c.name) }; });
     const scope = fromMoves ? `whole portfolio, ${v.positions.toLocaleString("en-US")} securities` : `top ${D.meta.topN}`;
     return `<div class="an-grid">
-      ${panelH("w6", "Largest buys", `net buying last quarter · ${scope}`, hbars(buys, { color: "var(--pos-line)" }))}
-      ${panelH("w6", "Largest sells", `net selling last quarter · ${scope}`, hbars(sells.map((x) => ({ ...x, value: Math.abs(x.value) })), { color: "var(--neg-line)", fmt: (x) => usdS(-x) }))}
+      ${panelH("w6", "Largest buys", `net buying last quarter · ${scope}`, hbars(buys, { color: "var(--pos-line)" }), fromMoves ? notBought(v.moves) : "")}
+      ${panelH("w6", "Largest sells", `net selling last quarter · ${scope}`, hbars(sells.map((x) => ({ ...x, value: Math.abs(x.value) })), { color: "var(--neg-line)", fmt: (x) => usdS(-x) }), fromMoves ? notSold(v.moves) : "")}
       ${panelH("w5", "Position actions", `top ${D.meta.topN} holdings`, donut(counts, { center: String(rows.length), sub: "positions", fmt: (x) => `${x} names` }))}
       ${panelH("w7", "Biggest share-count changes", `top ${D.meta.topN}, shares vs the previous quarter`, hbars(movers, { fmt: (x) => pct(x, 2) }))}
     </div>`;
@@ -1786,7 +1801,7 @@
     const per = D.meta.periods, n = per.length;
     const body = secs.map((x) => {
       const w = x.value / tot, pw = x.prev / ptot;
-      return `<tr><td class="l"><span class="mdot" style="background:${secColor(x.label)}"></span>${esc(x.label)}</td><td>${x.n}</td><td>${usd(x.value)}</td><td>${pct(w, 1, false)}</td><td>${pct(pw, 1, false)}</td><td>${signed(w - pw, (y) => pct(y, 2))}</td><td>${signed(x.trade, usdS)}</td></tr>`;
+      return `<tr><td class="l"><span class="mdot" style="background:${secColor(x.label)}"></span>${esc(x.label)}</td><td>${x.n}</td><td>${usd(x.value)}</td><td>${pct(w, 1, false)}</td><td>${pct(pw, 1, false)}</td><td>${signed(w - pw, (y) => pp(y))}</td><td>${signed(x.trade, usdS)}</td></tr>`;
     }).join("");
     return `<div class="an-grid">
       ${panelH("w6", "Allocation by sector", `top ${D.meta.topN} holdings`, donut(secs.map((x) => ({ label: x.label, value: x.value, color: secColor(x.label), href: secHref(x.label) })), { center: String(secs.length), sub: "sectors" }))}
@@ -1810,30 +1825,39 @@
     </div>`;
   }
 
-  // ----- sector money through the Big Three's sector ETFs (N-PORT net assets, apart from price moves) -----
-  /** Per sector: estimated net flow into the SPDR, Vanguard and iShares sector funds between their last two reports. */
-  function etfSectorFlows() {
+  // ----- sector money through the Big Three's sector ETFs (each fund's own reported flows, N-PORT) -----
+  const flowMgrs = (view) => (view === "big3" ? MGRS : [view]);
+  /** Per sector: money into the view's sector funds (all three issuers, or one) in one calendar quarter. */
+  function etfSectorFlows(view) {
     if (!ETF) return null;
     return Object.entries(ETF.sectors).map(([sector, by]) => {
-      const fs = MGRS.map((m) => etfByTicker(by[m])).filter(Boolean);
-      const flows = fs.map((f) => ({ f, fl: f.flow }));
+      const flows = flowMgrs(view).map((m) => { const f = etfByTicker(by[m]); return { m, f, fl: f && f.flow }; });
       const known = flows.filter((x) => x.fl);
       const total = known.reduce((a, x) => a + x.fl.flow, 0);
-      const base = known.reduce((a, x) => a + x.fl.netAssetsPrev, 0);
-      return { sector, flows, total, pct: base ? total / base : null, assets: fs.reduce((a, f) => a + (f.netAssets || 0), 0), n: known.length };
-    }).sort((a, b) => b.total - a.total);
+      const base = known.reduce((a, x) => a + (x.f.netAssets || 0), 0);
+      return { sector, flows, total, pct: known.length && base ? total / base : null, n: known.length };
+    }).filter((x) => x.n).sort((a, b) => b.total - a.total);
   }
+  const flowScope = (view) => (view === "big3" ? "SPDR, Vanguard and iShares sector funds" : `${ISSUER[view]} sector funds`);
+  const flowQ = () => (ETF && ETF.flowQuarter ? qlabel(ETF.flowQuarter) : null);
   function anFlows(v) {
-    const fl = etfSectorFlows();
+    const view = state.an.view, fl = etfSectorFlows(view);
     if (!fl) return etfMissing();
+    const ms = flowMgrs(view), q = flowQ();
     const thirteen = new Map(sectorAgg(v.rows).map((x) => [x.label, x.trade]));
-    const per = (x) => x && x.fl ? `<span title="${dateL(x.fl.from)} to ${dateL(x.fl.to)}">${signed(x.fl.flow, usdS)}</span>` : '<span class="na">—</span>';
-    const body = fl.map((x) => `<tr><td class="l"><span class="mdot" style="background:${secColor(x.sector)}"></span>${esc(x.sector)}</td>${x.flows.map((y) => `<td><a href="#etfs/${y.f.ticker}" class="tk-link">${esc(y.f.ticker)}</a> ${per(y)}</td>`).join("")}<td><b>${signed(x.total, usdS)}</b></td><td>${signed(x.pct)}</td><td>${thirteen.has(x.sector) ? signed(thirteen.get(x.sector), usdS) : '<span class="na">—</span>'}</td></tr>`).join("");
+    const cell = (x) => {
+      if (!x.f) return '<span class="na">—</span>';
+      const val = x.fl ? `<span${x.fl.in != null ? ` title="In ${usd(x.fl.in)} · out ${usd(x.fl.out)}"` : ""}>${signed(x.fl.flow, usdS)}</span>` : '<span class="na">—</span>';
+      return `<a href="#etfs/${x.f.ticker}" class="tk-link">${esc(x.f.ticker)}</a> ${val}`;
+    };
+    const body = fl.map((x) => `<tr><td class="l"><span class="mdot" style="background:${secColor(x.sector)}"></span>${esc(x.sector)}</td>${x.flows.map((y) => `<td>${cell(y)}</td>`).join("")}${ms.length > 1 ? `<td><b>${signed(x.total, usdS)}</b></td>` : ""}<td>${signed(x.pct)}</td><td>${thirteen.has(x.sector) ? signed(thirteen.get(x.sector), usdS) : '<span class="na">—</span>'}</td></tr>`).join("");
+    const when = q ? `${q}, as reported by each fund` : "latest reports";
+    const other = q && q !== qlabel(D.meta.latest) ? ` <span>The ETF figures are for ${q}, the latest quarter every fund has reported; the 13F column is for ${qlabel(D.meta.latest)}.</span>` : "";
     return `<div class="an-grid">
-      ${panelH("w6", "Money into sector ETFs", "SPDR + Vanguard + iShares sector funds, last reported quarter", hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))))}
-      ${panelH("w6", "Flow as % of fund assets", "a quarter’s flow ÷ assets at the start", hbars(fl.filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct).map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.pct, color: secColor(x.sector), title: x.sector, href: secHref(x.sector) })), { fmt: (y) => pct(y, 1) }))}
-      ${panelH("w12", "Sector flows, fund by fund", "estimated from each fund’s last two N-PORT reports", `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Sector</th><th scope="col">SPDR</th><th scope="col">Vanguard</th><th scope="col">iShares</th><th scope="col">Total flow</th><th scope="col">% of assets</th><th scope="col">13F net buying, top ${D.meta.topN}</th></tr></thead><tbody>${body}</tbody></table></div>`,
-        "Flow = net assets now − net assets a report earlier × the fund’s price change between the two dates, so market moves are taken out and what is left is money investors put in or took out. Vanguard figures cover the whole fund, including its mutual fund share classes. Funds report on their own fiscal quarters, so periods can differ by a month or two (hover a number for its dates). Distributions are not separated, so a flow can be understated by about a quarter’s dividend.")}
+      ${panelH("w6", "Money into sector ETFs", `${flowScope(view)} · ${when}`, hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))))}
+      ${panelH("w6", "Flow as % of fund assets", "the quarter’s flow ÷ the funds’ latest reported net assets", hbars(fl.filter((x) => x.pct != null).sort((a, b) => b.pct - a.pct).map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.pct, color: x.pct >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) })), { fmt: (y) => pct(y, 1) }))}
+      ${panelH("w12", "Sector flows, fund by fund", when, `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Sector</th>${ms.map((m) => `<th scope="col" data-etf-issuer>${ISSUER[m]}</th>`).join("")}${ms.length > 1 ? '<th scope="col">Total flow</th>' : ""}<th scope="col">% of assets</th><th scope="col">13F net buying, top ${D.meta.topN}</th></tr></thead><tbody>${body}</tbody></table></div>`,
+        `<span>Flow = money investors put into a fund minus what they took out (shares created and dividends reinvested, minus shares redeemed), as the fund reports it month by month on Form N-PORT, added up over the same calendar quarter for every fund. Hover a number for the money in and out. Vanguard figures cover the whole fund, including its mutual fund share classes.</span>${other}`)}
     </div>`;
   }
   // ----- peer group: the largest US banks, side by side -----
@@ -1841,11 +1865,17 @@
     const g = (D.meta.peers || {})[gid];
     return g ? g.rows : [];
   }
+  /** A peer row's stake and changes for the view: the Big Three together, or one manager. */
+  function peerView(r, view) {
+    if (view === "big3") return { own: r.ownership, qoq: r.qoq, yoy: r.yoy };
+    return { own: (r.byManager || {})[view], qoq: (r.qoqBy || {})[view] || null, yoy: (r.yoyBy || {})[view] || null };
+  }
+  const median = (xs) => { const a = xs.filter((x) => x != null).sort((x, y) => x - y); return a.length ? (a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2) : null; };
   function anPeers() {
-    const rows = peerRows("banks");
+    const view = state.an.view, who = view === "big3" ? "Big Three" : MGR_NAME[view];
+    const rows = peerRows("banks").map((r) => ({ ...r, ...peerView(r, view) }));
     if (!rows.length) return '<p class="empty-state">No peer data yet.</p>';
-    const own = rows.map((r) => r.ownership).filter((x) => x != null).sort((a, b) => a - b);
-    const med = own.length ? own[Math.floor(own.length / 2)] : null;
+    const med = median(rows.map((r) => r.own));
     const body = rows.map((r, i) => {
       const href = linkOf(r.ticker);
       const p = pxOf(r.ticker);
@@ -1854,17 +1884,17 @@
       const tk = `<span class="tk" style="--tk:${secColor("Financials")}">${esc(r.ticker)}</span>`;
       return `<tr class="${i === 0 ? "focus" : ""}"><td class="l fz fz-em">${href ? `<a class="co" href="${href}">` : '<span class="co">'}${tk}<span class="co-nm"><b>${esc(niceName(r.name))}</b></span>${href ? "</a>" : "</span>"}</td>
         <td>${live("px", r.ticker)}</td><td>${live("pill", r.ticker)}</td><td>${mc ? usd(mc) : '<span class="na">—</span>'}</td>
-        <td><b>${pct(r.ownership, 1, false)}</b></td>${MGRS.map((m) => `<td>${pct(r.byManager[m], 1, false)}</td>`).join("")}
+        <td><b>${pct(r.own, 1, false)}</b></td>${MGRS.map((m) => `<td>${pct(r.byManager[m], 1, false)}</td>`).join("")}
         <td>${r.qoq ? pill(r.qoq.dSharesPct, { sm: true }) : '<span class="na">—</span>'}</td><td>${r.qoq ? signed(r.qoq.trade, usdS) : '<span class="na">—</span>'}</td>
         <td>${r.yoy ? pill(r.yoy.dSharesPct, { sm: true }) : '<span class="na">—</span>'}</td><td>${pe ? mult(pe) : '<span class="na">—</span>'}</td><td>${pct(r.roe, 1, false)}</td></tr>`;
     }).join("");
-    const bars = rows.filter((r) => r.ownership != null).sort((a, b) => b.ownership - a.ownership).map((r) => ({ label: r.ticker, value: r.ownership, href: linkOf(r.ticker), color: r === rows[0] ? "var(--accent)" : "#9aa0a6", title: niceName(r.name) }));
+    const bars = rows.filter((r) => r.own != null).sort((a, b) => b.own - a.own).map((r) => ({ label: r.ticker, value: r.own, href: linkOf(r.ticker), color: r === rows[0] ? "var(--accent)" : "#9aa0a6", title: niceName(r.name) }));
     const flows = rows.filter((r) => r.qoq).sort((a, b) => b.qoq.trade - a.qoq.trade).map((r) => ({ label: r.ticker, value: r.qoq.trade, href: linkOf(r.ticker), color: r.qoq.trade >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: niceName(r.name) }));
     return `<div class="an-grid">
-      ${panelH("w6", "Big Three stake", `share of all shares outstanding · median ${pct(med, 1, false)}`, hbars(bars, { fmt: (y) => pct(y, 1, false) }))}
-      ${panelH("w6", "Net buying last quarter", "Big Three combined, Δ shares × quarter-end price", hbars(flows))}
-      ${panelH("w12", "Largest US banks", `${qlabel(D.meta.latest)} 13F · prices live`, `<div class="table-scroll flat"><table class="tbl peers"><thead><tr><th class="l fz fz-em" scope="col">Bank</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Market cap</th><th scope="col">Big Three stake</th>${MGRS.map((m) => `<th scope="col">${MGR_NAME[m]}</th>`).join("")}<th scope="col">QoQ shares</th><th scope="col">QoQ net flow</th><th scope="col">YoY shares</th><th scope="col">P/E</th><th scope="col">ROE</th></tr></thead><tbody>${body}</tbody></table></div>`,
-        "Stake = shares held ÷ shares outstanding. Market cap and P/E use the live price with the latest reported shares and earnings. The first row is highlighted for comparison.")}
+      ${panelH("w6", `${who} stake`, `share of all shares outstanding · median ${pct(med, 1, false)}`, hbars(bars, { fmt: (y) => pct(y, 1, false) }))}
+      ${panelH("w6", "Net buying last quarter", `${view === "big3" ? "Big Three combined" : who}, Δ shares × quarter-end price`, hbars(flows))}
+      ${panelH("w12", "Largest US banks", `${qlabel(D.meta.latest)} 13F · prices live`, `<div class="table-scroll flat"><table class="tbl peers"><thead><tr><th class="l fz fz-em" scope="col">Bank</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Market cap</th><th scope="col">${who} stake</th>${MGRS.map((m) => `<th scope="col">${MGR_NAME[m]}</th>`).join("")}<th scope="col">QoQ shares</th><th scope="col">QoQ net flow</th><th scope="col">YoY shares</th><th scope="col">P/E</th><th scope="col">ROE</th></tr></thead><tbody>${body}</tbody></table></div>`,
+        `Stake = shares held at the end of ${qlabel(D.meta.latest)} ÷ the latest shares outstanding the company reported. QoQ and YoY are the ${view === "big3" ? "Big Three’s combined" : `${who}’s`} changes in shares. Market cap and P/E use the live price with the latest reported shares and earnings. The first row is highlighted for comparison.`)}
     </div>`;
   }
   // ----- executive brief: what changed, in a handful of sentences with their numbers -----
@@ -1878,31 +1908,35 @@
     const prevRows = rows.map((r) => r.value - ((r.qoq && r.qoq.dValue) || 0)).sort((a, b) => b - a);
     const top10p = prevRows.slice(0, 10).reduce((a, x) => a + x, 0) / tPrev;
     const buy = v.moves && v.moves.bought[0], sell = v.moves && v.moves.sold[0];
-    const fl = etfSectorFlows();
-    const tk = (t) => { const h = linkOf(t); return h ? `<a href="${h}"><b>${esc(t)}</b></a>` : `<b>${esc(t)}</b>`; };
+    const view = state.an.view, fl = etfSectorFlows(view), q = flowQ();
+    const tk = tkA;
     const pts = [];
-    pts.push(`<li><span>The 13F portfolio is <b>${usd(tNow)}</b>, ${signed(tNow / tPrev - 1)} on the quarter.</span> <span>In the top ${D.meta.topN}, net buying added <b>${usdS(flow)}</b> and prices added <b>${usdS(pe)}</b>.</span></li>`);
+    pts.push(`<li><span>The 13F portfolio is <b>${usd(tNow)}</b>, ${signed(tNow / tPrev - 1)} on the quarter.</span> <span>In the top ${D.meta.topN}, estimated net buying added <b>${usdS(flow)}</b> and prices added <b>${usdS(pe)}</b>.</span></li>`);
     if (secs.length) {
       const lo = secs[secs.length - 1];
-      pts.push(`<li><span>Most buying went into <b>${esc(secs[0].label)}</b> (${usdS(secs[0].trade)});</span> <span>${lo.trade < 0 ? "the most selling was in" : "the least buying was in"} <b>${esc(lo.label)}</b> (${usdS(lo.trade)}).</span></li>`);
+      pts.push(`<li><span>Within the top ${D.meta.topN}, most buying went into <b>${esc(secs[0].label)}</b> (${usdS(secs[0].trade)});</span> <span>${lo.trade < 0 ? "the most selling was in" : "the least buying was in"} <b>${esc(lo.label)}</b> (${usdS(lo.trade)}).</span></li>`);
     }
     if (buy && sell) pts.push(`<li><span>Largest single buy: ${tk(buy.ticker)} (${usdS(buy.flow)}).</span> <span>Largest single sale: ${tk(sell.ticker)} (${usdS(sell.flow)}).</span></li>`);
+    if (v.moves && (v.moves.actions || []).length) pts.push(`<li>${notBought(v.moves)}</li>`);
     pts.push(`<li><span>The top 10 holdings are <b>${pct(top10, 1, false)}</b> of the portfolio, against ${pct(top10p, 1, false)} a quarter earlier.</span></li>`);
     if (fl && fl.length) {
       const lo = fl[fl.length - 1];
-      pts.push(`<li><span>Through their sector ETFs, the most money went into <b>${esc(fl[0].sector)}</b> (${usdS(fl[0].total)})</span> <span>${lo.total < 0 ? "and the most came out of" : "and the least into"} <b>${esc(lo.sector)}</b> (${usdS(lo.total)}).</span></li>`);
+      const via = view === "big3" ? "through their sector ETFs" : `through its ${ISSUER[view]} sector ETFs`;
+      pts.push(`<li><span>${q ? `In ${q}, ${via}` : via[0].toUpperCase() + via.slice(1)}, the most money went into <b>${esc(fl[0].sector)}</b> (${usdS(fl[0].total)})</span> <span>${lo.total < 0 ? "and the most came out of" : "and the least into"} <b>${esc(lo.sector)}</b> (${usdS(lo.total)}).</span></li>`);
     }
-    const peers = peerRows("banks");
-    if (peers.length) {
-      const own = peers.map((r) => r.ownership).filter((x) => x != null).sort((a, b) => a - b);
-      const p0 = peers[0];
-      pts.push(`<li><span>Banks: the Big Three own <b>${pct(p0.ownership, 1, false)}</b> of ${tk(p0.ticker)}, against a median of ${pct(own[Math.floor(own.length / 2)], 1, false)} for the ${peers.length} largest US banks;</span> <span>last quarter they ${p0.qoq && p0.qoq.trade >= 0 ? "bought" : "sold"} ${usd(Math.abs((p0.qoq || {}).trade || 0))} of it.</span></li>`);
+    const peers = peerRows("banks").map((r) => ({ ...r, ...peerView(r, view) }));
+    const p0 = peers[0];
+    if (p0 && p0.own != null) {
+      const own = peers.map((r) => r.own).filter((x) => x != null);
+      const t = p0.qoq && p0.qoq.trade;
+      const who = view === "big3" ? "the Big Three own" : `${MGR_NAME[view]} owns`;
+      pts.push(`<li><span>Banks: ${who} <b>${pct(p0.own, 1, false)}</b> of ${tk(p0.ticker)}, against a median of ${pct(median(own), 1, false)} for the ${own.length} largest US banks;</span>${t ? ` <span>last quarter ${view === "big3" ? "they" : "it"} ${t >= 0 ? "bought" : "sold"} ${usd(Math.abs(t))} of it.</span>` : ""}</li>`);
     }
     const secItems = sectorAgg(rows).map((x) => ({ label: SHORT_SECTOR[x.label] || x.label, value: x.trade, color: x.trade >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.label, href: secHref(x.label) })).sort((a, b) => b.value - a.value);
     return `<div class="an-grid">
       ${panelH("w12", "Executive brief", `${qlabel(per[n - 1])} 13F · ${esc(MGR_NAME[state.an.view])}`, `<ul class="brief">${pts.join("")}</ul>`)}
       ${panelH("w6", "Where the 13F buying went", `net buying by sector, top ${D.meta.topN}`, hbars(secItems))}
-      ${panelH("w6", "Where ETF money went", "flows into the Big Three’s sector ETFs", fl ? hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))) : etfMissing())}
+      ${panelH("w6", "Where ETF money went", `${flowScope(view)}${q ? ` · ${q}` : ""}`, fl ? hbars(fl.map((x) => ({ label: SHORT_SECTOR[x.sector] || x.sector, value: x.total, color: x.total >= 0 ? "var(--pos-line)" : "var(--neg-line)", title: x.sector, href: secHref(x.sector) }))) : etfMissing())}
     </div>`;
   }
   function renderAnalytics() {
@@ -1920,7 +1954,7 @@
       ${anKpis(v)}
       <div class="tabs" role="group" aria-label="Analytics view">${AN_TABS.map(([k, l]) => `<button type="button" class="tab" data-an-tab="${k}" aria-pressed="${a.tab === k}">${l}</button>`).join("")}</div>
       ${body}
-      <p class="foot">From the managers’ Form 13F filings on SEC EDGAR, the same data as the rest of Mr. Fink, updated with every new filing. ${D.meta.topN} = the largest company holdings; ETFs and funds are left out. Not investment advice.</p>
+      <p class="foot">From the managers’ Form 13F filings on SEC EDGAR (options positions are left out), the same data as the rest of Mr. Fink, updated with every new filing. Top ${D.meta.topN} = the ${D.meta.topN} largest company holdings; ETFs and funds are left out. Sector ETF flows come from each fund’s Form N-PORT. Not investment advice.</p>
     </div>`;
     const app = $("app");
     app.querySelectorAll("[data-an-view]").forEach((b) => b.addEventListener("click", () => { location.hash = `analytics/${b.dataset.anView}${a.tab === "brief" ? "" : "/" + a.tab}`; }));
