@@ -217,3 +217,15 @@ class NameFallbackTest(unittest.TestCase):
         self.assertEqual(securities._norm("CRH PLC"), securities._norm("CRH PUBLIC LTD CO"))
         self.assertEqual(securities._norm("CLEARWATER ANALYTICS HLDGS I"), "CLEARWATER ANALYTICS")
         self.assertEqual(securities._norm("LINDE PLC"), "LINDE")
+
+    def test_shorter_13f_name_matches_one_sec_company_only(self):
+        from pipeline import securities
+        securities._TICKERS = {"RCL": {"cik": "1", "title": "ROYAL CARIBBEAN CRUISES LTD"}, "TRI": {"cik": "2", "title": "THOMSON REUTERS CORP /CAN/"},
+                               "TMSOF": {"cik": "2", "title": "THOMSON REUTERS CORP /CAN/"}, "FCA": {"cik": "3", "title": "FIRST CAPITAL BANK"},
+                               "FCB": {"cik": "4", "title": "FIRST CAPITAL BANCORP"}}
+        try:
+            self.assertEqual(securities.fallback_map("ROYAL CARIBBEAN GROUP")["ticker"], "RCL")
+            self.assertEqual(securities.fallback_map("THOMSON REUTERS CORP")["ticker"], "TRI")   # the main listing
+            self.assertIsNone(securities.fallback_map("FIRST CAPITAL INC"))                      # two companies fit
+        finally:
+            securities._TICKERS = None
