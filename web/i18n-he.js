@@ -956,8 +956,8 @@
     "הדוחות הכספיים נלקחים מהנתונים שהחברות מגישות עם הדוחות הרבעוניים והשנתיים (10-Q ו-10-K). דיווחי האחזקה (13G) מגיעים מהדיווחים של המנהלות, בין דוחות ה-13F.");
   P("The hosted version re-reads EDGAR every 5 minutes and refreshes this page when a new 13F, 13G, 10-Q or 10-K appears\\. 13F reports lag the quarter by up to 45 days and cover US-listed long positions only\\. Not investment advice\\.", () =>
     "האתר בודק את מאגר ה-SEC כל 5 דקות ומתעדכן כשמגיע דוח חדש (13F, 13G, 10-Q או 10-K). דוח 13F מגיע עד 45 יום אחרי סוף הרבעון, וכולל רק מניות שנסחרות בארה״ב. זו לא המלצה להשקעה.");
-  P("TriQ is an independent project, not affiliated with BlackRock or Larry Fink\\. Icon photo: Larry Fink by Kena Betancur / European Commission,", () =>
-    "TriQ הוא פרויקט עצמאי, בלי קשר לבלקרוק או ללארי פינק. תמונת האייקון: לארי פינק, צילום Kena Betancur / הנציבות האירופית,");
+  P("TriQ is an independent project, not affiliated with BlackRock, Vanguard or State Street\\.", () =>
+    "TriQ הוא פרויקט עצמאי, בלי קשר לבלקרוק, לוואנגארד או לסטייט סטריט.");
 
   // feed
   P("{T} (quarterly|annual) report", (m) => `דוח ${m[2] === "annual" ? "שנתי" : "רבעוני"} של ${FSI}${m[1]}${PDI}`);

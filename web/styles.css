@@ -92,11 +92,10 @@ button { font: inherit; color: inherit; }
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px;
 }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none !important; }
-.brand-mark {
-  width: 34px; height: 34px; border-radius: 50%; flex: none;
-  background: var(--accent) url("icons/icon-192.png") center / cover no-repeat; box-shadow: 0 0 0 1px var(--line);
-  color: transparent; font-size: 0;
-}
+.brand-mark { width: 36px; height: 36px; flex: none; display: block; }
+/* TriQ wordmark: TRI in heavy type, the Q on a lime tile (the logo's colour) */
+.wm { font: 800 21px/1 "Archivo", var(--font-ui); letter-spacing: -.035em; color: var(--ink); display: inline-flex; align-items: center; }
+.wm i { font-style: normal; background: #C8F25B; color: #111111; border-radius: 6px; padding: 2px 5px 1px; margin-inline-start: 2px; }
 .brand-name { font: 500 20px/1 var(--font-ui); letter-spacing: -.01em; white-space: nowrap; }
 .brand-name span { color: var(--muted); font-weight: 400; }
 .search { position: relative; max-width: 620px; width: 100%; justify-self: center; }
