@@ -89,6 +89,33 @@
     "Show fewer": "פחות",
     "Compare managers": "השוואה בין המנהלות",
     "Latest SEC filings": "הדיווחים האחרונים ל-SEC",
+    "Notification settings": "הגדרות התראות",
+    "Unread": "לא נקראו",
+    "Mark all as read": "סימון הכול כנקרא",
+    "Earlier": "קודמות",
+    "Show": "הצגה",
+    "You’re all caught up.": "אין התראות שלא נקראו.",
+    "No recent filings from your watchlist.": "אין דיווחים אחרונים מחברות ברשימת המעקב.",
+    "Follow companies (☆ on a company page) to get every one of their filings here.": "עקבו אחרי חברות (☆ בעמוד החברה) כדי לקבל כאן כל דיווח שלהן.",
+    "No notifications yet.": "עוד אין התראות.",
+    "Get these on this device, even when Mr. Fink is closed.": "קבלו אותן במכשיר הזה, גם כש-Mr. Fink סגור.",
+    "Turn on": "הפעלה",
+    "Companies in your watchlist always notify you, whatever the filing type.": "על חברות ברשימת המעקב תקבלו תמיד התראה, מכל סוג דיווח.",
+    "Where": "איפה",
+    "Push notifications": "התראות פוש",
+    "On iPhone, install Mr. Fink first (below), open it from the home screen, then turn this on.": "באייפון, קודם התקינו את Mr. Fink (למטה), פתחו אותה ממסך הבית, ואז הפעילו כאן.",
+    "Blocked in your browser settings for this site.": "חסום בהגדרות הדפדפן לאתר הזה.",
+    "On this device, even when Mr. Fink is closed.": "במכשיר הזה, גם כש-Mr. Fink סגור.",
+    "While Mr. Fink is open": "כש-Mr. Fink פתוח",
+    "A notification from this tab, on desktop and Android.": "התראה מהלשונית הזו, במחשב ובאנדרואיד.",
+    "Installed on this device.": "מותקנת במכשיר הזה.",
+    "Install the app": "התקנת האפליקציה",
+    "An icon on your home screen, full screen, the last data offline.": "סמל במסך הבית, מסך מלא, והנתונים האחרונים גם בלי רשת.",
+    "In Safari: Share, then Add to Home Screen.": "ב-Safari: שיתוף ואז הוספה למסך הבית.",
+    "In Chrome or Edge: the browser menu, then Install app.": "ב-Chrome או Edge: תפריט הדפדפן ואז התקנת אפליקציה.",
+    "Install": "התקנה",
+    "Open the filing on SEC EDGAR": "פתיחת הדיווח ב-SEC EDGAR",
+    "Back": "חזרה",
     "News": "חדשות",
     "Market news": "חדשות השוק",
     "Company release": "הודעת החברה",
@@ -906,6 +933,7 @@
   P("top (\\d+)", (m) => `${m[1]} הגדולות`);
   P("Show top (\\d+)", (m) => `הצגת ${m[1]} הראשונות`);
   P("Show (\\d+) more", (m) => `עוד ${m[1]}`);
+  P("Notifications, (\\d+) new", (m) => `התראות, ${m[1]} חדשות`);
   P("([\\d,]+) securities", (m, v) => `${v(m[1])} ניירות ערך`);
   P("{N} shares", (m, v) => `${v(m[1])} מניות`);
   P("Up (\\d+) places?", (m) => (m[1] === "1" ? "עלתה מקום אחד" : `עלתה ${m[1]} מקומות`));
@@ -1195,6 +1223,8 @@
     ["#fin-h", { "Financials": "תוצאות כספיות" }],
     [".range, .ranges, th, dt", { "YTD": "מתחילת השנה", "ROE": "תשואה על ההון" }],
     ["[data-etf-issuer]", { "Vanguard": "Vanguard" }],
+    [".np-group", { "New": "חדשות" }],
+    [".ni-dot", { "Unread": "לא נקראה" }],
     [".suggest", { "ETF": "קרן סל" }],
     [".own-table", { "Bought": "קנייה", "Sold": "מכירה", "plan": "לפי תוכנית" }],
     ["[data-feed]", { "13F": "אחזקות (13F)", "13G/D": "מעל 5% (13G/D)", "N-PORT": "קרנות (N\u2011PORT)", "8-K": "דיווח מיידי (8-K)", "10-Q/K": "דוחות כספיים (10-Q/K)" }],
