@@ -25,6 +25,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    outputs:
+      checked_at: ${{ steps.stamp.outputs.checked_at }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -74,16 +76,42 @@ jobs:
         with:
           path: .cache
           key: edgar-${{ github.run_id }}
+      - name: Stamp of this build
+        id: stamp
+        run: echo "checked_at=$(jq -r .checkedAt web/data/status.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
 
+  # GitHub Pages sometimes answers a deployment with a server error, and sometimes reports it as
+  # successful while the site keeps serving an older version. So every deployment is checked
+  # against the live site, retried once, and the run fails (visibly) if the site is still stale.
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      SITE: ${{ vars.SITE_URL || 'https://ngean0807.github.io/mr-fink-Public./' }}
+      BUILT: ${{ needs.build.outputs.checked_at }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
       - id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - name: Check the live site serves this build
+        id: check1
+        continue-on-error: true
+        run: .github/scripts/verify-live.sh
+      - name: Deploy again
+        id: deployment2
+        if: steps.deployment.outcome == 'failure' || steps.check1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - name: Check again
+        if: steps.deployment.outcome == 'failure' || steps.check1.outcome == 'failure'
+        run: .github/scripts/verify-live.sh
