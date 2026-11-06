@@ -1,4 +1,4 @@
-/* Mr. Fink: Hebrew / English language switch.
+/* TriQ: Hebrew / English language switch.
  *
  * English is the site's own text and is never changed. In Hebrew mode this file translates what
  * the app renders, as it appears on screen (text, tooltips, placeholders), and turns the page

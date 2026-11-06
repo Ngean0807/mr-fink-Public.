@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-USER_AGENT = os.environ.get("SEC_USER_AGENT", "MrFink 13F Dashboard research@example.com")
+USER_AGENT = os.environ.get("SEC_USER_AGENT", "TriQ 13F Dashboard research@example.com")
 CACHE_DIR = Path(os.environ.get("MRFINK_CACHE", Path(__file__).resolve().parent.parent / ".cache"))
 MIN_INTERVAL = 0.125  # 8 req/s, comfortably under SEC's 10 req/s ceiling
 

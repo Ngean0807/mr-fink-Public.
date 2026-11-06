@@ -42,7 +42,7 @@ jobs:
         run: python -m unittest discover -s tests -t .
       - name: Build data from EDGAR
         env:
-          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'Mr Fink nissim711@gmail.com' }}
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'TriQ nissim711@gmail.com' }}
           MRFINK_SUBMISSIONS_TTL: "0"
           FINNHUB_KEY: ${{ vars.FINNHUB_KEY }}
           SITE_URL: ${{ vars.SITE_URL || 'https://ngean0807.github.io/mr-fink-Public./' }}

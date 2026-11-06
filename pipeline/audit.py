@@ -3,7 +3,7 @@
 A wrong number on the site usually comes from a filing the pipeline read in a way nobody
 expected: a complex that filed only part of its quarter, a value reported in thousands instead
 of dollars, a split the detector missed. These checks run on the built data and are published
-with it (dashboard.json meta.warnings); the Mr. Fink push server announces each new warning to
+with it (dashboard.json meta.warnings); the TriQ push server announces each new warning to
 subscribers of "site health".
 """
 from __future__ import annotations

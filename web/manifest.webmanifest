@@ -1,6 +1,6 @@
 {
-  "name": "Mr. Fink: Big Three holdings",
-  "short_name": "Mr. Fink",
+  "name": "TriQ: Big Three holdings",
+  "short_name": "TriQ",
   "description": "What BlackRock, Vanguard and State Street own and trade, from their SEC filings: holdings, analytics, small caps, ETFs and alerts.",
   "start_url": "./#big3",
   "scope": "./",
