@@ -287,7 +287,25 @@ def main() -> None:
 
     print(f"[{time.time() - t0:,.0f}s] top profiled")
     # Small caps the Big Three are accumulating, outside their top holdings.
-    emerging_rows, emerging_diag = emerging.screen(books, books_with_big3["big3"], period_list, exclude=selected)
+    # The screen reads every holding's SEC history (minutes); its inputs change with a new 13F or
+    # the SEC's daily data, so it runs once a day or on a new filing and is reused in between.
+    b3 = books_with_big3["big3"]
+    screen_key = hashlib.sha1(json.dumps([period_list, sorted(selected), config.EMERGING, date.today().isoformat(),
+                                          {p: [len(b3.get(p, {})), round(sum(r[1] for r in b3.get(p, {}).values()))] for p in period_list[-9:]}],
+                                         sort_keys=True, default=str).encode()).hexdigest()[:16]
+    memo = edgar.load_artifact(f"emerging_screen_{screen_key}.json.gz")
+    if memo:
+        emerging_rows, emerging_diag = memo
+        print("Emerging screen: reused (no new 13F since it ran today)")
+    else:
+        emerging_rows, emerging_diag = emerging.screen(books, b3, period_list, exclude=selected)
+        try:
+            for old in (edgar.CACHE_DIR / "derived").glob("emerging_screen_*.json.gz"):
+                old.unlink(missing_ok=True)
+            edgar.save_artifact(f"emerging_screen_{screen_key}.json.gz", [emerging_rows, emerging_diag])
+            (edgar.CACHE_DIR / "save-now").write_text(screen_key)  # the workflow keeps the cache now, not at the hour
+        except Exception as e:
+            print(f"  emerging screen not kept: {e}")
     for r in emerging_rows:
         c = r["cusip"]
         if not r["profiled"] and c not in sec_meta:

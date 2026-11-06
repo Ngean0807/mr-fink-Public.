@@ -218,7 +218,7 @@ def company_news(companies: dict[str, str], previous: dict, key: str, log=print)
                 break
         out[t] = {"at": int(now), "items": items}
         done += 1
-        time.sleep(1.05)
+        time.sleep(0.3)  # 15 a run, runs 5 minutes apart: well inside 60 a minute
     cutoff = now - KEEP_DAYS * 86400
     for v in out.values():
         v["items"] = [i for i in v["items"] if i["t"] >= cutoff]
