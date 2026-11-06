@@ -7,7 +7,7 @@ got=""
 for i in $(seq 1 "$tries"); do
   got=$(curl -fsS --max-time 15 "${SITE}data/status.json?v=${GITHUB_RUN_ID:-local}-$i" | jq -r .checkedAt 2>/dev/null || echo "")
   if [ -n "$got" ] && [[ ! "$got" < "$BUILT" ]]; then
-    echo "Live after $((i * 10))s: $got"
+    echo "Live after $(( (i - 1) * 10 ))s: $got"
     exit 0
   fi
   sleep 10
