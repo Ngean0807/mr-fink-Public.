@@ -112,7 +112,7 @@ jobs:
       - name: Check the live site serves this build
         id: check1
         continue-on-error: true
-        run: .github/scripts/verify-live.sh
+        run: .github/scripts/verify-live.sh 9   # a deployment that works is live within seconds
       - name: Deploy again
         id: deployment2
         if: steps.deployment.outcome == 'failure' || steps.check1.outcome == 'failure'
