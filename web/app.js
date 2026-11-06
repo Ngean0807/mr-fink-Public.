@@ -608,7 +608,7 @@
   function feedTitle(e) {
     if (e.kind === "13f") return [`${MGR_NAME[e.manager]} ${e.form.startsWith("13F-NT") ? "notice: reported by affiliates" : "holdings for " + qlabel(e.period)}`, e.entity];
     if (e.kind === "13g") return [`${MGR_NAME[e.manager]} owns ${pct(e.percent, 2, false)} of ${e.tickers[0]}`, `${e.entity} · ${e.form.includes("13D") ? "13D, active stake" : "as of " + dateL(e.eventDate)}`];
-    if (e.kind === "8k") return [`${e.tickers.join(" / ")}: ${(e.labels || []).join(", ") || "current report"}`, `${niceName(e.entity)} · ${e.form}`];
+    if (e.kind === "8k") return [`${e.tickers.join(" / ")}: ${(e.labels || []).join(", ") || "current report"}`, e.pr ? e.pr.title : `${niceName(e.entity)} · ${e.form}`, !!e.pr];
     if (e.kind === "nport") return [`${e.fund} portfolio as of ${dateL(e.period)}`, `${e.entity}${e.netAssets ? " · " + usd(e.netAssets) + " net assets" : ""}`];
     return [`${e.tickers.join(" / ")} ${e.form.startsWith("10-K") ? "annual report" : "quarterly report"}`, `${niceName(e.entity)} · period ended ${dateL(e.period)}`];
   }
@@ -626,8 +626,8 @@
     const shown = items.slice(0, state.feedMore ? 30 : 7);
     const badge = (e) => `<span class="badge ${e.kind === "13f" || e.kind === "nport" ? "f13f" : e.kind === "13g" || (e.kind === "8k" && e.key) ? "f13g" : "frep"}">${esc(e.form.replace("SCHEDULE ", "").replace("SC ", "").replace("NPORT-P", "N-PORT"))}</span>`;
     const rows = shown.map((e) => {
-      const [a, b] = feedTitle(e);
-      return `<a href="${e.url}" target="_blank" rel="noopener">${badge(e)}<span class="nm"><b>${esc(a)}</b><small>${esc(b)}</small></span><span class="rt muted">${ago(e.accepted)}</span></a>`;
+      const [a, b, asFiled] = feedTitle(e);
+      return `<a href="${e.url}" target="_blank" rel="noopener">${badge(e)}<span class="nm"><b>${esc(a)}</b><small${asFiled ? ' translate="no" class="pr-t"' : ""}>${esc(b)}</small></span><span class="rt muted">${ago(e.accepted)}</span></a>`;
     }).join("") || `<div class="item"><span></span><span class="nm"><small>No filings in the past year.</small></span><span></span></div>`;
     const tabs = ticker ? "" : `<div class="tabs" role="group" aria-label="Filing type">${[["all", "All"], ["13f", "13F"], ["13g", "13G/D"], ["nport", "N-PORT"], ["8k", "8-K"], ["report", "10-Q/K"]].map(([k, l]) => `<button type="button" class="tab" data-feed="${k}" aria-pressed="${state.feedTab === k}">${l}</button>`).join("")}</div>`;
     return `<section class="card" aria-labelledby="feed-h">
@@ -636,7 +636,47 @@
       ${items.length > 7 ? `<button type="button" class="more" data-more>${state.feedMore ? "Show fewer" : `Show ${Math.min(30, items.length) - 7} more`}</button>` : ""}
     </section>`;
   }
+  // ---------- news (pipeline/news.py: company press releases from 8-Ks, Finnhub headlines) ----------
+  let NEWS = null, newsLoad = null;
+  function needNews() {
+    if (NEWS) return true;
+    if (!newsLoad) newsLoad = fetch("data/news.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      .then((d) => { NEWS = d || { market: [], companies: {} }; if (["home", "company"].includes(state.page)) render(); });
+    return false;
+  }
+  const isoOf = (t) => new Date(t * 1000).toISOString();
+  const newsRow = (n) => `<a href="${esc(n.u)}" target="_blank" rel="noopener"><span class="badge ${n.own ? "f13g" : "fnews"}">${n.own ? "8-K" : "News"}</span><span class="nm"><b translate="no">${esc(n.h)}</b><small${n.own ? "" : ' translate="no"'}>${esc(n.src)}</small></span><span class="rt muted">${ago(n.iso)}</span></a>`;
+  /** A company's news: its own press releases (from its 8-Ks) and third-party headlines, newest first. */
+  function newsCard(ticker) {
+    const filings = ((D.feed || []).filter((e) => (e.tickers || []).includes(ticker))).concat((bySlug(slugOf(ticker)) || {}).filings || []);
+    const seen = new Set();
+    const own = filings.filter((e) => e.pr && !seen.has(e.accession) && seen.add(e.accession))
+      .map((e) => ({ h: e.pr.title, u: e.pr.url, src: "Company release", iso: e.accepted, own: true }));
+    const loaded = needNews();
+    const fh = loaded ? (((NEWS.companies || {})[ticker] || {}).items || []).map((i) => ({ h: i.h, u: i.u, src: i.s, iso: isoOf(i.t) })) : [];
+    const all = own.concat(fh).sort((a, b) => (a.iso < b.iso ? 1 : -1));
+    // The company's own latest announcement always shows, even behind newer media headlines.
+    const items = own.length && !all.slice(0, 6).some((n) => n.own) && !state.newsMore ? [own[0]].concat(all.filter((n) => n !== own[0]).slice(0, 5)) : all.slice(0, state.newsMore ? 16 : 6);
+    const total = own.length + fh.length;
+    if (!total && loaded) return "";
+    return `<section class="card" aria-labelledby="news-h">
+      <div class="card-head"><h2 id="news-h">News</h2><span class="feed-meta">${fh.length ? "Finnhub · SEC EDGAR" : "SEC EDGAR"}</span></div>
+      <div class="list wrap">${items.map(newsRow).join("") || '<div class="item"><span></span><span class="nm"><small>Loading news…</small></span><span></span></div>'}</div>
+      ${total > 6 ? `<button type="button" class="more" data-news-more>${state.newsMore ? "Show fewer" : `Show ${Math.min(16, total) - 6} more`}</button>` : ""}
+    </section>`;
+  }
+  /** Market headlines on the home page. */
+  function marketNewsCard() {
+    if (!needNews()) return "";
+    const items = (NEWS.market || []).slice(0, 6).map((i) => ({ h: i.h, u: i.u, src: i.s, iso: isoOf(i.t) }));
+    if (!items.length) return "";
+    return `<section class="card" aria-labelledby="mnews-h">
+      <div class="card-head"><h2 id="mnews-h">Market news</h2><span class="feed-meta">Finnhub</span></div>
+      <div class="list wrap">${items.map(newsRow).join("")}</div>
+    </section>`;
+  }
   function wireCommon(root) {
+    root.querySelectorAll("[data-news-more]").forEach((b) => b.addEventListener("click", () => { state.newsMore = !state.newsMore; render(); }));
     root.querySelectorAll("[data-feed]").forEach((b) => b.addEventListener("click", () => { state.feedTab = b.dataset.feed; state.feedMore = false; render(); }));
     root.querySelectorAll("[data-more]").forEach((b) => b.addEventListener("click", () => { state.feedMore = !state.feedMore; render(); }));
     root.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", () => { state.range = b.dataset.range; render(); }));
@@ -772,6 +812,7 @@
       </div>
       <aside class="rail" aria-label="Highlights">
         ${feedCard()}
+        ${marketNewsCard()}
         <section class="card" aria-labelledby="ks-h">
           <div class="card-head"><h2 id="ks-h">Key stats</h2></div>
           <dl class="kv">
@@ -1403,6 +1444,7 @@
             <div><dt>CUSIP</dt><dd>${esc(c)}</dd></div>
           </dl>
         </section>
+        ${newsCard(s.ticker)}
         ${feedCard(s.ticker)}
         <section class="card" aria-labelledby="sim-h">
           <div class="card-head"><h2 id="sim-h">More ${esc(s.sector || "holdings")}</h2></div>

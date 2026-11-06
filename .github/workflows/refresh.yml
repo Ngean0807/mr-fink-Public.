@@ -44,6 +44,8 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT || 'Mr Fink nissim711@gmail.com' }}
           MRFINK_SUBMISSIONS_TTL: "0"
+          FINNHUB_KEY: ${{ vars.FINNHUB_KEY }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://ngean0807.github.io/mr-fink-Public./' }}
         run: python -m pipeline.build
       - name: Price feed and push server config
         # Optional: a free Finnhub key turns on real-time prices (websocket trades) in the browser.

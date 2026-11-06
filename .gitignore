@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 dist/
 web/data/co/
+web/data/news.json
+web/data/press.json

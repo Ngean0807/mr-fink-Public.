@@ -169,7 +169,8 @@ function message(e, site) {
   const url = t ? `${site}#t-${t.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : `${site}#${e.manager || "big3"}`;
   if (e.kind === "13f") return { title: `${MGR[e.manager] || e.entity} 13F for ${quarter(e.period)}`, body: `${e.entity} filed ${e.form}.`, url, tag: e.accession, urgent: true };
   if (e.kind === "13g") return { title: `${MGR[e.manager] || ""} owns ${(e.percent * 100).toFixed(2)}% of ${t}`, body: `${e.entity} filed ${e.form.replace("SCHEDULE ", "")}`, url, tag: e.accession };
-  if (e.kind === "8k") return { title: `${(e.tickers || []).join(" / ")} 8-K: ${(e.labels || []).join(", ") || "current report"}`, body: e.entity, url, tag: e.accession, urgent: !!e.key };
+  // the company's own press release headline, when the 8-K carries one
+  if (e.kind === "8k") return { title: `${(e.tickers || []).join(" / ")} 8-K: ${(e.labels || []).join(", ") || "current report"}`, body: e.pr ? e.pr.title : e.entity, url, tag: e.accession, urgent: !!e.key };
   if (e.kind === "nport") return { title: `${e.fund} holdings as of ${e.period}`, body: `${e.entity} published its portfolio (N-PORT).`, url, tag: e.accession };
   return { title: `${(e.tickers || []).join(" / ")} filed its ${e.form.startsWith("10-K") ? "annual" : "quarterly"} report`, body: `Period ended ${e.period}.`, url, tag: e.accession };
 }
