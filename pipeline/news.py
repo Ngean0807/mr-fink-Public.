@@ -168,7 +168,7 @@ def add_press_releases(events: list[dict], known: dict | None = None, log=print)
 
 
 def _fh(path: str, key: str) -> list | dict:
-    req = urllib.request.Request(f"{FINNHUB}{path}&token={key}", headers={"User-Agent": "Mr Fink"})
+    req = urllib.request.Request(f"{FINNHUB}{path}&token={key}", headers={"User-Agent": "TriQ"})
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
 

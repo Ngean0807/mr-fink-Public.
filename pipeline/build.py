@@ -465,7 +465,7 @@ def main() -> None:
     print(f"[{time.time() - t0:,.0f}s] news")
     data = {
         "meta": {
-            "app": "Mr. Fink",
+            "app": "TriQ",
             "generatedAt": now,
             "fingerprint": fingerprint,
             "latest": latest,
@@ -509,7 +509,7 @@ def main() -> None:
     print(f"[{time.time() - t0:,.0f}s] quotes")
     write_company_pages(lite, data["quotes"]["quotes"])
     print(f"[{time.time() - t0:,.0f}s] company pages written")
-    # Notifications go out from the Mr. Fink push server (worker/), which reads this data; the
+    # Notifications go out from the TriQ push server (worker/), which reads this data; the
     # pipeline itself sends nothing. New audit warnings reach it through status.json.
     try:  # the Big Three's ETFs (prices every run; N-PORT summaries cached per filing)
         etfs.write()

@@ -1,4 +1,4 @@
-// Mr. Fink service worker: the installed app opens offline with the last data it saw.
+// TriQ service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
 const CACHE = "mrfink-v8";
 const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
@@ -25,11 +25,11 @@ self.addEventListener("fetch", (e) => {
   );
 });
 
-// Push notifications from the Mr. Fink push server (worker/): show them, open the page on tap.
+// Push notifications from the TriQ push server (worker/): show them, open the page on tap.
 self.addEventListener("push", (e) => {
   let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "Mr. Fink", body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || "Mr. Fink", {
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "TriQ", body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || "TriQ", {
     body: d.body || "", tag: d.tag, icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { url: d.url || "./" },
   }));
 });

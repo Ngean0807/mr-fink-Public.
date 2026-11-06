@@ -1,4 +1,4 @@
-/* Mr. Fink: Big Three 13F holdings. Plain browser JS, no dependencies. */
+/* TriQ: Big Three 13F holdings. Plain browser JS, no dependencies. */
 (function () {
   "use strict";
 
@@ -587,7 +587,7 @@
       const r = results();
       box.innerHTML = r.length
         ? r.map(({ s, held }, i) => `<a href="${s.href || `#t-${slugOf(s.ticker)}`}" role="option" aria-selected="${i === sel}">${s.href ? `<span class="tk" style="background:${mColor(s.manager)}">${esc(s.ticker)}</span>` : tkChip(s)}<span class="nm">${esc(niceName(s.name))}</span><span class="muted">${held > 0 ? usd(held) + " held" : held === -2 ? "ETF" : ""}</span></a>`).join("")
-        : `<div class="empty">No holding matches “${esc(q.value)}”. Mr. Fink covers the Big Three’s largest company holdings.</div>`;
+        : `<div class="empty">No holding matches “${esc(q.value)}”. TriQ covers the Big Three’s largest company holdings.</div>`;
       box.hidden = false;
       q.setAttribute("aria-expanded", "true");
     }
@@ -1017,7 +1017,7 @@
         <li>Stock splits and CUSIP changes are detected from the filings and adjusted, so share counts compare across time. Funds and ETFs are identified with OpenFIGI and excluded.</li>
         <li>Fundamentals come from the XBRL data companies file with their 10-Q and 10-K. Schedule 13G stakes come from the managers’ ownership filings, which arrive between 13F reports.</li>
         <li>The hosted version re-reads EDGAR every 5 minutes and refreshes this page when a new 13F, 13G, 10-Q or 10-K appears. 13F reports lag the quarter by up to 45 days and cover US-listed long positions only. Not investment advice.</li>
-        <li>Mr. Fink is an independent project, not affiliated with BlackRock or Larry Fink. Icon photo: Larry Fink by Kena Betancur / European Commission, <a href="https://commons.wikimedia.org/wiki/File:Larry_Fink_with_Valdis_Dombrovskis_(cropped).jpg" target="_blank" rel="noopener">Wikimedia Commons</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, cropped.</li>
+        <li>TriQ is an independent project, not affiliated with BlackRock or Larry Fink. Icon photo: Larry Fink by Kena Betancur / European Commission, <a href="https://commons.wikimedia.org/wiki/File:Larry_Fink_with_Valdis_Dombrovskis_(cropped).jpg" target="_blank" rel="noopener">Wikimedia Commons</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, cropped.</li>
       </ul>
       <p class="foot">${qlabel(D.meta.latest)} filings: ${view().sources.map((x) => `<a href="${x.url}" target="_blank" rel="noopener">${esc(x.entity)}</a>`).join(" · ")}</p>
     </section>`;
@@ -1609,15 +1609,15 @@
     lineChart(host, { series, dates: per.slice(i0), height: 280, fmt: k ? usd : (v) => num(v) + " shares", axisFmt: k ? axisUsd : axisNum });
   }
 
-  // ---------- alerts for one company: Mr. Fink's own notifications ----------
+  // ---------- alerts for one company: TriQ's own notifications ----------
   function alertPanel(s) {
     const on = isWatched(s.ticker);
     const pushOn = !!(nprefs.push && canNotify() && Notification.permission === "granted");
     const browserOn = !!(nprefs.browser && canNotify() && Notification.permission === "granted");
     const t = esc(s.ticker);
-    const text = !on ? `Follow ${t} to get a Mr. Fink notification for each of its SEC filings (8-K, 10-Q/10-K, Big Three 13G/13D).`
-      : pushOn ? `${t} is in your watchlist: Mr. Fink notifies you of each new filing, even when the site is closed.`
-      : browserOn ? `${t} is in your watchlist: new filings show as notifications while Mr. Fink is open. Turn on push notifications to get them with the site closed.`
+    const text = !on ? `Follow ${t} to get a TriQ notification for each of its SEC filings (8-K, 10-Q/10-K, Big Three 13G/13D).`
+      : pushOn ? `${t} is in your watchlist: TriQ notifies you of each new filing, even when the site is closed.`
+      : browserOn ? `${t} is in your watchlist: new filings show as notifications while TriQ is open. Turn on push notifications to get them with the site closed.`
       : `${t} is in your watchlist. Turn on notifications to hear about each new filing.`;
     const btn = !on ? `<button type="button" class="btn primary" data-follow="${t}" aria-pressed="false">☆ Follow ${t}</button>`
       : pushOn ? "" : `<button type="button" class="btn primary" data-open-notify>Turn on notifications</button>`;
@@ -1998,7 +1998,7 @@
       ${anKpis(v)}
       <div class="tabs" role="group" aria-label="Analytics view">${AN_TABS.map(([k, l]) => `<button type="button" class="tab" data-an-tab="${k}" aria-pressed="${a.tab === k}">${l}</button>`).join("")}</div>
       ${body}
-      <p class="foot">From the managers’ Form 13F filings on SEC EDGAR (options positions are left out), the same data as the rest of Mr. Fink, updated with every new filing. Top ${D.meta.topN} = the ${D.meta.topN} largest company holdings; ETFs and funds are left out. Sector ETF flows come from each fund’s Form N-PORT. Not investment advice.</p>
+      <p class="foot">From the managers’ Form 13F filings on SEC EDGAR (options positions are left out), the same data as the rest of TriQ, updated with every new filing. Top ${D.meta.topN} = the ${D.meta.topN} largest company holdings; ETFs and funds are left out. Sector ETF flows come from each fund’s Form N-PORT. Not investment advice.</p>
     </div>`;
     const app = $("app");
     app.querySelectorAll("[data-an-view]").forEach((b) => b.addEventListener("click", () => { location.hash = `analytics/${b.dataset.anView}${a.tab === "brief" ? "" : "/" + a.tab}`; }));
@@ -2350,7 +2350,7 @@
 
   // ---------- live updates ----------
   // ---------- notifications ----------
-  // Every notification comes from Mr. Fink: push notifications through the Mr. Fink push server
+  // Every notification comes from TriQ: push notifications through the TriQ push server
   // (worker/, works with the site closed) or browser notifications while a tab is open.
   const NKINDS = [
     ["13f", "13F holdings", "BlackRock, Vanguard or State Street files its quarterly holdings"],
@@ -2358,7 +2358,7 @@
     ["8k", "Material 8-K events", "Deals, bankruptcy, delisting, financings or executive changes at tracked companies"],
     ["report", "10-Q / 10-K", "A tracked company files its quarterly or annual report"],
     ["nport", "Fund holdings (N-PORT)", "A flagship index fund (IWM, VTI, SPSM…) publishes its portfolio"],
-    ["health", "Site health", "Mr. Fink stops updating or recovers, or a data check finds something to review (push only)"],
+    ["health", "Site health", "TriQ stops updating or recovers, or a data check finds something to review (push only)"],
   ];
   const nprefs = (() => {
     try { return JSON.parse(localStorage.getItem("mrfink.notify") || "null"); } catch (e) { return null; }
@@ -2381,7 +2381,7 @@
       } catch (err) { /* some mobile browsers only notify from a service worker */ }
     });
   }
-  // ---------- push notifications through the Mr. Fink push server (worker/) ----------
+  // ---------- push notifications through the TriQ push server (worker/) ----------
   let PUSH_URL = null;
   const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && canNotify();
   const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
@@ -2485,7 +2485,7 @@
     const fresh = shown.filter(isUnread), older = shown.filter((e) => !isUnread(e));
     const empty = tab === "unread" ? "You’re all caught up." : tab === "watch" ? (watch.length ? "No recent filings from your watchlist." : "Follow companies (☆ on a company page) to get every one of their filings here.") : "No notifications yet.";
     const offer = PUSH_URL && pushSupported() && !pushOn() && Notification.permission !== "denied"
-      ? `<div class="np-offer"><span>Get these on this device, even when Mr. Fink is closed.</span><button type="button" class="btn primary" id="np-offer-on">Turn on</button></div>` : "";
+      ? `<div class="np-offer"><span>Get these on this device, even when TriQ is closed.</span><button type="button" class="btn primary" id="np-offer-on">Turn on</button></div>` : "";
     return `
       <div class="np-top"><h2 id="np-h">Notifications</h2>${npIcon("np-settings", "Notification settings", P_GEAR)}${npIcon("np-close", "Close", P_CLOSE)}</div>
       <div class="np-tabs" role="group" aria-label="Show">${[["all", "All"], ["unread", unread ? `Unread · ${unread}` : "Unread"], ["watch", "Watchlist"]].map(([k, l]) => `<button type="button" class="np-tab" data-np-tab="${k}" aria-pressed="${tab === k}">${l}</button>`).join("")}</div>
@@ -2499,9 +2499,9 @@
   function settingsView() {
     const perm = canNotify() ? Notification.permission : "unsupported";
     const pushRow = !PUSH_URL ? "" : !pushSupported()
-      ? `<div class="np-row"><span><b>Push notifications</b><small>${isIOS() && !standalone() ? "On iPhone, install Mr. Fink first (below), open it from the home screen, then turn this on." : "This browser does not support push notifications."}</small></span></div>`
-      : `<label class="np-row"><span><b>Push notifications</b><small>${perm === "denied" ? "Blocked in your browser settings for this site." : "On this device, even when Mr. Fink is closed."}${pushOn() ? ' <button type="button" class="np-link" id="np-push-test">Send a test</button>' : ""}</small></span>${sw("np-push", pushOn(), perm === "denied" ? "disabled" : "")}</label>`;
-    const browserRow = `<label class="np-row"><span><b>While Mr. Fink is open</b><small>${perm === "unsupported" ? "This browser cannot show notifications." : perm === "denied" ? "Blocked in your browser settings for this site." : "A notification from this tab, on desktop and Android."}${browserOn() ? ' <button type="button" class="np-link" id="np-test">Send a test</button>' : ""}</small></span>${sw("np-browser", browserOn(), perm === "unsupported" || perm === "denied" ? "disabled" : "")}</label>`;
+      ? `<div class="np-row"><span><b>Push notifications</b><small>${isIOS() && !standalone() ? "On iPhone, install TriQ first (below), open it from the home screen, then turn this on." : "This browser does not support push notifications."}</small></span></div>`
+      : `<label class="np-row"><span><b>Push notifications</b><small>${perm === "denied" ? "Blocked in your browser settings for this site." : "On this device, even when TriQ is closed."}${pushOn() ? ' <button type="button" class="np-link" id="np-push-test">Send a test</button>' : ""}</small></span>${sw("np-push", pushOn(), perm === "denied" ? "disabled" : "")}</label>`;
+    const browserRow = `<label class="np-row"><span><b>While TriQ is open</b><small>${perm === "unsupported" ? "This browser cannot show notifications." : perm === "denied" ? "Blocked in your browser settings for this site." : "A notification from this tab, on desktop and Android."}${browserOn() ? ' <button type="button" class="np-link" id="np-test">Send a test</button>' : ""}</small></span>${sw("np-browser", browserOn(), perm === "unsupported" || perm === "denied" ? "disabled" : "")}</label>`;
     const installRow = standalone() ? `<div class="np-row"><span><b>App</b><small>Installed on this device.</small></span></div>`
       : `<div class="np-row"><span><b>Install the app</b><small>${installPrompt ? "An icon on your home screen, full screen, the last data offline." : isIOS() ? "In Safari: Share, then Add to Home Screen." : "In Chrome or Edge: the browser menu, then Install app."}</small></span>${installPrompt ? '<button type="button" class="btn" id="np-install">Install</button>' : ""}</div>`;
     return `
@@ -2579,14 +2579,14 @@
     });
     $("np-test")?.addEventListener("click", (e) => {
       e.preventDefault();
-      try { new Notification("Mr. Fink notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
+      try { new Notification("TriQ notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
       catch (err) { toast("This browser shows notifications only from installed apps."); }
     });
     $("np-install")?.addEventListener("click", async () => {
       installPrompt.prompt();
       const { outcome } = await installPrompt.userChoice;
       installPrompt = null;
-      if (outcome === "accepted") toast("Mr. Fink is installed.");
+      if (outcome === "accepted") toast("TriQ is installed.");
       renderNotifyPanel();
     });
   }
