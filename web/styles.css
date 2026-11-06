@@ -226,12 +226,12 @@ label.np-row:hover { background: var(--chip); }
 .np-row b { font: 500 14px var(--font-ui); }
 .np-row small { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
 .np-row .np-link { font-size: 12.5px; }
-.sw { appearance: none; -webkit-appearance: none; flex: none; width: 40px; height: 24px; border-radius: 12px; background: var(--line-strong); position: relative; cursor: pointer; transition: background .15s; margin: 0; }
-.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
-.sw:checked { background: var(--accent); }
-.sw:checked::after { transform: translateX(16px); }
-.sw:disabled { opacity: .4; cursor: not-allowed; }
-.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.np-sw { appearance: none; -webkit-appearance: none; flex: none; width: 40px; height: 24px; border-radius: 12px; background: var(--line-strong); position: relative; cursor: pointer; transition: background .15s; margin: 0; }
+.np-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
+.np-sw:checked { background: var(--accent); }
+.np-sw:checked::after { transform: translateX(16px); }
+.np-sw:disabled { opacity: .4; cursor: not-allowed; }
+.np-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 600px) {
   .npanel { left: 8px; right: 8px; width: auto; }
   .nb-av { width: 48px; height: 48px; }
@@ -600,8 +600,8 @@ sup { font-size: 10px; color: var(--muted); }
 [dir="rtl"] .ni-ext { right: auto; left: 6px; }
 [dir="rtl"] .nb-kind { right: auto; left: -6px; }
 [dir="rtl"] .npanel { right: auto; left: max(16px, env(safe-area-inset-left, 0px)); }
-[dir="rtl"] .sw::after { left: auto; right: 3px; }
-[dir="rtl"] .sw:checked::after { transform: translateX(-16px); }
+[dir="rtl"] .np-sw::after { left: auto; right: 3px; }
+[dir="rtl"] .np-sw:checked::after { transform: translateX(-16px); }
 [dir="rtl"] .np-top { padding: 12px 16px 4px 8px; }
 [dir="rtl"] .follow { margin-left: 0; margin-right: auto; }
 [dir="rtl"] .co-acts { margin-left: 0; margin-right: auto; }

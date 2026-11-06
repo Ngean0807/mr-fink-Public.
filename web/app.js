@@ -2495,7 +2495,7 @@
       </div>
       ${offer}`;
   }
-  const sw = (id, on, attrs = "") => `<input type="checkbox" class="sw" role="switch" id="${id}" ${on ? "checked" : ""} ${attrs}>`;
+  const sw = (id, on, attrs = "") => `<input type="checkbox" class="np-sw" role="switch" id="${id}" ${on ? "checked" : ""} ${attrs}>`;
   function settingsView() {
     const perm = canNotify() ? Notification.permission : "unsupported";
     const pushRow = !PUSH_URL ? "" : !pushSupported()
