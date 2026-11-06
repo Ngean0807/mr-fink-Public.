@@ -9,11 +9,13 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from . import edgar
 
+WORKERS = 6  # parallel requests to Yahoo
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval={interval}&range={range}&includePrePost=false"
 HEADERS = {"User-Agent": "Mozilla/5.0 (MrFink dashboard)"}
 
@@ -99,12 +101,13 @@ def intraday_cached(tickers: list[str], budget: int, max_age: float = 1800, log=
         max_age = max(max_age, 6 * 3600)  # nothing trades: a closing copy stays current
     missing = [t for t in tickers if age[t] == float("inf")]
     stale = missing + sorted((t for t in tickers if max_age < age[t] < float("inf")), key=lambda t: -age[t])[:budget]
-    for t in stale:
+    def refresh(t):
         try:
             path[t].write_text(json.dumps(intraday(t)))
         except Exception as e:
             log(f"  intraday unavailable for {t}: {e}")
-        time.sleep(0.25)
+    with ThreadPoolExecutor(WORKERS) as pool:
+        list(pool.map(refresh, stale))
     out = {}
     for t in tickers:
         try:
@@ -121,13 +124,13 @@ SPARK = "https://query1.finance.yahoo.com/v8/finance/spark?symbols={syms}&range=
 def batch_quotes(tickers: list[str], log=print) -> dict:
     """Last price and previous close for many tickers, 20 per request (no intraday or history)."""
     out = {}
-    for i in range(0, len(tickers), 20):
-        chunk = tickers[i : i + 20]
+
+    def chunk_quotes(chunk):
         try:
             data = _get(SPARK.format(syms=",".join(yahoo_symbol(t) for t in chunk)))
         except Exception as e:
             log(f"  batch quotes failed for {chunk[0]}..: {e}")
-            continue
+            return
         by_symbol = {yahoo_symbol(t): t for t in chunk}
         for sym, q in data.items():
             closes = [c for c in q.get("close") or [] if c is not None]
@@ -137,19 +140,22 @@ def batch_quotes(tickers: list[str], log=print) -> dict:
                     "prevClose": q.get("chartPreviousClose") or q.get("previousClose"),
                     "time": (q.get("timestamp") or [None])[-1],
                 }
-        time.sleep(0.25)
+    with ThreadPoolExecutor(4) as pool:
+        list(pool.map(chunk_quotes, [tickers[i : i + 20] for i in range(0, len(tickers), 20)]))
     log(f"Batch quotes: {len(out)}/{len(tickers)} tickers")
     return out
 
 
 def build(tickers: list[str], log=print) -> tuple[dict, dict]:
     quotes, hist = {}, {}
-    for t in tickers:
+
+    def one(t):
         try:
-            quotes[t] = intraday(t)
-            hist[t] = history(t)
+            q, h = intraday(t), history(t)
+            quotes[t], hist[t] = q, h
         except Exception as e:  # keep going; the page falls back to the 13F price
             log(f"  price data unavailable for {t}: {e}")
-        time.sleep(0.25)
+    with ThreadPoolExecutor(WORKERS) as pool:  # a few at a time: the whole set in seconds, not minutes
+        list(pool.map(one, tickers))
     log(f"Quotes: {len(quotes)}/{len(tickers)} tickers")
     return {"asOf": datetime.now(timezone.utc).isoformat(timespec="seconds"), "source": "Yahoo Finance", "quotes": quotes}, hist

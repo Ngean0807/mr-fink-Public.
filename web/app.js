@@ -34,6 +34,7 @@
     try { localStorage.setItem("mrfink.watch", JSON.stringify(watch)); } catch (e) { /* storage unavailable */ }
     toast(isWatched(t) ? `${t} added to your watchlist` : `${t} removed from your watchlist`);
     pushPrefsChanged();
+    updateBell();
   }
 
   // ---------- formatting ----------
@@ -1644,6 +1645,7 @@
     }
     try { localStorage.setItem("mrfink.watchSeen", JSON.stringify(seen)); } catch (e) { /* storage unavailable */ }
     if (fresh.length) { browserNotify(fresh, true); toast(`New filing: ${feedTitle(fresh[0])[0]}`); }
+    updateBell();
   }
 
   // ---------- export ----------
@@ -2402,105 +2404,184 @@
   }
   let pushTimer = null;
   const pushPrefsChanged = () => { if (nprefs.push) { clearTimeout(pushTimer); pushTimer = setTimeout(() => pushSync().catch(() => {}), 800); } };
-  function pushSection() {
-    if (!PUSH_URL) return "";
-    const head = `<section class="np-sec"><h3>Push notifications, even when the site is closed</h3>`;
-    if (!pushSupported()) {
-      return isIOS() && !standalone()
-        ? `${head}<p>On iPhone, first install Mr. Fink as an app (below), open it from the home screen, then turn push on here.</p></section>`
-        : `${head}<p>This browser does not support push notifications.</p></section>`;
-    }
-    const perm = Notification.permission;
-    if (perm === "denied") return `${head}<p>Notifications are blocked for this site in your browser settings.</p></section>`;
-    return `${head}<p>No app to install. Uses the filing types above and every company in your watchlist.</p>
-      <div>${nprefs.push && perm === "granted"
-        ? '<button type="button" class="btn" id="np-push-test">Send a test</button> <button type="button" class="btn" id="np-push-off">Turn off</button>'
-        : '<button type="button" class="btn primary" id="np-push-on">Turn on push notifications</button>'}</div>
-      <p class="np-status">${nprefs.push && perm === "granted" ? "On for this device." : "Off."}</p></section>`;
+  // ---------- install as an app ----------
+  let installPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; if (!$("npanel").hidden) renderNotifyPanel(); });
+  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  // ---------- notification center: an inbox of SEC events, read state kept in this browser ----------
+  state.np = { view: "inbox", tab: "all" };
+  const nread = (() => {
+    try { return JSON.parse(localStorage.getItem("mrfink.nread") || "null"); } catch (e) { return null; }
+  })() || { base: new Date(Date.now() - 864e5).toISOString(), ids: [] };  // first visit: the last day counts as new
+  const saveRead = () => { try { localStorage.setItem("mrfink.nread", JSON.stringify(nread)); } catch (e) { /* storage unavailable */ } };
+  const isUnread = (e) => e.accepted > nread.base && !nread.ids.includes(e.accession);
+  function markRead(acc) {
+    if (nread.ids.includes(acc)) return;
+    nread.ids = nread.ids.concat(acc).slice(-400);
+    saveRead();
+    updateBell();
   }
-  function wirePush() {
-    $("np-push-on")?.addEventListener("click", async (e) => {
+  /** Notifications for this browser: the chosen filing types, plus everything about watchlist companies. */
+  function inbox() {
+    const all = (D.feed || []).slice();
+    for (const t of watch) { const s = bySlug(slugOf(t)); if (s && s.filings) all.push(...s.filings); }
+    const seen = new Set();
+    const watchedE = (e) => (e.tickers || []).some(isWatched);
+    return all.filter((e) => e.accession && !seen.has(e.accession) && seen.add(e.accession))
+      .filter((e) => watchedE(e) || (nprefs.kinds.includes(e.kind) && (e.kind !== "8k" || e.key)))
+      .sort((a, b) => (a.accepted < b.accepted ? 1 : -1)).slice(0, 80);
+  }
+  function updateBell() {
+    const n = D ? inbox().filter(isUnread).length : 0;
+    const c = $("bell-count");
+    if (!c) return;
+    c.hidden = !n;
+    c.textContent = n > 9 ? "9+" : String(n);
+    $("bell").setAttribute("aria-label", n ? `Notifications, ${n} new` : "Notifications");
+  }
+  const NICON = {  // small badge on each avatar: what kind of filing it is
+    "13f": '<path d="M5 9h3v10H5zm5.5-5h3v15h-3zM16 13h3v6h-3z"/>',
+    "13g": '<path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/>',
+    "8k": '<path d="M7 2v11h3v9l7-12h-4l4-8z"/>',
+    "report": '<path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>',
+    "nport": '<path d="M12 2 1 7l11 5 9-4.09V17h2V7L12 2zM5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z"/>',
+  };
+  function nAvatar(e) {
+    const t = (e.tickers || [])[0];
+    const co = t && (bySlug(slugOf(t)) || emergingAll().find((r) => r.ticker === t));
+    const face = e.manager
+      ? `<span class="nb-face" style="background:${mColor(e.manager)}">${esc(MGR_NAME[e.manager][0])}</span>`
+      : `<span class="nb-face${t && t.length > 3 ? " sm" : ""}" style="background:${secColor((co && co.sector) || "")}" translate="no">${esc((t || "?").slice(0, 5))}</span>`;
+    return `<span class="nb-av">${face}<span class="nb-kind nb-${e.kind}"><svg viewBox="0 0 24 24" aria-hidden="true">${NICON[e.kind] || NICON.report}</svg></span></span>`;
+  }
+  function nItem(e) {
+    const [a, b, asFiled] = feedTitle(e);
+    const t = (e.tickers || [])[0];
+    const href = t && coPage(t) ? `#t-${slugOf(t)}` : e.manager ? `#${e.manager}` : e.url;
+    const ext = !href.startsWith("#");
+    const un = isUnread(e);
+    return `<div class="ni${un ? " unread" : ""}">
+      <a class="ni-main" href="${esc(href)}" data-acc="${esc(e.accession)}"${ext ? ' target="_blank" rel="noopener"' : ""}>
+        ${nAvatar(e)}
+        <span class="ni-txt"><b>${esc(a)}</b><span class="ni-body"${asFiled ? ' translate="no"' : ""}>${esc(b)}</span><span class="ni-time">${ago(e.accepted)}</span></span>
+      </a>
+      <a class="ni-ext" href="${esc(e.url)}" target="_blank" rel="noopener" data-acc="${esc(e.accession)}" title="Open the filing on SEC EDGAR" aria-label="Open the filing on SEC EDGAR"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></a>
+      ${un ? '<span class="ni-dot" aria-label="Unread"></span>' : ""}
+    </div>`;
+  }
+  const npIcon = (id, label, path) => `<button type="button" class="np-icon" id="${id}" aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg></button>`;
+  const P_CLOSE = "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z";
+  const P_GEAR = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.47.47 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.47.47 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z";
+  const P_BACK = "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z";
+  const pushOn = () => !!(nprefs.push && canNotify() && Notification.permission === "granted");
+  const browserOn = () => !!(nprefs.browser && canNotify() && Notification.permission === "granted");
+  function inboxView() {
+    const items = inbox();
+    const tab = state.np.tab;
+    const shown = tab === "unread" ? items.filter(isUnread) : tab === "watch" ? items.filter((e) => (e.tickers || []).some(isWatched)) : items;
+    const unread = items.filter(isUnread).length;
+    const fresh = shown.filter(isUnread), older = shown.filter((e) => !isUnread(e));
+    const empty = tab === "unread" ? "You’re all caught up." : tab === "watch" ? (watch.length ? "No recent filings from your watchlist." : "Follow companies (☆ on a company page) to get every one of their filings here.") : "No notifications yet.";
+    const offer = PUSH_URL && pushSupported() && !pushOn() && Notification.permission !== "denied"
+      ? `<div class="np-offer"><span>Get these on this device, even when Mr. Fink is closed.</span><button type="button" class="btn primary" id="np-offer-on">Turn on</button></div>` : "";
+    return `
+      <div class="np-top"><h2 id="np-h">Notifications</h2>${npIcon("np-settings", "Notification settings", P_GEAR)}${npIcon("np-close", "Close", P_CLOSE)}</div>
+      <div class="np-tabs" role="group" aria-label="Show">${[["all", "All"], ["unread", unread ? `Unread · ${unread}` : "Unread"], ["watch", "Watchlist"]].map(([k, l]) => `<button type="button" class="np-tab" data-np-tab="${k}" aria-pressed="${tab === k}">${l}</button>`).join("")}</div>
+      <div class="np-list">
+        ${shown.length ? `${fresh.length ? `<div class="np-grow"><h3 class="np-group">New</h3><button type="button" class="np-link" id="np-readall">Mark all as read</button></div>${fresh.map(nItem).join("")}` : ""}${older.length ? `<h3 class="np-group">Earlier</h3>${older.map(nItem).join("")}` : ""}`
+          : `<p class="np-empty">${empty}</p>`}
+      </div>
+      ${offer}`;
+  }
+  const sw = (id, on, attrs = "") => `<input type="checkbox" class="sw" role="switch" id="${id}" ${on ? "checked" : ""} ${attrs}>`;
+  function settingsView() {
+    const perm = canNotify() ? Notification.permission : "unsupported";
+    const pushRow = !PUSH_URL ? "" : !pushSupported()
+      ? `<div class="np-row"><span><b>Push notifications</b><small>${isIOS() && !standalone() ? "On iPhone, install Mr. Fink first (below), open it from the home screen, then turn this on." : "This browser does not support push notifications."}</small></span></div>`
+      : `<label class="np-row"><span><b>Push notifications</b><small>${perm === "denied" ? "Blocked in your browser settings for this site." : "On this device, even when Mr. Fink is closed."}${pushOn() ? ' <button type="button" class="np-link" id="np-push-test">Send a test</button>' : ""}</small></span>${sw("np-push", pushOn(), perm === "denied" ? "disabled" : "")}</label>`;
+    const browserRow = `<label class="np-row"><span><b>While Mr. Fink is open</b><small>${perm === "unsupported" ? "This browser cannot show notifications." : perm === "denied" ? "Blocked in your browser settings for this site." : "A notification from this tab, on desktop and Android."}${browserOn() ? ' <button type="button" class="np-link" id="np-test">Send a test</button>' : ""}</small></span>${sw("np-browser", browserOn(), perm === "unsupported" || perm === "denied" ? "disabled" : "")}</label>`;
+    const installRow = standalone() ? `<div class="np-row"><span><b>App</b><small>Installed on this device.</small></span></div>`
+      : `<div class="np-row"><span><b>Install the app</b><small>${installPrompt ? "An icon on your home screen, full screen, the last data offline." : isIOS() ? "In Safari: Share, then Add to Home Screen." : "In Chrome or Edge: the browser menu, then Install app."}</small></span>${installPrompt ? '<button type="button" class="btn" id="np-install">Install</button>' : ""}</div>`;
+    return `
+      <div class="np-top">${npIcon("np-back", "Back", P_BACK)}<h2 id="np-h">Notification settings</h2>${npIcon("np-close", "Close", P_CLOSE)}</div>
+      <div class="np-list">
+        <h3 class="np-group">Notify me about</h3>
+        ${NKINDS.map(([k, l, d]) => `<label class="np-row"><span><b>${l}</b><small>${d}</small></span>${sw("nk-" + k, nprefs.kinds.includes(k), `data-nkind="${k}"`)}</label>`).join("")}
+        <p class="np-note">Companies in your watchlist always notify you, whatever the filing type.</p>
+        <h3 class="np-group">Where</h3>
+        ${pushRow}${browserRow}${installRow}
+      </div>`;
+  }
+  async function pushTurnOn() {
+    try {
+      if ((await Notification.requestPermission()) !== "granted") throw new Error("permission");
+      if (!(await pushSync(true))) throw new Error("server");
+      nprefs.push = true; saveN(); toast("Push notifications are on.");
+    } catch (err) { toast(err.message === "permission" ? "Notifications were not allowed." : "Could not reach the push server. Try again later."); }
+  }
+  async function pushTurnOff() {
+    try {
+      const sub = await pushSubscription(false);
+      if (sub) {
+        await fetch(PUSH_URL + "/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+        await sub.unsubscribe();
+      }
+    } catch (err) { /* already gone */ }
+    nprefs.push = false; saveN();
+  }
+  function renderNotifyPanel() {
+    const np = $("npanel");
+    const keep = np.querySelector(".np-list") ? np.querySelector(".np-list").scrollTop : 0;
+    np.innerHTML = state.np.view === "settings" ? settingsView() : inboxView();
+    np.querySelector(".np-list").scrollTop = keep;
+    $("np-close").addEventListener("click", closeNotify);
+    $("np-settings")?.addEventListener("click", () => { state.np.view = "settings"; renderNotifyPanel(); $("np-back").focus(); });
+    $("np-back")?.addEventListener("click", () => { state.np.view = "inbox"; renderNotifyPanel(); $("np-settings").focus(); });
+    np.querySelectorAll("[data-np-tab]").forEach((b) => b.addEventListener("click", () => { state.np.tab = b.dataset.npTab; renderNotifyPanel(); np.querySelector(".np-list").scrollTop = 0; }));
+    $("np-readall")?.addEventListener("click", () => {
+      const top = inbox()[0];
+      const now = new Date().toISOString();
+      nread.base = top && top.accepted > now ? top.accepted : now;
+      nread.ids = [];
+      saveRead(); updateBell(); renderNotifyPanel();
+    });
+    np.querySelectorAll("[data-acc]").forEach((a) => a.addEventListener("click", () => {
+      markRead(a.dataset.acc);
+      if (a.classList.contains("ni-main") && a.getAttribute("href").startsWith("#")) closeNotify(false);
+      else renderNotifyPanel();
+    }));
+    $("np-offer-on")?.addEventListener("click", async (e) => { e.target.disabled = true; await pushTurnOn(); renderNotifyPanel(); });
+    np.querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
+      nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => np.querySelector(`[data-nkind="${k}"]`).checked);
+      saveN(); pushPrefsChanged(); updateBell();
+    }));
+    $("np-push")?.addEventListener("change", async (e) => {
       e.target.disabled = true;
-      try {
-        if ((await Notification.requestPermission()) !== "granted") throw new Error("permission");
-        if (!(await pushSync(true))) throw new Error("server");
-        nprefs.push = true; saveN(); toast("Push notifications are on.");
-      } catch (err) { toast(err.message === "permission" ? "Notifications were not allowed." : "Could not reach the push server. Try again later."); }
+      if (e.target.checked) await pushTurnOn(); else await pushTurnOff();
       renderNotifyPanel();
     });
-    $("np-push-test")?.addEventListener("click", async () => {
+    $("np-push-test")?.addEventListener("click", async (e) => {
+      e.preventDefault();
       try {
         const sub = await pushSubscription(false);
         const r = await fetch(PUSH_URL + "/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub && sub.endpoint }) });
         toast(r.ok ? "Test sent. It should arrive in a few seconds." : "The push server did not accept the test.");
       } catch (err) { toast("Could not reach the push server."); }
     });
-    $("np-push-off")?.addEventListener("click", async () => {
-      try {
-        const sub = await pushSubscription(false);
-        if (sub) {
-          await fetch(PUSH_URL + "/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
-          await sub.unsubscribe();
-        }
-      } catch (err) { /* already gone */ }
-      nprefs.push = false; saveN(); renderNotifyPanel();
-    });
-  }
-
-  // ---------- install as an app ----------
-  let installPrompt = null;
-  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; if (!$("npanel").hidden) renderNotifyPanel(); });
-  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  function installSection() {
-    if (standalone()) return `<section class="np-sec"><h3>App</h3><p>Mr. Fink is installed on this device.</p></section>`;
-    const how = installPrompt
-      ? `<div><button type="button" class="btn primary" id="np-install">Install Mr. Fink</button></div>`
-      : isIOS()
-        ? `<p>In Safari, tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b>. Once installed, the bell's browser notifications also work on iPhone while the app is open.</p>`
-        : `<p>In Chrome or Edge, open the browser menu and choose <b>Install app</b> (or <b>Add to Home screen</b> on Android).</p>`;
-    return `<section class="np-sec"><h3>Install as an app</h3><p>An icon on your home screen, full screen without the browser bar, and the last data available offline.</p>${how}</section>`;
-  }
-  function renderNotifyPanel() {
-    const perm = canNotify() ? Notification.permission : "unsupported";
-    const browserState = perm === "unsupported" ? "This browser cannot show notifications."
-      : perm === "denied" ? "Notifications are blocked for this site in your browser settings."
-      : nprefs.browser && perm === "granted" ? "On. You will be notified while Mr. Fink is open in a tab." : "Off.";
-    $("npanel").innerHTML = `
-      <div class="np-head"><h2 id="np-h">Notifications</h2><button type="button" class="btn" id="np-close">Close</button></div>
-      <section class="np-sec">
-        <h3>Notify me about</h3>
-        ${NKINDS.map(([k, l, d]) => `<label class="np-kind"><input type="checkbox" data-nkind="${k}" ${nprefs.kinds.includes(k) ? "checked" : ""}><span>${l}</span><small>${d}</small></label>`).join("")}
-      </section>
-      ${pushSection()}
-      <section class="np-sec">
-        <h3>In this browser</h3>
-        <p>No install. Works while the site is open in a tab, on desktop and Android.</p>
-        <div><button type="button" class="btn ${nprefs.browser && perm === "granted" ? "" : "primary"}" id="np-browser" ${perm === "unsupported" || perm === "denied" ? "disabled" : ""}>${nprefs.browser && perm === "granted" ? "Turn off" : "Turn on browser notifications"}</button>
-        ${nprefs.browser && perm === "granted" ? '<button type="button" class="btn" id="np-test">Send a test</button>' : ""}</div>
-        <p class="np-status">${esc(browserState)}</p>
-      </section>
-      ${installSection()}`;
-    $("np-close").addEventListener("click", closeNotify);
-    $("npanel").querySelectorAll("[data-nkind]").forEach((c) => c.addEventListener("change", () => {
-      nprefs.kinds = NKINDS.map(([k]) => k).filter((k) => $("npanel").querySelector(`[data-nkind="${k}"]`).checked);
-      saveN();
-      pushPrefsChanged();
-      renderNotifyPanel();
-    }));
-    $("np-browser")?.addEventListener("click", async () => {
-      if (nprefs.browser && Notification.permission === "granted") { nprefs.browser = false; saveN(); renderNotifyPanel(); return; }
+    $("np-browser")?.addEventListener("change", async (e) => {
+      if (!e.target.checked) { nprefs.browser = false; saveN(); renderNotifyPanel(); return; }
       const res = await Notification.requestPermission();
       nprefs.browser = res === "granted";
-      saveN();
-      renderNotifyPanel();
+      saveN(); renderNotifyPanel();
       if (nprefs.browser) toast("Browser notifications are on.");
     });
-    $("np-test")?.addEventListener("click", () => {
+    $("np-test")?.addEventListener("click", (e) => {
+      e.preventDefault();
       try { new Notification("Mr. Fink notifications are on", { body: "You will hear about new SEC filings while this site is open." }); }
-      catch (e) { toast("This browser shows notifications only from installed apps."); }
+      catch (err) { toast("This browser shows notifications only from installed apps."); }
     });
-    wirePush();
     $("np-install")?.addEventListener("click", async () => {
       installPrompt.prompt();
       const { outcome } = await installPrompt.userChoice;
@@ -2508,27 +2589,35 @@
       if (outcome === "accepted") toast("Mr. Fink is installed.");
       renderNotifyPanel();
     });
-    $("bell-dot").hidden = !(nprefs.browser && perm === "granted");
+  }
+  function placeNotify() {
+    // Just under the bell (on a second header row on phones), down to the bottom of the screen.
+    const top = Math.round($("bell").getBoundingClientRect().bottom + 8);
+    const tb = $("tabbar");  // the bottom navigation on phones: the panel ends above it
+    const tbr = tb && getComputedStyle(tb).display !== "none" ? tb.getBoundingClientRect() : null;
+    const tbTop = tbr && tbr.height && tbr.top > top ? tbr.top : innerHeight;
+    $("npanel").style.top = top + "px";
+    $("npanel").style.maxHeight = `${Math.max(240, Math.round(Math.min(tbTop, innerHeight) - top - 10))}px`;
   }
   function openNotify() {
+    state.np.view = "inbox";
     renderNotifyPanel();
-    // Open just under the bell, which sits on a second header row on phones.
-    const top = Math.round($("bell").getBoundingClientRect().bottom + 8);
-    Object.assign($("npanel").style, { top: top + "px", maxHeight: `calc(100vh - ${top + 16}px)` });
+    placeNotify();
     $("npanel").hidden = false;
     $("bell").setAttribute("aria-expanded", "true");
-    $("np-close").focus();
+    $("npanel").querySelector(".np-tab[aria-pressed=true]").focus();
   }
-  function closeNotify() {
+  function closeNotify(focusBell = true) {
     $("npanel").hidden = true;
     $("bell").setAttribute("aria-expanded", "false");
-    $("bell").focus();
+    if (focusBell) $("bell").focus();
   }
   function setupNotify() {
     $("bell").addEventListener("click", () => ($("npanel").hidden ? openNotify() : closeNotify()));
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("npanel").hidden) closeNotify(); });
-    document.addEventListener("click", (e) => { if (!$("npanel").hidden && document.contains(e.target) && !e.target.closest("#npanel, #bell")) closeNotify(); });
-    $("bell-dot").hidden = !(nprefs.browser && canNotify() && Notification.permission === "granted");
+    document.addEventListener("click", (e) => { if (!$("npanel").hidden && document.contains(e.target) && !e.target.closest("#npanel, #bell")) closeNotify(false); });
+    window.addEventListener("resize", () => { if (!$("npanel").hidden) placeNotify(); });
+    updateBell();
   }
 
   async function poll() {
@@ -2546,6 +2635,8 @@
         D = fresh;
         emSO = null;
         render();
+        updateBell();
+        if (!$("npanel").hidden && state.np.view === "inbox") renderNotifyPanel();
         toast(e ? `New SEC filing: ${feedTitle(e)[0]}. Data updated.` : "Updated with the latest SEC data.");
         browserNotify(added);
       } else {

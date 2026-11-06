@@ -69,7 +69,11 @@ jobs:
         id: hourly
         # Runs come every 5 minutes from cron-job.org (workflow_dispatch) or GitHub's schedule; a
         # push to main (new code) always saves.
-        run: echo "save=$([ "$(date -u +%M)" -lt 5 ] || [ "${{ github.event_name }}" = "push" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        # Also right after the build computed something slow it wants to reuse (.cache/save-now).
+        run: echo "save=$([ "$(date -u +%M)" -lt 5 ] || [ "${{ github.event_name }}" = "push" ] || [ -f .cache/save-now ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Clear the save marker
+        if: always()
+        run: rm -f .cache/save-now
       - name: Save EDGAR cache
         # Also after a failed or timed-out build, so a slow first run (OpenFIGI mapping thousands of
         # new CUSIPs) is not repeated from scratch by every later run.
