@@ -1,7 +1,7 @@
 // TriQ service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
-const CACHE = "mrfink-v8";
-const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
+const CACHE = "mrfink-v9";
+const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/logo.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -30,7 +30,7 @@ self.addEventListener("push", (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "TriQ", body: e.data && e.data.text() }; }
   e.waitUntil(self.registration.showNotification(d.title || "TriQ", {
-    body: d.body || "", tag: d.tag, icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { url: d.url || "./" },
+    body: d.body || "", tag: d.tag, icon: "icons/icon-192.png", badge: "icons/badge-96.png", data: { url: d.url || "./" },
   }));
 });
 self.addEventListener("notificationclick", (e) => {
