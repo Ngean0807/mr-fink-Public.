@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -438,6 +438,13 @@ def main() -> None:
                         | {e["accession"] for e in feed_events})
     fingerprint = hashlib.sha1("|".join(accessions).encode()).hexdigest()[:16]
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # News: the press release behind each 8-K (feed and company pages), Finnhub headlines.
+    try:
+        news.write(feed_events + [e for m in lite.values() for e in (m.get("filings") or [])],
+                   {m["ticker"]: m["name"] for m in sec_meta.values()})
+    except Exception as e:
+        print(f"News skipped: {e}")
+    print(f"[{time.time() - t0:,.0f}s] news")
     data = {
         "meta": {
             "app": "Mr. Fink",
