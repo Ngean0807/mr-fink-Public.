@@ -69,6 +69,83 @@
     "Not among the Big Three’s positions of $50M or more": "לא בין האחזקות של שלוש הגדולות ששוות 50 מיליון דולר ומעלה",
     "Last quarter’s changes followed index-fund flows: passive": "השינויים ברבעון האחרון היו לפי הזרימה לקרנות המחקות: פסיבי",
     "Already following every company Trintel covers": "כבר במעקב אחרי כל החברות ש-Trintel מכסה",
+    // famous investors
+    "Famous investors": "משקיעים מפורסמים",
+    "& activists": "ואקטיביסטים",
+    "Famous investors and activists": "משקיעים מפורסמים ואקטיביסטים",
+    "What several of them bought": "מה כמה מהם קנו",
+    "Companies at least two of these managers added to in their latest 13F": "חברות שלפחות שניים מהמנהלים האלה הגדילו בדוח ה-13F האחרון",
+    "Managers buying": "מנהלים שקנו",
+    "Bought together": "קנו יחד",
+    "Who": "מי",
+    "Activist stakes (Schedule 13D)": "אחזקות של אקטיביסטים (דוח 13D)",
+    "A 13D is filed within days of crossing 5% of a company with intent to influence it; an amendment means the stake or the plan changed": "דוח 13D מוגש תוך ימים ממעבר של 5% בחברה, כשיש כוונה להשפיע עליה; תיקון אומר שהאחזקה או התוכנית השתנו",
+    "Amended its stake": "עדכנו את האחזקה",
+    "New 5%+ stake": "אחזקה חדשה של 5% ומעלה",
+    "The managers": "המנהלים",
+    "Manager": "מנהל",
+    "Style": "סגנון",
+    "13F book": "תיק ה-13F",
+    "Quarter": "רבעון",
+    "Largest holding": "האחזקה הגדולה",
+    "Biggest buy": "הקנייה הגדולה",
+    "Biggest sells": "המכירות הגדולות",
+    "Largest holdings": "האחזקות הגדולות",
+    "Bought": "קנו",
+    "Sold": "מכרו",
+    "Change in shares": "שינוי במניות",
+    "% of book": "% מהתיק",
+    "% of its book": "% מהתיק שלו",
+    "Last quarter": "ברבעון האחרון",
+    "None": "אין",
+    "All famous investors": "כל המשקיעים המפורסמים",
+    "Famous investors could not be loaded.": "לא הצלחנו לטעון את המשקיעים המפורסמים.",
+    "From each manager’s latest Form 13F on SEC EDGAR, compared with the quarter before. Activist 13D filings from the managers’ own SEC filing history, last 12 months. Not investment advice.": "מדוח ה-13F האחרון של כל מנהל ב-SEC EDGAR, בהשוואה לרבעון שלפניו. דוחות 13D של אקטיביסטים מתוך היסטוריית הדיווחים של המנהלים עצמם, 12 החודשים האחרונים. לא ייעוץ השקעות.",
+    "Value": "ערך",
+    "Activist": "אקטיביסט",
+    "Macro": "מאקרו",
+    "Quality growth": "צמיחה איכותית",
+    "Long term": "טווח ארוך",
+    "Innovation growth": "צמיחה וחדשנות",
+    "Tech growth": "צמיחת טכנולוגיה",
+    "Long/short": "לונג/שורט",
+    "Multi-strategy": "רב-אסטרטגי",
+    "Quant": "כמותי",
+    // Israel
+    "Israel": "ישראל",
+    "on Wall Street": "בוול סטריט",
+    "Israeli companies on Wall Street": "חברות ישראליות בוול סטריט",
+    "held by the Big Three in these companies": "ששלוש הגדולות מחזיקות בחברות האלה",
+    "$ Dollars": "$ דולרים",
+    "₪ Shekels": "₪ שקלים",
+    "Field": "תחום",
+    "Big Three hold": "שלוש הגדולות מחזיקות",
+    "Stake": "חלק",
+    "Below $50M held": "מתחת ל-50 מיליון דולר",
+    "Ownership data is being added": "נתוני האחזקות בתהליך הוספה",
+    "The Israeli companies could not be loaded.": "לא הצלחנו לטעון את החברות הישראליות.",
+    "Pharma": "תרופות",
+    "Cyber security": "סייבר",
+    "Software": "תוכנה",
+    "Autonomous driving": "נהיגה אוטונומית",
+    "Defense": "ביטחון",
+    "Chemicals": "כימיקלים",
+    "Semiconductors": "שבבים",
+    "E-commerce": "מסחר מקוון",
+    "Solar energy": "אנרגיה סולארית",
+    "Internet": "אינטרנט",
+    "Medical devices": "מכשור רפואי",
+    "Insurance": "ביטוח",
+    "Shipping": "ספנות",
+    "Digital forensics": "פורנזיקה דיגיטלית",
+    "Renewable energy": "אנרגיה מתחדשת",
+    "Gaming": "משחקים",
+    "Communications": "תקשורת",
+    "Telematics": "טלמטיקה",
+    "Advertising": "פרסום",
+    "Printing technology": "טכנולוגיית הדפסה",
+    "Electric vehicles": "רכב חשמלי",
+    "Networking": "תקשורת נתונים",
     // passive or active
     "Passive or active": "פסיבי או אקטיבי",
     "With the flows": "פסיבי, עם הזרימה",
@@ -98,6 +175,18 @@
   P("{N} companies added to your watchlist", (m, v) => `${v(m[1])} חברות נוספו לרשימת המעקב`);
   P("From the managers’ 13F filings for {Q}\\. Stake = shares the three hold ÷ the shares outstanding the company last reported\\. Passive or active compares each change in shares with the same manager’s change across its whole book \\(its index funds’ flows\\)\\. Not investment advice\\.", (m, v) =>
     `מדוחות ה-13F של המנהלות ל-${v(m[1])}. החלק = המניות ששלושתן מחזיקות ÷ מספר המניות האחרון שהחברה דיווחה. פסיבי או אקטיבי משווה כל שינוי במספר המניות לשינוי של אותה מנהלת בכל התיק שלה (הזרימה לקרנות המחקות שלה). לא ייעוץ השקעות.`);
+  P("{N} well-known managers whose moves are decisions, not index flows: what they hold, what they bought and sold last quarter, and the stakes activists take to push for change\\.", (m, v) =>
+    `${v(m[1])} מנהלים מוכרים שהמהלכים שלהם הם החלטות, לא זרימה למדדים: מה הם מחזיקים, מה קנו ומכרו ברבעון האחרון, והאחזקות שאקטיביסטים לוקחים כדי לדחוף לשינוי.`);
+  P("Biggest buys in {Q}", (m, v) => `הקניות הגדולות ב${v(m[1])}`);
+  P("in {N} US-listed positions, 13F for {Q} \\(filed {D}\\)", (m, v) => `ב-${v(m[1])} אחזקות שנסחרות בארה״ב, דוח 13F ל${v(m[2])} (הוגש ב-${v(m[3])})`);
+  P("From (.+)’s Form 13F on SEC EDGAR \\(US-listed stocks and options are reported; options are left out\\), compared with {Q}\\. A 13F is filed up to 45 days after the quarter ends\\.", (m, v) =>
+    `מדוח ה-13F של ${m[1]} ב-SEC EDGAR (מדווחים מניות ואופציות שנסחרות בארה״ב; האופציות לא נכללות כאן), בהשוואה ל${v(m[2])}. דוח 13F מוגש עד 45 יום אחרי סוף הרבעון.`);
+  P("(.+): (13D amendment|new 13D stake), {D}", (m, v) => `${m[1]}: ${m[2] === "13D amendment" ? "עדכון 13D" : "אחזקת 13D חדשה"}, ${v(m[3])}`);
+  P("{N} Israeli companies listed in the US: how much of each the Big Three hold, what they did last quarter, and which famous investors are in\\.", (m, v) =>
+    `${v(m[1])} חברות ישראליות שנסחרות בארה״ב: כמה מכל אחת מחזיקות שלוש הגדולות, מה הן עשו ברבעון האחרון, ואילו משקיעים מפורסמים בפנים.`);
+  P("Israeli-founded or Israel-headquartered companies with a US listing\\. Holdings from the Big Three’s 13F filings for {Q}; stake where the company reports its share count to the SEC \\(many Israeli companies file a 20-F and do not\\)\\. Prices from Yahoo Finance; shekel amounts at the latest dollar-shekel rate\\. Not investment advice\\.", (m, v) =>
+    `חברות שנוסדו בישראל או שהמטה שלהן בישראל, ונסחרות בארה״ב. האחזקות מדוחות ה-13F של שלוש הגדולות ל${v(m[1])}; החלק מוצג כשהחברה מדווחת ל-SEC על מספר המניות שלה (חברות ישראליות רבות מגישות 20-F ולא מדווחות). המחירים מ-Yahoo Finance; סכומים בשקלים לפי שער הדולר האחרון. לא ייעוץ השקעות.`);
+  P("\\$1 = ₪{N}", (m) => `$1 = ₪${m[1]}`);
   P("Loading {X}…", (m) => `טוען…`);
   P("Money flows: an ETF that takes in money buys more of everything it holds in the same proportion, so the share count of most holdings moves by the same ratio\\. Trintel takes that ratio as the day’s flow; what moves differently is a change in the fund’s mix \\(index additions and removals, rebalances, corporate actions\\)\\. iShares \\(BlackRock\\) and Vanguard do not publish a daily holdings file that can be downloaded, so their funds are tracked monthly from N-PORT filings on the ETFs page\\. Source: State Street, checked {X}\\.", (m, v) =>
     `כסף נכנס ויוצא: תעודת סל שמקבלת כסף קונה עוד מכל מה שהיא מחזיקה באותו יחס, אז מספר המניות של רוב האחזקות זז באותו יחס. Trintel מתייחס ליחס הזה ככסף שנכנס או יצא באותו יום; מה שזז אחרת הוא שינוי בהרכב הקרן (הוספות והוצאות מהמדד, איזון מחדש, אירועים תאגידיים). iShares (בלקרוק) וואנגארד לא מפרסמות קובץ אחזקות יומי שאפשר להוריד, אז הקרנות שלהן מתעדכנות פעם בחודש מדוחות N-PORT בעמוד תעודות הסל. מקור: סטייט סטריט, נבדק ${v(m[1])}.`);

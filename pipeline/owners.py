@@ -92,7 +92,7 @@ def build(books: dict[str, dict], latest: str, prev: str, figi_known: dict, log=
         stake = sh_now / out_sh if out_sh and 0 < sh_now / out_sh < 1.2 else None
         rows[t] = {"n": (sec or {}).get("title") or name, "v": round(total[c]), "s": None if stake is None else round(stake, 4),
                    "q": round(sh_now / sh_prev - 1, 4) if sh_prev else None, "m": per}
-    out = {"asOf": latest, "base": base, "rows": rows}
+    out = {"asOf": latest, "base": base, "rows": rows, "pending": max(0, len(missing) - NEW_PER_RUN)}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, separators=(",", ":")))
     log(f"owners: {len(rows)} companies ({len(missing)} CUSIPs still to map, {min(len(missing), NEW_PER_RUN)} this run)")
