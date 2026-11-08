@@ -748,6 +748,20 @@
     }
     return `<div class="season"><span>${mine.text} for ${qlabel(q.progress.period)}. It moves to the new quarter when every entity has reported${q.progress.pending.length ? ` (waiting for ${esc(q.progress.pending.slice(0, 3).join(", "))}${q.progress.pending.length > 3 ? "…" : ""})` : ""}.</span></div>`;
   }
+  /** Passive or active (pipeline/style.py): a change in shares against the quarter's flow baseline,
+   *  the value-weighted median change across the manager's whole 13F book. */
+  function styleOf(dPct, status, base) {
+    if (status === "new" || status === "exited" || base == null || dPct == null) return null;
+    const x = (1 + dPct) / (1 + base) - 1;
+    return { kind: Math.abs(x) <= 0.02 ? "flows" : x > 0 ? "more" : "less", excess: x };
+  }
+  function styleTag(st, base) {
+    if (!st || !st.kind || st.kind === "new" || st.kind === "exit") return "";
+    const label = { flows: "With the flows", more: "Above the flows", less: "Below the flows" }[st.kind];
+    const tip = st.kind === "flows" ? `Moved with the money flowing in or out of its index funds: shares changed about as much as across the whole book (${signed(base).replace(/<[^>]+>/g, "")})`
+      : `Shares changed ${pp(st.excess).replace(/ pp$/, " points")} ${st.kind === "more" ? "more" : "less"} than across the whole book (${signed(base).replace(/<[^>]+>/g, "")}): an index weight change or an active decision`;
+    return `<span class="sty sty-${st.kind}" title="${esc(tip)}">${label}</span>`;
+  }
   /** Largest net buys or sells across the whole book (pipeline/movers.py), linked where a page exists. */
   function wholeBookMoves(v) {
     const list = v.moves[state.movers].slice(0, state.movesMore ? 25 : 8);
@@ -756,7 +770,7 @@
       const sl = slugOf(r.ticker);
       const href = coPage(r.ticker) ? `#t-${sl}` : null;
       const tag = r.status === "new" ? '<span class="act new">New</span>' : r.status === "exited" ? '<span class="act out">Sold out</span>'
-        : r.status === "converted" ? '<span class="act" title="Net of the listing it replaced (for example ADR to ordinary shares)">Listing change</span>' : pill(r.dSharesPct, { sm: true });
+        : r.status === "converted" ? '<span class="act" title="Net of the listing it replaced (for example ADR to ordinary shares)">Listing change</span>' : pill(r.dSharesPct, { sm: true }) + styleTag(r.style, v.flowBase);
       const inner = `${tkChip(r)}<span class="nm"><b>${esc(niceName(r.name))}</b><small>${numS(r.dShares)} shares</small></span><span class="rt"><b class="${r.flow >= 0 ? "txt-up" : "txt-down"}">${usdS(r.flow)}</b>${tag}</span>`;
       return href ? `<a href="${href}">${inner}</a>` : `<div class="item">${inner}</div>`;
     }).join("");
@@ -917,6 +931,7 @@
         { key: "own", label: big3 ? "Combined stake" : "Stake", get: (r) => r.ownership, render: (r) => (r.ownership == null ? '<span class="na">n/a</span>' : pct(r.ownership, 1, false)) },
         { key: "qoq", label: "QoQ shares", get: (r) => r.qoq && r.qoq.dSharesPct, render: (r) => (r.qoq ? (r.qoq.status === "new" ? '<span class="act new">New</span>' : pill(r.qoq.dSharesPct, { sm: true })) : "—") },
         { key: "flow", label: "QoQ net flow", get: (r) => r.qoq && r.qoq.trade, render: (r) => (r.qoq ? signed(r.qoq.trade, usdS, 5e5) : "—") },
+        { key: "style", label: "Passive or active", get: (r) => (r.style && r.style.excess != null ? r.style.excess : null), render: (r) => styleTag(r.style, view().flowBase) || "—" },
         ...(big3 ? [{ key: "mix", label: "By manager", sortable: false, render: (r) => `<span class="mix" data-mix="${r.cusip}" aria-label="${MGRS.map((id) => `${MGR_NAME[id]} ${usd(r.byManager[id].value)}`).join(", ")}">${MGRS.map((id) => `<i style="width:${(r.byManager[id].value / r.value) * 100}%;background:${mColor(id)}"></i>`).join("")}</span>` }] : []),
         ...(big3 ? [] : [{ key: "trend", label: "Value, 3Y", sortable: false, render: (r) => spark((holder(r.cusip, state.view)?.series || []).slice(-13).map((x) => x[1]), r.yoy && r.yoy.dValuePct < 0 ? "var(--neg-line)" : "var(--pos-line)") }]),
       ];
@@ -1360,10 +1375,10 @@
     const lq = q[q.length - 1], yq = q.length >= 5 ? q[q.length - 5] : null;
     const yoy = (a, b) => (a != null && b ? a / b - 1 : null);
 
-    const ownRow = (label, mark, h, extra = "") => {
+    const ownRow = (label, mark, h, extra = "", vid = null) => {
       if (!h) return `<tr><td class="l">${mark}${label}</td><td colspan="8" class="na l">Not held</td></tr>`;
       const cur = lastOf(h);
-      return `<tr${extra}><td class="l">${mark}${label}</td><td>${usd(cur[1])}</td><td>${live("val", s.ticker, cur[0])}</td><td>${num(cur[0])}</td><td>${h.ownership == null ? "n/a" : pct(h.ownership, 2, false)}</td><td>${h.rank ? "#" + h.rank : "—"}</td><td>${h.qoq ? pill(h.qoq.dSharesPct, { sm: true }) : "—"}</td><td>${h.yoy ? pill(h.yoy.dSharesPct, { sm: true }) : "—"}</td><td>${signed(h.inception.dSharesPct)} <span class="muted">from ${qshort(h.inception.period)}</span></td></tr>`;
+      return `<tr${extra}><td class="l">${mark}${label}</td><td>${usd(cur[1])}</td><td>${live("val", s.ticker, cur[0])}</td><td>${num(cur[0])}</td><td>${h.ownership == null ? "n/a" : pct(h.ownership, 2, false)}</td><td>${h.rank ? "#" + h.rank : "—"}</td><td>${h.qoq ? pill(h.qoq.dSharesPct, { sm: true }) + (vid && D.views[vid] ? styleTag(styleOf(h.qoq.dSharesPct, h.qoq.status, D.views[vid].flowBase), D.views[vid].flowBase) : "") : "—"}</td><td>${h.yoy ? pill(h.yoy.dSharesPct, { sm: true }) : "—"}</td><td>${signed(h.inception.dSharesPct)} <span class="muted">from ${qshort(h.inception.period)}</span></td></tr>`;
     };
     const notes = [];
     (s.splits || []).forEach((sp) => notes.push(sp.ratio >= 1
@@ -1402,7 +1417,7 @@
           <div class="section-head"><h2 id="own-h">Big Three ownership</h2><span class="note">${qlabel(D.meta.latest)} 13F filings</span></div>
           <div class="table-scroll flat"><table class="own-table">
             <thead><tr><th class="l" scope="col">Manager</th><th scope="col">13F value</th><th scope="col">Value today</th><th scope="col">Shares</th><th scope="col">Stake</th><th scope="col">Rank</th><th scope="col">QoQ shares</th><th scope="col">YoY shares</th><th scope="col">Since first held</th></tr></thead>
-            <tbody>${MGRS.map((id) => ownRow(MGR_NAME[id], dot(id), holder(c, id))).join("")}${ownRow("Big Three", "", b3, ' class="total"')}</tbody>
+            <tbody>${MGRS.map((id) => ownRow(MGR_NAME[id], dot(id), holder(c, id), "", id)).join("")}${ownRow("Big Three", "", b3, ' class="total"', "big3")}</tbody>
           </table></div>
           ${ownersDonut(c)}
           ${latestG.length ? `<div class="g13"><b>Latest Schedule 13G stakes</b>${latestG.map((g) => `<span>${dot(g.manager)}${esc(g.reporter)}: <b>${pct(g.percent, 2, false)}</b> of the class as of ${dateL(g.eventDate)} · <a href="${g.url}" target="_blank" rel="noopener">filed ${dateL(g.filed)}</a></span>`).join("")}</div>` : ""}
@@ -2672,7 +2687,7 @@
   window.TRINTEL = {
     get D() { return D; }, get Q() { return Q; }, get watch() { return watch; }, state,
     $, esc, usd, usdS, num, pct, pp, signed, pill, dateL, ago, qlabel, niceName, tkChip, live, pxOf, dayChg, mColor, dot,
-    MGR_NAME, MGRS, VIEWS, aumOf, holder, anySec, isWatched, toggleWatch, toast, render, exportBtn, slugOf,
+    styleOf, styleTag, MGR_NAME, MGRS, VIEWS, aumOf, holder, anySec, isWatched, toggleWatch, toast, render, exportBtn, slugOf,
     secByTicker: (t) => Object.values(D.securities).find((s) => s.ticker === t) || emergingAll().find((r) => r.ticker === t),
     page(name, def) { EXTRA[name] = def; }, chip(fn) { EXTRA_CHIPS.push(fn); }, company(fn) { EXTRA_CO.push(fn); }, onBoot(fn) { if (D) fn(); else ON_BOOT.push(fn); },
     rerender(pages) { if (!pages || pages.includes(state.page)) render(); },
