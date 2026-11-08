@@ -16,3 +16,5 @@ web/data/votes.json
 web/data/votes/
 web/data/csv/
 web/data/digest.json
+web/data/ask/
+worker/node_modules/

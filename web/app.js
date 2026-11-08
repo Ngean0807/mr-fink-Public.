@@ -2737,6 +2737,7 @@
       fetch("data/config.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
         PUSH_URL = (cfg && cfg.pushUrl) || null;
         if (!$("npanel").hidden) renderNotifyPanel();
+        if (EXTRA[state.page]) render();  // pages that use the push server (Ask, the digest)
         if (cfg && cfg.finnhubKey) { startRealtime(cfg.finnhubKey); setInterval(pollQuotes, POLL_MS * 5); }
         else { priceMode = "delayed"; setInterval(pollQuotes, POLL_MS); }
         flush();

@@ -2,6 +2,9 @@ name: Deploy push server
 
 # The Cloudflare Worker that sends Web Push notifications (worker/). Needs the repository secret
 # CLOUDFLARE_API_TOKEN ("Edit Cloudflare Workers" template) and the variable CLOUDFLARE_ACCOUNT_ID.
+# Optional Worker secrets, set in Cloudflare (Workers > mrfink-push > Settings > Variables and
+# Secrets), never in this repository: ANTHROPIC_API_KEY turns on Ask; TELEGRAM_BOT_TOKEN (and the
+# plain variable TELEGRAM_BOT_NAME) turns on the weekly digest on Telegram.
 on:
   push:
     branches: [main]
@@ -43,6 +46,12 @@ jobs:
             curl -s -X PUT -H "$auth" -H "Content-Type: application/json" -d "{\"subdomain\":\"$sub\"}" "$api/workers/subdomain" | jq -c '.success, .errors'
           fi
           echo "Push server URL: https://mrfink-push.$sub.workers.dev"
+      - name: Install and test
+        if: env.ready == '1'
+        working-directory: worker
+        run: |
+          npm ci --no-audit --no-fund
+          node test/ask.test.mjs test/fixtures
       - name: Deploy
         if: env.ready == '1'
         working-directory: worker

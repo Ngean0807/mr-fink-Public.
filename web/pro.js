@@ -397,6 +397,51 @@
   T.page("digest", { match: (h) => h === "digest" || h.startsWith("digest/"), onRoute: (h) => { digestWeek = h.startsWith("digest/") ? h.slice(7) : null; }, render: digestPage });
   T.chip(() => `<a class="chip" href="#digest" ${T.state.page === "digest" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--warn)"></span>Weekly digest</a>`);
 
+  // ---------- 6. Ask Trintel: questions in Hebrew or English, answered by Claude from the data (worker/src/ask.js) ----------
+  const askLog = [];  // this visit's questions and answers
+  let askBusy = false, askState = null;  // null | "off"
+  const EXAMPLES_HE = ["מה בלקרוק קנתה הכי הרבה ברבעון האחרון, ומה מזה אקטיבי?", "כמה מטבע (TEVA) מחזיקות שלוש הגדולות?", "על מה משקיעים מפורסמים מסכימים עכשיו?", "איך ואנגארד הצביעה על הצעות אקלים?"];
+  const EXAMPLES_EN = ["What did BlackRock buy most last quarter, and what of it was active?", "How much of Nvidia do the Big Three own?", "What are famous investors agreeing on right now?", "How did Vanguard vote on climate proposals?"];
+  function askPage(app) {
+    const he = isHe();
+    const examples = he ? EXAMPLES_HE : EXAMPLES_EN;
+    app.innerHTML = `<div class="main ask">
+      <div class="hero"><h1>Ask Trintel</h1>
+        <p class="hero-sub">Ask about the Big Three, famous investors, any company or the signals, in Hebrew or English. Answers come from Trintel’s data only, with numbers and dates.</p></div>
+      ${!T.pushUrl ? '<p class="empty-state">Ask works on the live site only.</p>' : askState === "off" ? '<p class="empty-state">Ask is not switched on yet.</p>' : `
+      <div class="ask-log" aria-live="polite">${askLog.map((x) => `<div class="ask-q" translate="no">${esc(x.q)}</div><div class="ask-a${x.err ? " err" : ""}"${x.err ? "" : ' translate="no"'}>${x.a == null ? '<span class="muted">Thinking…</span>' : esc(x.a).replace(/\n/g, "<br>")}${(x.tickers || []).length ? `<div class="ask-links">${x.tickers.map((t) => (T.secByTicker(t) ? `<a href="#t-${slugOf(t)}">${esc(t)}</a>` : "")).join("")}</div>` : ""}</div>`).join("")}</div>
+      ${askLog.length ? "" : `<div class="ask-ex">${examples.map((q) => `<button type="button" class="chip" data-ex="${esc(q)}" translate="no">${esc(q)}</button>`).join("")}</div>`}
+      <form class="ask-form" id="ask-form"><textarea id="ask-q" rows="2" maxlength="600" placeholder="${he ? "שאלו שאלה…" : "Ask a question…"}" translate="no"></textarea><button type="submit" class="btn primary" ${askBusy ? "disabled" : ""}>Ask</button></form>
+      <p class="foot">Answers are written by an AI model (Claude) from Trintel’s data and can be wrong; check the numbers on the pages it links. Not investment advice. A few questions a day per visitor.</p>`}
+    </div>`;
+    const form = $("ask-form");
+    if (!form) return;
+    const send = async (q) => {
+      q = q.trim();
+      if (!q || askBusy) return;
+      askBusy = true;
+      const entry = { q, a: null };
+      askLog.push(entry);
+      T.render();
+      try {
+        const r = await fetch(T.pushUrl + "/ask", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, lang: he ? "he" : "en", history: askLog.slice(0, -1).slice(-2).flatMap((x) => (x.a && !x.err ? [{ role: "user", content: x.q }, { role: "assistant", content: x.a }] : [])) }) });
+        const d = await r.json().catch(() => ({}));
+        if (d.error === "not_configured") { askState = "off"; askLog.pop(); }
+        else if (d.answer) { entry.a = d.answer; entry.tickers = d.tickers; }
+        else { entry.err = true; entry.a = d.error === "daily_user" ? "You have reached today’s question limit. Try again tomorrow." : d.error === "daily_total" ? "Ask has reached its limit for today. Try again tomorrow." : d.error === "refused" ? "This question cannot be answered here." : "Something went wrong. Try again in a minute."; }
+      } catch (e) { entry.err = true; entry.a = "Something went wrong. Try again in a minute."; }
+      askBusy = false;
+      T.render();
+      document.querySelector(".ask-log > :last-child")?.scrollIntoView({ block: "nearest" });
+    };
+    form.addEventListener("submit", (e) => { e.preventDefault(); send($("ask-q").value); });
+    $("ask-q").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("ask-q").value); } });
+    app.querySelectorAll("[data-ex]").forEach((b) => b.addEventListener("click", () => send(b.dataset.ex)));
+  }
+  T.page("ask", { match: (h) => h === "ask", render: askPage });
+  T.chip(() => `<a class="chip" href="#ask" ${T.state.page === "ask" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--accent)"></span>Ask <small>in Hebrew or English</small></a>`, true);
+
   // ---------- 10. Pro tools: proxy votes (pipeline/votes.py), CSV for spreadsheets and the data API ----------
   const VOTE = { FOR: "For", AGAINST: "Against", WITHHOLD: "Withheld", ABSTAIN: "Abstained" };
   const voteTag = (v, it) => { if (!v) return '<span class="na">—</span>'; const w = v === (it.s === "Shareholder" ? "AGAINST" : "FOR"); return `<span class="vote ${w ? "with" : "against"}" title="${w ? "With management" : "Against management"}">${esc(VOTE[v] || v.toLowerCase())}</span>`; };
