@@ -267,6 +267,28 @@
     "Israeli companies": "חברות ישראליות",
     "Latest prices": "המחירים האחרונים",
     "When the data was last checked": "מתי הנתונים נבדקו לאחרונה",
+    // weekly digest
+    "Weekly digest": "סיכום שבועי",
+    "The week’s most important changes, every Friday after the US close (push only)": "השינויים החשובים של השבוע, בכל יום שישי אחרי סגירת המסחר בארה״ב (רק בהתראות שמגיעות גם כשהאתר סגור)",
+    "The week in short": "השבוע בקצרה",
+    "A quiet week so far.": "שבוע שקט עד עכשיו.",
+    "Get it every Friday as a push notification: turn on": "קבלו אותו בכל יום שישי כהתראה: הפעילו את",
+    "under the bell.": "תחת הפעמון.",
+    "Get it on Telegram": "קבלו אותו בטלגרם",
+    "Big Three stake filings (13G/13D)": "דיווחי אחזקה של שלוש הגדולות (13G/13D)",
+    "SPDR funds this week": "קרנות SPDR השבוע",
+    "Net money in or out:": "כסף נטו שנכנס או יצא:",
+    "Buy": "קנייה",
+    "Sell": "מכירה",
+    "Mostly a change in the funds’ mix": "בעיקר שינוי בהרכב הקרנות",
+    "Mostly money flows": "בעיקר כסף שנכנס או יצא",
+    "Activists": "אקטיביסטים",
+    "Famous investors’ 13F filings": "דוחות 13F של משקיעים מפורסמים",
+    "New signals": "סיגנלים חדשים",
+    "Best signals so far": "הסיגנלים הטובים עד עכשיו",
+    "Key company reports (8-K)": "דיווחים מהותיים של חברות (8-K)",
+    "Signal": "סיגנל",
+    "The weekly digest could not be loaded.": "לא הצלחנו לטעון את הסיכום השבועי.",
     // passive or active
     "Passive or active": "פסיבי או אקטיבי",
     "With the flows": "פסיבי, עם הזרימה",
@@ -331,6 +353,11 @@
   P("Shareholder meeting of {D}, through each manager’s flagship S&P 500 fund \\(Form N-PX\\)\\.", (m, v) => `אסיפת בעלי המניות מ-${v(m[1])}, דרך קרן S&P 500 המרכזית של כל מנהלת (דוח N-PX).`);
   P("(Shareholder|Company) proposal · (.+)", (m) => `${m[1] === "Shareholder" ? "הצעה של בעלי מניות" : "הצעה של החברה"} · ${I.dict[m[2]] || m[2]}`);
   P("of {N}", (m, v) => `מתוך ${v(m[1])}`);
+  P("{D} – {D}( · this week so far)?", (m, v) => `${v(m[1])} – ${v(m[2])}${m[3] ? " · השבוע עד עכשיו" : ""}`);
+  P("(BlackRock|Vanguard|State Street): {N} of {T}", (m, v) => `${HE_M[m[1]]}: ${v(m[2])} ב-${m[3]}`);
+  P("{T}: {N}", (m, v) => `${m[1]}: ${v(m[2])}`);
+  P("{Q} · biggest buy {T} \\(({N})\\)", (m, v) => `${v(m[1])} · הקנייה הגדולה ${m[2]} (${v(m[3])})`);
+  P("(.+) · since {D} · S&P 500 {N}", (m, v) => `${I.dict[m[1]] || m[1]} · מאז ${v(m[2])} · S&P 500 ${v(m[3])}`);
   P("Loading {X}…", (m) => `טוען…`);
   P("Money flows: an ETF that takes in money buys more of everything it holds in the same proportion, so the share count of most holdings moves by the same ratio\\. Trintel takes that ratio as the day’s flow; what moves differently is a change in the fund’s mix \\(index additions and removals, rebalances, corporate actions\\)\\. iShares \\(BlackRock\\) and Vanguard do not publish a daily holdings file that can be downloaded, so their funds are tracked monthly from N-PORT filings on the ETFs page\\. Source: State Street, checked {X}\\.", (m, v) =>
     `כסף נכנס ויוצא: תעודת סל שמקבלת כסף קונה עוד מכל מה שהיא מחזיקה באותו יחס, אז מספר המניות של רוב האחזקות זז באותו יחס. Trintel מתייחס ליחס הזה ככסף שנכנס או יצא באותו יום; מה שזז אחרת הוא שינוי בהרכב הקרן (הוספות והוצאות מהמדד, איזון מחדש, אירועים תאגידיים). iShares (בלקרוק) וואנגארד לא מפרסמות קובץ אחזקות יומי שאפשר להוריד, אז הקרנות שלהן מתעדכנות פעם בחודש מדוחות N-PORT בעמוד תעודות הסל. מקור: סטייט סטריט, נבדק ${v(m[1])}.`);
