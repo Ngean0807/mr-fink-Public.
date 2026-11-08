@@ -781,3 +781,8 @@ sup { font-size: 10px; color: var(--muted); }
 .badge.tone-up { background: var(--pos-soft); color: var(--pos); }
 .badge.tone-down { background: var(--neg-soft); color: var(--neg); }
 .bt-note { margin-top: 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 14px; line-height: 1.55; }
+.vote { display: inline-block; font: 500 12px var(--font-ui); padding: 2px 8px; border-radius: 6px; }
+.vote.with { background: var(--chip); color: var(--ink-2); }
+.vote.against { background: var(--warn-soft); color: var(--warn); }
+code.copy { cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: var(--chip); white-space: nowrap; }
+.api-ex { margin-top: 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; overflow-x: auto; }

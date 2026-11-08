@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, signals, style, thirteenf
+from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, exports, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, signals, style, thirteenf, votes
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -550,6 +550,14 @@ def main() -> None:
         signals.build(data)
     except Exception as e:
         print(f"Signals skipped: {e}")
+    try:  # proxy votes from Form N-PX (read once a year; per-company files every run)
+        votes.build()
+    except Exception as e:
+        print(f"Proxy votes skipped: {e}")
+    try:  # CSV copies for spreadsheets (last: they read the JSON files written above)
+        exports.write(data)
+    except Exception as e:
+        print(f"CSV exports skipped: {e}")
     # The Emerging backtest is re-run once per new quarter (it reads every 13F since 2017).
     try:
         bt = json.loads(backtest.OUT.read_text()) if backtest.OUT.exists() else {}

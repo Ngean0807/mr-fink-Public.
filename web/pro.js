@@ -343,6 +343,88 @@
   T.page("israel", { match: (h) => h === "israel", render: israelPage });
   T.chip(() => `<a class="chip" href="#israel" ${T.state.page === "israel" ? 'aria-current="page"' : ""}><span class="sw il-sw"></span>Israel <small>on Wall Street</small></a>`);
 
+  // ---------- 10. Pro tools: proxy votes (pipeline/votes.py), CSV for spreadsheets and the data API ----------
+  const VOTE = { FOR: "For", AGAINST: "Against", WITHHOLD: "Withheld", ABSTAIN: "Abstained" };
+  const voteTag = (v, it) => { if (!v) return '<span class="na">—</span>'; const w = v === (it.s === "Shareholder" ? "AGAINST" : "FOR"); return `<span class="vote ${w ? "with" : "against"}" title="${w ? "With management" : "Against management"}">${esc(VOTE[v] || v.toLowerCase())}</span>`; };
+  function votesPage(app) {
+    const d = data("votes", ["votes"]);
+    if (d === undefined) { app.innerHTML = `<div class="main">${loading("proxy votes")}</div>`; return; }
+    if (!d) { app.innerHTML = `<div class="main"><p class="empty-state">Proxy votes could not be loaded.</p></div>`; return; }
+    const ms = Object.keys(d.summary);
+    const cats = [...new Set(ms.flatMap((m) => Object.keys(d.summary[m].byCategory)))];
+    app.innerHTML = `<div class="main">
+      <div class="hero"><h1>How the Big Three vote</h1>
+        <p class="hero-sub">Every shareholder-meeting vote of each manager’s flagship S&amp;P 500 fund (${ms.map((m) => `${T.MGR_NAME[m]}: ${esc(d.funds[m])}`).join(", ")}), from Form N-PX for the year to ${dateL(d.period)}.</p></div>
+      <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Manager</th><th scope="col">Votes cast</th><th scope="col">Against management</th><th scope="col">Shareholder proposals</th><th scope="col">Supported</th></tr></thead>
+        <tbody>${ms.map((m) => { const x = d.summary[m]; return `<tr><td class="l">${T.dot(m)}${T.MGR_NAME[m]}</td><td>${x.proposals.toLocaleString("en-US")}</td><td>${pct(x.againstMgmt, 1, false)}</td><td>${x.shareholder}</td><td>${pct(x.shareholderFor, 1, false)}</td></tr>`; }).join("")}</tbody></table></div>
+      <section class="section" aria-labelledby="vt-c"><div class="section-head"><div><h2 id="vt-c">Support for shareholder proposals, by subject</h2><p class="note">Share of the proposals voted for</p></div></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Subject</th>${ms.map((m) => `<th scope="col">${T.dot(m)}${T.MGR_NAME[m]}</th>`).join("")}</tr></thead>
+        <tbody>${cats.map((c) => `<tr><td class="l">${esc(c)}</td>${ms.map((m) => { const x = d.summary[m].byCategory[c]; return `<td>${x ? `${pct(x[1], 0, false)} <small class="muted">of ${x[0]}</small>` : "—"}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div></section>
+      <section class="section" aria-labelledby="vt-a"><div class="section-head"><div><h2 id="vt-a">Where they voted against management</h2><p class="note">Proposals where at least one of the three went against the board’s position, most agreement first</p></div></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th class="l" scope="col">Proposal</th><th scope="col">Meeting</th>${ms.map((m) => `<th scope="col">${T.dot(m)}${T.MGR_NAME[m]}</th>`).join("")}</tr></thead>
+        <tbody>${d.contested.slice(0, 80).map((it) => `<tr><td class="l">${coLink(it.t, it.n)}</td><td class="l wrapc">${esc(it.d)}<br><small class="muted">${it.s === "Shareholder" ? "Shareholder proposal" : "Company proposal"}${it.c ? " · " + esc(it.c) : ""}</small></td><td>${dateL(it.date)}</td>${ms.map((m) => `<td>${voteTag(it.v[m], it)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+        <p class="foot">Management backs its own proposals and opposes shareholders’; a vote is against management when it goes the other way (a withheld vote on a director counts as against). Source: the funds’ Form N-PX on SEC EDGAR. Each company page lists all of its votes.</p></section>
+    </div>`;
+  }
+  T.page("votes", { match: (h) => h === "votes", render: votesPage });
+  T.chip(() => `<a class="chip" href="#votes" ${T.state.page === "votes" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--c-purple)"></span>Votes <small>proxy voting</small></a>`);
+  const coVotes = {};
+  T.company((s) => {
+    const t = s.ticker;
+    if (!(t in coVotes)) {
+      coVotes[t] = undefined;
+      fetch(`data/votes/${encodeURIComponent(t)}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((v) => { coVotes[t] = v; if (v) T.rerender(["company"]); });
+      return "";
+    }
+    const v = coVotes[t];
+    if (!v || !v.items.length) return "";
+    const ms = ["blackrock", "vanguard", "statestreet"].filter((m) => v.items.some((it) => it.v[m]));
+    const latest = v.items[0].date;
+    const items = v.items.filter((it) => it.date === latest);
+    return `<section class="section" aria-labelledby="co-vt">
+      <div class="section-head"><h2 id="co-vt">How the Big Three voted</h2><a class="note" href="#votes">All proxy votes</a></div>
+      <p class="foot">Shareholder meeting of ${dateL(latest)}, through each manager’s flagship S&amp;P 500 fund (Form N-PX).</p>
+      <div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Proposal</th>${ms.map((m) => `<th scope="col">${T.dot(m)}${T.MGR_NAME[m]}</th>`).join("")}</tr></thead>
+      <tbody>${items.map((it) => `<tr><td class="l wrapc">${esc(it.d)}${it.s === "Shareholder" ? ' <small class="muted">(shareholder proposal)</small>' : ""}</td>${ms.map((m) => `<td>${voteTag(it.v[m], it)}${it.k && it.k[m] ? ` <small class="muted">×${it.k[m]}</small>` : ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    </section>`;
+  });
+
+  // ---------- data for spreadsheets and other apps ----------
+  const CSVS = [
+    ["holdings-big3.csv", "Big Three combined: top 50 holdings, stake, last quarter’s change, passive or active"],
+    ["holdings-blackrock.csv", "BlackRock’s top 50 holdings"], ["holdings-vanguard.csv", "Vanguard’s top 50 holdings"], ["holdings-statestreet.csv", "State Street’s top 50 holdings"],
+    ["ownership.csv", "Every Big Three position of $50M or more, by manager"],
+    ["famous-investors.csv", "Famous investors: holdings, buys and sells"], ["activist-13d.csv", "Activist 13D filings, last 12 months"],
+    ["spdr-daily.csv", "SPDR funds’ daily trades by company"], ["spdr-funds.csv", "SPDR funds: money in and out"],
+    ["signals.csv", "Every signal since it was issued, with its return"], ["israel.csv", "Israeli companies on Wall Street"],
+  ];
+  const JSONS = [
+    ["dashboard.json", "Everything on the main pages: managers, top holdings, company profiles, filings feed"],
+    ["owners.json", "Ownership index by ticker"], ["daily.json", "SPDR daily trades"], ["gurus.json", "Famous investors and activists"],
+    ["signals.json", "Signals and their ledger"], ["votes.json", "Proxy voting summary"], ["votes/AAPL.json", "One company’s proxy votes (any ticker)"],
+    ["israel.json", "Israeli companies"], ["quotes.json", "Latest prices"], ["status.json", "When the data was last checked"],
+  ];
+  function apiPage(app) {
+    const base = location.href.split("#")[0].replace(/index\.html$/, "") + "data/";
+    app.innerHTML = `<div class="main">
+      <div class="hero"><h1>Data for spreadsheets and apps</h1>
+        <p class="hero-sub">Everything Trintel shows is published as files you can pull into Google Sheets, Excel or your own code, refreshed with the site.</p></div>
+      <section class="section" aria-labelledby="api-c"><div class="section-head"><div><h2 id="api-c">Spreadsheets (CSV)</h2><p class="note">In Google Sheets, paste the formula into a cell; in Excel use Data, From Web, with the address</p></div></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">File</th><th class="l" scope="col">What is in it</th><th class="l" scope="col">Google Sheets formula</th></tr></thead>
+        <tbody>${CSVS.map(([f, w]) => `<tr><td class="l"><a href="${esc(base + "csv/" + f)}" download>${esc(f)}</a></td><td class="l wrapc">${esc(w)}</td><td class="l"><code class="copy" data-copy="=IMPORTDATA(&quot;${esc(base + "csv/" + f)}&quot;)" title="Copy">=IMPORTDATA("…/${esc(f)}")</code></td></tr>`).join("")}</tbody></table></div></section>
+      <section class="section" aria-labelledby="api-j"><div class="section-head"><div><h2 id="api-j">JSON API</h2><p class="note">Plain HTTPS GET, no key, open to any website (CORS)</p></div></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Address</th><th class="l" scope="col">What is in it</th></tr></thead>
+        <tbody>${JSONS.map(([f, w]) => `<tr><td class="l"><a href="${esc(base + f)}" target="_blank" rel="noopener"><code>${esc("data/" + f)}</code></a></td><td class="l wrapc">${esc(w)}</td></tr>`).join("")}</tbody></table></div>
+        <pre class="api-ex" dir="ltr">fetch("${esc(base)}owners.json")
+  .then((r) =&gt; r.json())
+  .then((d) =&gt; console.log(d.rows["AAPL"]));</pre>
+        <p class="foot">The data comes from public SEC filings and the sources named on each page. The files are updated every few minutes and their format can change; status.json says when they were last checked.</p></section>
+    </div>`;
+    app.querySelectorAll("[data-copy]").forEach((c) => c.addEventListener("click", () => { navigator.clipboard?.writeText(c.dataset.copy).then(() => T.toast("Formula copied"), () => {}); }));
+  }
+  T.page("api", { match: (h) => h === "api", render: apiPage });
+  T.chip(() => `<a class="chip" href="#api" ${T.state.page === "api" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--muted)"></span>Data <small>CSV · API</small></a>`);
+
   // ---------- 2. Daily: State Street's SPDR funds, day by day (pipeline/daily.py) ----------
   const kindOf = (x) => (x.add ? "Added to the fund" : x.drop ? "Removed from the fund" : "Weight changed");
   function dailyPage(app) {
