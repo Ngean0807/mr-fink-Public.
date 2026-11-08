@@ -120,7 +120,7 @@
         <div class="kpi"><span>Crowded holdings</span><b>${crowded.length}</b><small>the Big Three own 25% or more</small></div>
         <div class="kpi"><span>Active moves last quarter</span><b>${active.length}</b><small>bought or sold apart from index flows</small></div>
       </div>
-      <div class="table-scroll"><table class="tbl pf-tbl">
+      <div class="table-scroll"><table class="tbl pro-tbl pf-tbl">
         <thead><tr><th class="l" scope="col">Company</th><th scope="col">Shares</th><th scope="col">Value</th><th scope="col">Big Three stake</th><th class="l" scope="col">Last quarter, by manager</th><th class="l" scope="col">What it means</th></tr></thead>
         <tbody>${rows.map((r) => `<tr><td class="l">${r.o ? coLink(r.t, r.o.n) : `<span class="co"><span class="tk">${esc(r.t)}</span><span class="co-nm"><small>Not among the Big Three’s positions of $50M or more</small></span></span>`}</td>
           <td>${r.n ? r.n.toLocaleString("en-US") : "—"}</td><td>${usd(r.val)}</td><td>${r.o && r.o.s != null ? pct(r.o.s, 1, false) : '<span class="na">n/a</span>'}</td>
@@ -140,6 +140,70 @@
   }
   T.page("portfolio", { match: (h) => h === "portfolio", render: portfolioPage });
   T.chip(() => `<a class="chip" href="#portfolio" ${T.state.page === "portfolio" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--accent)"></span>My portfolio <small>X-ray</small></a>`);
+
+  // ---------- 5. Famous investors and activists (pipeline/gurus.py) ----------
+  let guruOpen = null;
+  const chg = (r) => (r.st === "new" ? '<span class="act new">New</span>' : r.st === "exited" ? '<span class="act out">Sold out</span>' : r.d != null ? T.pill(r.d, { sm: true }) : "—");
+  const gRow = (r, extra = "") => `<tr><td class="l">${r.t ? coLink(r.t, r.n) : `<span class="co"><span class="tk">—</span><span class="co-nm"><b>${esc(T.niceName(r.n))}</b></span></span>`}</td>${extra}</tr>`;
+  function gurusPage(app) {
+    const g = data("gurus", ["gurus", "company"]);
+    if (g === undefined) { app.innerHTML = `<div class="main">${loading("famous investors")}</div>`; return; }
+    if (!g) { app.innerHTML = `<div class="main"><p class="empty-state">Famous investors could not be loaded.</p></div>`; return; }
+    const m = guruOpen && g.managers.find((x) => x.id === guruOpen);
+    if (m) {
+      app.innerHTML = `<div class="main">
+        <div class="hero">
+          <nav class="crumbs" aria-label="Breadcrumb"><a href="#gurus">Famous investors</a><span aria-hidden="true">›</span><span>${esc(m.name)}</span></nav>
+          <h1>${esc(m.name)}</h1>
+          <p class="hero-sub">${esc(m.person)} · ${esc(m.style)}</p>
+          <div class="figure"><span class="figure-value">${usd(m.total)}</span><span class="muted">in ${m.positions.toLocaleString("en-US")} US-listed positions, 13F for ${T.qlabel(m.period)} (filed ${dateL(m.filed)})</span></div>
+        </div>
+        <section class="section" aria-labelledby="gu-b"><div class="section-head"><h2 id="gu-b">Biggest buys in ${T.qlabel(m.period)}</h2></div>
+          <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Bought</th><th scope="col">Change in shares</th><th scope="col">% of book</th></tr></thead>
+          <tbody>${m.buys.map((r) => gRow(r, `<td>${signed(r.f, usdS)}</td><td>${chg(r)}</td><td>${pct(r.w, 1, false)}</td>`)).join("") || '<tr><td colspan="4" class="na l">None</td></tr>'}</tbody></table></div></section>
+        <section class="section" aria-labelledby="gu-s"><div class="section-head"><h2 id="gu-s">Biggest sells</h2></div>
+          <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Sold</th><th scope="col">Change in shares</th><th scope="col">% of book</th></tr></thead>
+          <tbody>${m.sells.map((r) => gRow(r, `<td>${signed(r.f, usdS)}</td><td>${chg(r)}</td><td>${r.w ? pct(r.w, 1, false) : "—"}</td>`)).join("") || '<tr><td colspan="4" class="na l">None</td></tr>'}</tbody></table></div></section>
+        <section class="section" aria-labelledby="gu-t"><div class="section-head"><h2 id="gu-t">Largest holdings</h2></div>
+          <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Value</th><th scope="col">% of book</th><th scope="col">Last quarter</th></tr></thead>
+          <tbody>${m.top.map((r) => gRow(r, `<td>${usd(r.v)}</td><td>${pct(r.w, 1, false)}</td><td>${chg(r)}</td>`)).join("")}</tbody></table></div>
+          <p class="foot">From ${esc(m.name)}’s Form 13F on SEC EDGAR (US-listed stocks and options are reported; options are left out), compared with ${m.prevPeriod ? T.qlabel(m.prevPeriod) : "the previous quarter"}. A 13F is filed up to 45 days after the quarter ends.</p></section>
+      </div>`;
+      return;
+    }
+    const D13 = Object.fromEntries(g.managers.map((x) => [x.id, x.name]));
+    app.innerHTML = `<div class="main">
+      <div class="hero">
+        <h1>Famous investors and activists</h1>
+        <p class="hero-sub">${g.managers.length} well-known managers whose moves are decisions, not index flows: what they hold, what they bought and sold last quarter, and the stakes activists take to push for change.</p>
+      </div>
+      <section class="section" aria-labelledby="gu-c"><div class="section-head"><div><h2 id="gu-c">What several of them bought</h2><p class="note">Companies at least two of these managers added to in their latest 13F</p></div></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Managers buying</th><th scope="col">Bought together</th><th class="l" scope="col">Who</th></tr></thead>
+        <tbody>${g.consensus.map((c) => `<tr><td class="l">${coLink(c.t, c.n)}</td><td>${c.by.length}</td><td>${usdS(c.f)}</td><td class="l wrapc">${c.by.map((id) => `<a href="#gurus/${id}">${esc(D13[id])}</a>`).join(", ")}</td></tr>`).join("")}</tbody></table></div></section>
+      <section class="section" aria-labelledby="gu-d"><div class="section-head"><div><h2 id="gu-d">Activist stakes (Schedule 13D)</h2><p class="note">A 13D is filed within days of crossing 5% of a company with intent to influence it; an amendment means the stake or the plan changed</p></div></div>
+        <div class="list wrap">${g.d13.slice(0, 20).map((d) => `<a href="${esc(d.url)}" target="_blank" rel="noopener"><span class="badge frep">${d.amend ? "13D/A" : "13D"}</span><span class="nm"><b>${esc(D13[d.g])} · ${esc(T.niceName(d.name))}${d.t ? ` (${esc(d.t)})` : ""}</b><small>${d.amend ? "Amended its stake" : "New 5%+ stake"} · ${dateL(d.filed)}</small></span><span class="rt muted">${ago(d.filed + "T12:00:00Z")}</span></a>`).join("")}</div></section>
+      <section class="section" aria-labelledby="gu-m"><div class="section-head"><h2 id="gu-m">The managers</h2></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Manager</th><th class="l" scope="col">Style</th><th scope="col">13F book</th><th scope="col">Quarter</th><th class="l" scope="col">Largest holding</th><th class="l" scope="col">Biggest buy</th></tr></thead>
+        <tbody>${g.managers.map((x) => `<tr data-href="#gurus/${x.id}"><td class="l"><a href="#gurus/${x.id}"><b>${esc(x.name)}</b></a><br><small class="muted">${esc(x.person)}</small></td><td class="l">${esc(x.style)}</td><td>${usd(x.total)}</td><td>${T.qlabel(x.period)}</td><td class="l">${x.top[0] ? `${esc(x.top[0].t || T.niceName(x.top[0].n))} <span class="muted">${pct(x.top[0].w, 0, false)}</span>` : "—"}</td><td class="l">${x.buys[0] ? `${esc(x.buys[0].t || T.niceName(x.buys[0].n))} <span class="muted">${usdS(x.buys[0].f)}</span>` : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="foot">From each manager’s latest Form 13F on SEC EDGAR, compared with the quarter before. Activist 13D filings from the managers’ own SEC filing history, last 12 months. Not investment advice.</p></section>
+    </div>`;
+    app.querySelectorAll("tr[data-href]").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest("a")) location.hash = tr.dataset.href.slice(1); }));
+  }
+  T.page("gurus", { match: (h) => h === "gurus" || h.startsWith("gurus/"), onRoute: (h) => { guruOpen = h.startsWith("gurus/") ? h.slice(6) : null; }, render: gurusPage });
+  T.chip(() => `<a class="chip" href="#gurus" ${T.state.page === "gurus" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--c-gold)"></span>Famous investors <small>& activists</small></a>`);
+  T.company((s) => {
+    const g = data("gurus", ["gurus", "company"]);
+    if (!g) return "";
+    const holds = g.managers.map((m) => ({ m, r: m.top.find((r) => r.t === s.ticker) || m.buys.find((r) => r.t === s.ticker) || m.sells.find((r) => r.t === s.ticker) })).filter((x) => x.r);
+    const d = g.d13.filter((x) => x.t === s.ticker);
+    if (!holds.length && !d.length) return "";
+    return `<section class="section" aria-labelledby="co-gu">
+      <div class="section-head"><h2 id="co-gu">Famous investors</h2><a class="note" href="#gurus">All famous investors</a></div>
+      ${holds.length ? `<div class="table-scroll flat"><table class="own-table"><thead><tr><th class="l" scope="col">Manager</th><th scope="col">Value</th><th scope="col">% of its book</th><th scope="col">Last quarter</th></tr></thead>
+      <tbody>${holds.map(({ m, r }) => `<tr><td class="l"><a href="#gurus/${m.id}">${esc(m.name)}</a> <small class="muted">${esc(m.person)}</small></td><td>${usd(r.v)}</td><td>${r.w ? pct(r.w, 1, false) : "—"}</td><td>${chg(r)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${d.length ? `<p class="foot">${d.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(g.managers.find((m) => m.id === x.g)?.name || x.g)}: ${x.amend ? "13D amendment" : "new 13D stake"}, ${dateL(x.filed)}</a>`).join(" · ")}</p>` : ""}
+    </section>`;
+  });
 
   // ---------- 2. Daily: State Street's SPDR funds, day by day (pipeline/daily.py) ----------
   const kindOf = (x) => (x.add ? "Added to the fund" : x.drop ? "Removed from the fund" : "Weight changed");
@@ -165,17 +229,17 @@
       ${!d.asOf ? `<p class="empty-state">The holdings of ${d.funds.length} SPDR funds are stored (files of ${dateL((d.funds[0] || {}).asOf)}). The first day-to-day comparison appears when the next business day’s files come out.</p>` : `
       <section class="section" aria-labelledby="dl-st">
         <div class="section-head"><div><h2 id="dl-st">Biggest buys and sells, all SPDR funds together</h2><p class="note">Net shares bought or sold on ${dateL(d.asOf)}, valued at that day’s price</p></div></div>
-        <div class="table-scroll"><table class="tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Bought or sold</th><th scope="col">Not from money flows</th><th class="l" scope="col">Mostly</th></tr></thead>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Bought or sold</th><th scope="col">Not from money flows</th><th class="l" scope="col">Mostly</th></tr></thead>
         <tbody>${stocks.map((x) => `<tr><td class="l">${coLink(x.t, x.n)}</td><td>${signed(x.usd, usdS)}</td><td>${signed(x.mix, usdS)}</td><td class="l muted">${why(x)}</td></tr>`).join("")}</tbody></table></div>
       </section>
       <section class="section" aria-labelledby="dl-mix">
         <div class="section-head"><div><h2 id="dl-mix">Changes in the funds’ mix</h2><p class="note">Additions, removals and weight changes, after taking out money coming in or going out</p></div></div>
-        ${mixRows.length ? `<div class="table-scroll"><table class="tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Fund</th><th scope="col">Value</th><th class="l" scope="col">What changed</th></tr></thead>
+        ${mixRows.length ? `<div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Fund</th><th scope="col">Value</th><th class="l" scope="col">What changed</th></tr></thead>
         <tbody>${mixRows.map((x) => `<tr><td class="l">${coLink(x.t, x.n)}</td><td>${esc(x.f)}</td><td>${signed(x.v, usdS)}</td><td class="l">${kindOf(x)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="foot">No change in any fund’s mix on ${dateL(d.asOf)}: every trade followed money in or out.</p>`}
       </section>`}
       <section class="section" aria-labelledby="dl-f">
         <div class="section-head"><div><h2 id="dl-f">The funds</h2><p class="note">Money in or out each business day (bars: last 20 days)</p></div></div>
-        <div class="table-scroll"><table class="tbl"><thead><tr><th class="l" scope="col">Fund</th><th scope="col">Size</th><th scope="col">Latest day</th><th scope="col">Money in or out</th><th scope="col">Of the fund</th><th scope="col">Last 20 days</th></tr></thead>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Fund</th><th scope="col">Size</th><th scope="col">Latest day</th><th scope="col">Money in or out</th><th scope="col">Of the fund</th><th scope="col">Last 20 days</th></tr></thead>
         <tbody>${d.funds.map((f) => { const h = (d.history[f.t] || []).slice(-20); return `<tr><td class="l"><a class="co" href="#etfs/${esc(f.t)}"><span class="tk" style="background:var(--ss)">${esc(f.t)}</span><span class="co-nm"><b>${esc(f.name)}</b><small>${esc(f.cat)}</small></span></a></td><td>${usd(f.value)}</td><td>${dateL(f.asOf)}</td><td>${f.pending ? '<span class="na">—</span>' : signed(f.flowUsd, usdS)}</td><td>${f.pending ? '<span class="na">—</span>' : signed(f.flowPct)}</td><td>${h.length ? bars(h.map((x) => x[1])) : ""}</td></tr>`; }).join("")}</tbody></table></div>
         <p class="foot">Money flows: an ETF that takes in money buys more of everything it holds in the same proportion, so the share count of most holdings moves by the same ratio. Trintel takes that ratio as the day’s flow; what moves differently is a change in the fund’s mix (index additions and removals, rebalances, corporate actions). iShares (BlackRock) and Vanguard do not publish a daily holdings file that can be downloaded, so their funds are tracked monthly from N-PORT filings on the ETFs page. Source: State Street, checked ${ago(d.checkedAt)}.</p>
       </section>

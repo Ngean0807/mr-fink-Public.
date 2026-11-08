@@ -772,3 +772,5 @@ sup { font-size: 10px; color: var(--muted); }
 .pf-tbl .pf-why { min-width: 240px; white-space: normal; }
 .pf-mg span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .pf-mg span + span { margin-top: 4px; }
+.pro-tbl .co { min-width: 190px; }
+.pro-tbl td.wrapc { white-space: normal; min-width: 260px; font-size: 13px; line-height: 1.5; }
