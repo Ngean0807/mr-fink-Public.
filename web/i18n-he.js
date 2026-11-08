@@ -1,4 +1,4 @@
-/* Hebrew for TriQ: fixed texts, patterns for texts with values in them, industries, insider
+/* Hebrew for Trintel: fixed texts, patterns for texts with values in them, industries, insider
  * roles and 8-K event types. Used only in Hebrew mode (i18n.js). Keys are the exact English the
  * site shows; a text with no entry stays in English, never blank. Simple, everyday Hebrew. */
 (function () {
@@ -7,9 +7,9 @@
   // ---------- fixed texts ----------
   const dict = {
     // header, navigation
-    "TriQ": "TriQ",
+    "Trintel": "Trintel",
     "Holdings": "אחזקות",
-    "TriQ home": "מסך הבית של TriQ",
+    "Trintel home": "מסך הבית של Trintel",
     "Search holdings": "חיפוש אחזקות",
     "Search holdings by ticker or company": "חיפוש (באנגלית)",
     "Notifications": "התראות",
@@ -30,6 +30,11 @@
     "Highlights": "עיקרי הדברים",
     "BlackRock, Vanguard & State Street": "בלקרוק, ואנגארד וסטייט סטריט",
     "Big Three": "שלוש הגדולות",
+    "Total assets under management": "סך הנכסים המנוהלים",
+    "Total AUM (reported)": "סך הנכסים המנוהלים (מדווח)",
+    "13F share of AUM": "חלק ה-13F מהנכסים המנוהלים",
+    "sum of each manager’s latest report": "סכום הדיווח האחרון של כל מנהלת",
+    "Vanguard (company announcement)": "ואנגארד (הודעת החברה)",
     "up": "עלייה",
     "down": "ירידה",
 
@@ -98,15 +103,15 @@
     "No recent filings from your watchlist.": "אין דיווחים אחרונים מחברות ברשימת המעקב.",
     "Follow companies (☆ on a company page) to get every one of their filings here.": "עקבו אחרי חברות (☆ בעמוד החברה) כדי לקבל כאן כל דיווח שלהן.",
     "No notifications yet.": "עוד אין התראות.",
-    "Get these on this device, even when TriQ is closed.": "קבלו אותן במכשיר הזה, גם כש-TriQ סגור.",
+    "Get these on this device, even when Trintel is closed.": "קבלו אותן במכשיר הזה, גם כש-Trintel סגור.",
     "Turn on": "הפעלה",
     "Companies in your watchlist always notify you, whatever the filing type.": "על חברות ברשימת המעקב תקבלו תמיד התראה, מכל סוג דיווח.",
     "Where": "איפה",
     "Push notifications": "התראות פוש",
-    "On iPhone, install TriQ first (below), open it from the home screen, then turn this on.": "באייפון, קודם התקינו את TriQ (למטה), פתחו אותה ממסך הבית, ואז הפעילו כאן.",
+    "On iPhone, install Trintel first (below), open it from the home screen, then turn this on.": "באייפון, קודם התקינו את Trintel (למטה), פתחו אותה ממסך הבית, ואז הפעילו כאן.",
     "Blocked in your browser settings for this site.": "חסום בהגדרות הדפדפן לאתר הזה.",
-    "On this device, even when TriQ is closed.": "במכשיר הזה, גם כש-TriQ סגור.",
-    "While TriQ is open": "כש-TriQ פתוח",
+    "On this device, even when Trintel is closed.": "במכשיר הזה, גם כש-Trintel סגור.",
+    "While Trintel is open": "כש-Trintel פתוח",
     "A notification from this tab, on desktop and Android.": "התראה מהלשונית הזו, במחשב ובאנדרואיד.",
     "Installed on this device.": "מותקנת במכשיר הזה.",
     "Install the app": "התקנת האפליקציה",
@@ -380,7 +385,7 @@
     "All other holders": "כל שאר המחזיקים",
     // notifications
     "Site health": "תקינות האתר",
-    "TriQ stops updating or recovers, or a data check finds something to review (push only)": "TriQ מפסיק להתעדכן או חוזר לעבוד, או שבדיקת נתונים מצאה משהו לבדוק (רק בהתראות שמגיעות גם כשהאתר סגור)",
+    "Trintel stops updating or recovers, or a data check finds something to review (push only)": "Trintel מפסיק להתעדכן או חוזר לעבוד, או שבדיקת נתונים מצאה משהו לבדוק (רק בהתראות שמגיעות גם כשהאתר סגור)",
     "Turn on notifications": "הפעלת התראות",
     "Open": "פתיחה",
     "10-Q / 10-K": "דוחות רבעוניים ושנתיים (10-Q / 10-K)",
@@ -560,20 +565,20 @@
     "Share": "Share (שיתוף)",
     "(the square with an arrow), then": "(הריבוע עם החץ), ואז",
     "Add to Home Screen": "Add to Home Screen (הוספה למסך הבית)",
-    "Install TriQ": "התקנת TriQ",
+    "Install Trintel": "התקנת Trintel",
     "App": "אפליקציה",
-    "TriQ is installed on this device.": "TriQ מותקן במכשיר הזה.",
-    "TriQ is installed.": "TriQ מותקן.",
+    "Trintel is installed on this device.": "Trintel מותקן במכשיר הזה.",
+    "Trintel is installed.": "Trintel מותקן.",
     "Pick at least one filing type above.": "בחרו לפחות סוג דיווח אחד למעלה.",
     "1. Install the free ntfy app, no account needed:": "1. התקינו את האפליקציה החינמית ntfy, בלי צורך בחשבון:",
     "2. Subscribe to the channels you want. In the app tap +, then paste the channel name, or open the link on your phone.": "2. הירשמו לערוצים שאתם רוצים. באפליקציה לחצו על + והדביקו את שם הערוץ, או פתחו את הקישור בטלפון.",
     "Press copy to copy the selected channel name.": "לחצו על העתקה כדי להעתיק את שם הערוץ שבחרתם.",
     "This browser cannot show notifications.": "הדפדפן הזה לא יכול להציג התראות.",
-    "On. You will be notified while TriQ is open in a tab.": "פועל. תקבלו התראה כש-TriQ פתוח בלשונית.",
+    "On. You will be notified while Trintel is open in a tab.": "פועל. תקבלו התראה כש-Trintel פתוח בלשונית.",
     "Browser notifications are on.": "ההתראות בדפדפן פועלות.",
     "This browser shows notifications only from installed apps.": "הדפדפן הזה מציג התראות רק מאפליקציות מותקנות.",
     "Push notifications, even when the site is closed": "התראות גם כשהאתר סגור",
-    "On iPhone, first install TriQ as an app (below), open it from the home screen, then turn push on here.": "באייפון, קודם התקינו את TriQ כאפליקציה (למטה), פתחו אותה ממסך הבית, ואז הפעילו כאן את ההתראות.",
+    "On iPhone, first install Trintel as an app (below), open it from the home screen, then turn push on here.": "באייפון, קודם התקינו את Trintel כאפליקציה (למטה), פתחו אותה ממסך הבית, ואז הפעילו כאן את ההתראות.",
     "This browser does not support push notifications.": "הדפדפן הזה לא תומך בהתראות.",
     "Send a test": "שליחת בדיקה",
     "Turn off": "כיבוי",
@@ -956,8 +961,8 @@
     "הדוחות הכספיים נלקחים מהנתונים שהחברות מגישות עם הדוחות הרבעוניים והשנתיים (10-Q ו-10-K). דיווחי האחזקה (13G) מגיעים מהדיווחים של המנהלות, בין דוחות ה-13F.");
   P("The hosted version re-reads EDGAR every 5 minutes and refreshes this page when a new 13F, 13G, 10-Q or 10-K appears\\. 13F reports lag the quarter by up to 45 days and cover US-listed long positions only\\. Not investment advice\\.", () =>
     "האתר בודק את מאגר ה-SEC כל 5 דקות ומתעדכן כשמגיע דוח חדש (13F, 13G, 10-Q או 10-K). דוח 13F מגיע עד 45 יום אחרי סוף הרבעון, וכולל רק מניות שנסחרות בארה״ב. זו לא המלצה להשקעה.");
-  P("TriQ is an independent project, not affiliated with BlackRock, Vanguard or State Street\\.", () =>
-    "TriQ הוא פרויקט עצמאי, בלי קשר לבלקרוק, לוואנגארד או לסטייט סטריט.");
+  P("Trintel is an independent project, not affiliated with BlackRock, Vanguard or State Street\\.", () =>
+    "Trintel הוא פרויקט עצמאי, בלי קשר לבלקרוק, לוואנגארד או לסטייט סטריט.");
 
   // feed
   P("{T} (quarterly|annual) report", (m) => `דוח ${m[2] === "annual" ? "שנתי" : "רבעוני"} של ${FSI}${m[1]}${PDI}`);
@@ -968,6 +973,12 @@
   P("(BlackRock|Vanguard|State Street) owns {N} of {T}", (m, v) => `${v(m[1])} מחזיקה ${v(m[2])} מ-${m[3]}`);
   P("{X} · as of {D}", (m, v) => `${v(m[1])} · נכון ל-${v(m[2])}`);
   P("as of {D}", (m, v) => `נכון ל-${v(m[1])}`);
+  // total AUM (each manager's own report) next to the 13F
+  P("as of {D} ·", (m, v) => `נכון ל-${v(m[1])} ·`);
+  P("{N} of AUM", (m, v) => `${v(m[1])} מכלל הנכסים המנוהלים`);
+  P("(BlackRock|State Street) earnings release \\(8-K\\)", (m) => `דוח התוצאות הרבעוני של ${{ BlackRock: "בלקרוק", "State Street": "סטייט סטריט" }[m[1]]} (8-K)`);
+  P("The 13F above covers only US-listed stocks: {N} of it\\. Bonds, non-US stocks, cash and private funds are not in a 13F\\.", (m, v) =>
+    `דוח ה-13F שלמעלה כולל רק מניות שנסחרות בארה״ב: ${v(m[1])} מהסכום הזה. אג״ח, מניות מחוץ לארה״ב, מזומן וקרנות פרטיות לא נכללים ב-13F.`);
   P("{T} portfolio as of {D}", (m, v) => `התיק של ${m[1]} נכון ל-${v(m[2])}`);
   P("{X} · {N} net assets", (m, v) => `${v(m[1])} · נכסים ${v(m[2])}`);
   P("{X} · ((?:\\d+-[KQ]|8-K)(?:/A)?|10-K405)", (m, v) => `${v(m[1])} · ${FORM[m[2].replace("/A", "")] || m[2]}${m[2].endsWith("/A") ? " (תיקון)" : ""}`);
@@ -984,10 +995,10 @@
   P("{T} • ([A-Za-z ]+)", (m) => `${m[1]} • ${m[2]}`);
   P("Every SEC filing by {T} \\(8-K, 10-Q/10-K, Big Three 13G/13D\\) is pushed to its own channel\\. In the free ntfy app \\(", (m) =>
     `כל דיווח ל-SEC של ${m[1]} (8-K, 10-Q/10-K, ודיווחי 13G/13D של שלוש הגדולות) נשלח לערוץ משלו. באפליקציה החינמית ntfy (`);
-  P("Follow {T} to get a browser notification for each of its filings while TriQ is open\\.", (m) => `עקבו אחרי ${m[1]} כדי לקבל התראה בדפדפן על כל דיווח שלה, כש-TriQ פתוח.`);
+  P("Follow {T} to get a browser notification for each of its filings while Trintel is open\\.", (m) => `עקבו אחרי ${m[1]} כדי לקבל התראה בדפדפן על כל דיווח שלה, כש-Trintel פתוח.`);
   P("☆ Follow {T}", (m) => `☆ הוספה למעקב: ${m[1]}`);
-  P("{T} is in your watchlist, so its new filings show as browser notifications while TriQ is open once browser notifications are on \\(bell, top right\\)\\.", (m) =>
-    `${m[1]} ברשימת המעקב שלכם, אז הדיווחים החדשים שלה יופיעו כהתראות בדפדפן כש-TriQ פתוח, אחרי שתפעילו התראות בדפדפן (הפעמון, למעלה).`);
+  P("{T} is in your watchlist, so its new filings show as browser notifications while Trintel is open once browser notifications are on \\(bell, top right\\)\\.", (m) =>
+    `${m[1]} ברשימת המעקב שלכם, אז הדיווחים החדשים שלה יופיעו כהתראות בדפדפן כש-Trintel פתוח, אחרי שתפעילו התראות בדפדפן (הפעמון, למעלה).`);
   P("{T} added to your watchlist", (m) => `${m[1]} נוספה לרשימת המעקב`);
   P("{T} removed from your watchlist", (m) => `${m[1]} הוסרה מרשימת המעקב`);
   P("Remove {T}", (m) => `הסרת ${m[1]}`);
@@ -1090,7 +1101,7 @@
   // watchlist
   P("Since 13F is the price change from the quarter-end price in the latest 13F \\({D}\\)\\. Each company page has a 🔔 Alerts button for its phone channel\\.", (m, v) =>
     `״מאז דוח 13F״ = השינוי במחיר מאז סוף הרבעון של דוח ה-13F האחרון (${v(m[1])}). בכל עמוד חברה יש כפתור 🔔 התראות לערוץ שלה בטלפון.`);
-  P("No holding matches “(.+)”\\. TriQ covers the Big Three’s largest company holdings\\.", (m) => `אין אחזקה שמתאימה ל״${m[1]}״. TriQ מכסה את האחזקות הגדולות של שלוש הגדולות. שמות החברות כתובים באנגלית, למשל Apple.`);
+  P("No holding matches “(.+)”\\. Trintel covers the Big Three’s largest company holdings\\.", (m) => `אין אחזקה שמתאימה ל״${m[1]}״. Trintel מכסה את האחזקות הגדולות של שלוש הגדולות. שמות החברות כתובים באנגלית, למשל Apple.`);
 
   // notifications panel
   P("(BlackRock), Vanguard or State Street files its quarterly holdings", () => "בלקרוק, ואנגארד או סטייט סטריט מגישות את דוח האחזקות הרבעוני");
@@ -1197,14 +1208,14 @@
   P("top (\\d+), shares vs the previous quarter", (m) => `${m[1]} הגדולות, מניות מול הרבעון הקודם`);
   P("(\\d+) names", (m) => `${m[1]} חברות`);
   P("\\+(\\d+) filers", (m) => `ועוד ${m[1]} גופים מדווחים`);
-  P("From the managers’ Form 13F filings on SEC EDGAR \\(options positions are left out\\), the same data as the rest of TriQ, updated with every new filing\\. Top (\\d+) = the (\\d+) largest company holdings; ETFs and funds are left out\\. Sector ETF flows come from each fund’s Form N-PORT\\. Not investment advice\\.", (m) =>
-    `מדוחות ה-13F שהמנהלות מגישות ל-SEC (בלי פוזיציות אופציות), אותם נתונים כמו בשאר TriQ, ומתעדכן עם כל דוח חדש. ${m[1]} הגדולות = ${m[2]} האחזקות הגדולות בחברות, בלי קרנות סל וקרנות. התזרימים לקרנות הסל הענפיות לקוחים מדוח N-PORT של כל קרן. זו לא המלצה להשקעה.`);
+  P("From the managers’ Form 13F filings on SEC EDGAR \\(options positions are left out\\), the same data as the rest of Trintel, updated with every new filing\\. Top (\\d+) = the (\\d+) largest company holdings; ETFs and funds are left out\\. Sector ETF flows come from each fund’s Form N-PORT\\. Not investment advice\\.", (m) =>
+    `מדוחות ה-13F שהמנהלות מגישות ל-SEC (בלי פוזיציות אופציות), אותם נתונים כמו בשאר Trintel, ומתעדכן עם כל דוח חדש. ${m[1]} הגדולות = ${m[2]} האחזקות הגדולות בחברות, בלי קרנות סל וקרנות. התזרימים לקרנות הסל הענפיות לקוחים מדוח N-PORT של כל קרן. זו לא המלצה להשקעה.`);
   P("{X}: {N}", (m, v) => { const t = v(m[1]); return t.startsWith("⁨") ? null : `${t}: ${v(m[2])}`; });
   // notifications for one company
   P("Notifications for {T}", (m) => `התראות על ${m[1]}`);
-  P("Follow {T} to get a TriQ notification for each of its SEC filings \\(8-K, 10-Q/10-K, Big Three 13G/13D\\)\\.", (m) => `הוסיפו את ${m[1]} למעקב כדי לקבל מ-TriQ התראה על כל דיווח שלה ל-SEC (8-K, 10-Q/10-K ודיווחי 13G/13D של שלוש הגדולות).`);
-  P("{T} is in your watchlist: TriQ notifies you of each new filing, even when the site is closed\\.", (m) => `${m[1]} ברשימת המעקב: TriQ ישלח לכם התראה על כל דיווח חדש, גם כשהאתר סגור.`);
-  P("{T} is in your watchlist: new filings show as notifications while TriQ is open\\. Turn on push notifications to get them with the site closed\\.", (m) => `${m[1]} ברשימת המעקב: דיווחים חדשים יופיעו כהתראות כש-TriQ פתוח. הפעילו התראות כדי לקבל אותן גם כשהאתר סגור.`);
+  P("Follow {T} to get a Trintel notification for each of its SEC filings \\(8-K, 10-Q/10-K, Big Three 13G/13D\\)\\.", (m) => `הוסיפו את ${m[1]} למעקב כדי לקבל מ-Trintel התראה על כל דיווח שלה ל-SEC (8-K, 10-Q/10-K ודיווחי 13G/13D של שלוש הגדולות).`);
+  P("{T} is in your watchlist: Trintel notifies you of each new filing, even when the site is closed\\.", (m) => `${m[1]} ברשימת המעקב: Trintel ישלח לכם התראה על כל דיווח חדש, גם כשהאתר סגור.`);
+  P("{T} is in your watchlist: new filings show as notifications while Trintel is open\\. Turn on push notifications to get them with the site closed\\.", (m) => `${m[1]} ברשימת המעקב: דיווחים חדשים יופיעו כהתראות כש-Trintel פתוח. הפעילו התראות כדי לקבל אותן גם כשהאתר סגור.`);
   P("{T} is in your watchlist\\. Turn on notifications to hear about each new filing\\.", (m) => `${m[1]} ברשימת המעקב. הפעילו התראות כדי לשמוע על כל דיווח חדש.`);
   P("New filing: (.+)", (m, v) => `דיווח חדש: ${v(m[1])}`);
   P("New SEC filing: (.+)\\. Data updated\\.", (m, v) => `דיווח חדש ל-SEC: ${v(m[1])}. הנתונים עודכנו.`);

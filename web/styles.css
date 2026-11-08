@@ -93,9 +93,9 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none !important; }
 .brand-mark { width: 36px; height: 36px; flex: none; display: block; }
-/* TriQ wordmark: TRI in heavy type, the Q on a lime tile (the logo's colour) */
-.wm { font: 800 21px/1 "Archivo", var(--font-ui); letter-spacing: -.035em; color: var(--ink); display: inline-flex; align-items: center; }
-.wm i { font-style: normal; background: #C8F25B; color: #111111; border-radius: 6px; padding: 2px 5px 1px; margin-inline-start: 2px; }
+/* Trintel wordmark: TRINTEL in mono type and a redaction bar in the logo's aurora gradient */
+.wm { font: 700 19px/1 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: -.02em; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+.wm i { display: inline-block; width: 16px; height: 6px; border-radius: 2px; background: linear-gradient(90deg, #7C3AED, #D946EF 55%, #FB923C); }
 .brand-name { font: 500 20px/1 var(--font-ui); letter-spacing: -.01em; white-space: nowrap; }
 .brand-name span { color: var(--muted); font-weight: 400; }
 .search { position: relative; max-width: 620px; width: 100%; justify-self: center; }
@@ -340,6 +340,8 @@ details.callout[open] > summary::after { content: "▴"; }
 .hero { display: grid; gap: 6px; }
 .hero h1 { font-size: 28px; line-height: 1.25; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .hero-sub { color: var(--ink-2); font-size: 14px; }
+.aum-line { margin-top: 10px; font-size: 14px; line-height: 1.5; }
+.aum-line b { font: 600 18px var(--font-ui); margin-inline: 4px; }
 .figure { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
 .figure-value { font: 400 36px/1.1 var(--font-ui); letter-spacing: -.01em; }
 .figure-chg { font: 500 16px var(--font-ui); }

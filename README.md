@@ -1,4 +1,4 @@
-# TriQ
+# Trintel
 
 Big Three 13F intelligence: the 30 largest company holdings of **BlackRock**, **Vanguard** and
 **State Street**, with quarter-over-quarter, year-over-year and since-inception analytics and
@@ -77,7 +77,7 @@ and for personal use.
 
 ### Notifications
 
-Every notification comes from TriQ itself, through its push server (`worker/`, a Cloudflare
+Every notification comes from Trintel itself, through its push server (`worker/`, a Cloudflare
 Worker). Nothing goes through third-party apps. In the bell panel each visitor picks:
 
 - **Filing types**: 13F holdings, 13G/13D stakes, material 8-K events, 10-Q/10-K reports and fund
