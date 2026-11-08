@@ -163,6 +163,34 @@
     "pre-arranged plan (10b5-1)": "תוכנית מכירה מתוכננת מראש (10b5-1)",
     "Mostly a change in the funds’ mix, not money flows": "בעיקר שינוי בהרכב הקרנות, לא כסף שנכנס או יצא",
     "Mostly money flowing in or out of the funds": "בעיקר כסף שנכנס לקרנות או יצא מהן",
+    // signals
+    "Signals": "סיגנלים",
+    "with track record": "עם תוצאות",
+    "Signals, with their track record": "סיגנלים, עם התוצאות שלהם",
+    "Five signals from the filings. Each one is recorded on the day it first appears, at that day’s price, and scored against the S&P 500 from then on. Nothing is back-filled or removed.": "חמישה סיגנלים מתוך הדיווחים. כל סיגנל נרשם ביום שהוא מופיע לראשונה, במחיר של אותו יום, ומושווה למדד S&P 500 מאז. שום דבר לא נוסף בדיעבד ושום דבר לא נמחק.",
+    "Track record so far": "התוצאות עד עכשיו",
+    "Return since each signal was issued, against SPY over the same days": "התשואה מאז שכל סיגנל ניתן, מול SPY באותם ימים",
+    "Signal": "סיגנל",
+    "Tracked since": "במעקב מאז",
+    "Average return": "תשואה ממוצעת",
+    "Versus the S&P 500": "מול S&P 500",
+    "Beat the S&P 500": "ניצחו את S&P 500",
+    "Why": "למה",
+    "Since": "מאז",
+    "Return since": "תשואה מאז",
+    "None right now.": "אין כרגע.",
+    "Signals could not be loaded.": "לא הצלחנו לטעון את הסיגנלים.",
+    "Bought above index flows": "קנו מעבר לזרימה למדדים",
+    "The Big Three bought clearly more than the money flowing into their index funds": "שלוש הגדולות קנו בבירור יותר מהכסף שנכנס לקרנות המחקות שלהן",
+    "Famous investors agree": "משקיעים מפורסמים מסכימים",
+    "Three or more famous investors bought it in their latest 13F": "שלושה משקיעים מפורסמים או יותר קנו אותה בדוח ה-13F האחרון",
+    "New activist stake": "אחזקה אקטיביסטית חדשה",
+    "A new Schedule 13D in the last 30 days: 5%+ with intent to push for change": "דוח 13D חדש ב-30 הימים האחרונים: 5% ומעלה עם כוונה לדחוף לשינוי",
+    "Insiders buying": "בעלי עניין קונים",
+    "Two or more insiders bought on the open market in the last 90 days": "שניים או יותר מבעלי העניין קנו בשוק הפתוח ב-90 הימים האחרונים",
+    "Emerging small caps": "חברות קטנות צומחות",
+    "The Emerging screen’s small caps with the largest stake gain over a year": "החברות הקטנות במסך הצומחות שבהן החלק של שלוש הגדולות גדל הכי הרבה בשנה",
+    "The full backtest, on the Emerging page": "המבחן ההיסטורי המלא, בעמוד הצומחות",
     // passive or active
     "Passive or active": "פסיבי או אקטיבי",
     "With the flows": "פסיבי, עם הזרימה",
@@ -211,6 +239,17 @@
   P("{T}: State Street’s SPDR funds (bought|sold) {N}", (m, v) => `${m[1]}: קרנות SPDR של סטייט סטריט ${m[2] === "bought" ? "קנו" : "מכרו"} ב-${v(m[3])}`);
   P("{T}: (.+) (changed its activist stake|took an activist stake of 5% or more)", (m) => `${m[1]}: ${m[2]} ${m[3].startsWith("changed") ? "עדכנה את האחזקה האקטיביסטית שלה" : "לקחה אחזקה אקטיביסטית של 5% ומעלה"}`);
   P("{T}: (.+) (opened a position|sold out|bought more|sold some) \\(({N})\\)", (m, v) => `${m[1]}: ${m[2]} ${({ "opened a position": "פתחה פוזיציה", "sold out": "מכרה את כל האחזקה", "bought more": "קנתה עוד", "sold some": "מכרה חלק" })[m[3]]} (${v(m[4])})`);
+  P("(The record is young: no signal is 30 days old yet, so these numbers say little for now\\. )?Prices from Yahoo Finance, before dividends and costs\\. Past results do not predict future ones; not investment advice\\.", (m) =>
+    `${m[1] ? "הרשומה עדיין צעירה: אף סיגנל עוד לא בן 30 יום, אז המספרים האלה אומרים מעט בינתיים. " : ""}המחירים מ-Yahoo Finance, לפני דיבידנדים ועמלות. תוצאות עבר לא מנבאות את העתיד; לא ייעוץ השקעות.`);
+  P("The Emerging screen, tested back to 2018:", () => "מסך הצומחות, נבדק אחורה עד 2018:");
+  P("bought each quarter once the 13F data was public and held 12 months, it returned {N} a year on average, against {N} for the Russell 2000 \\(IWM\\), and beat it in {N} of {N} quarters\\.", (m, v) =>
+    `בקנייה בכל רבעון אחרי שנתוני ה-13F פורסמו והחזקה ל-12 חודשים, התשואה הממוצעת הייתה ${v(m[1])} בשנה, מול ${v(m[2])} למדד ראסל 2000 (IWM), והוא ניצח את המדד ב-${v(m[3])} מתוך ${v(m[4])} רבעונים.`);
+  P("vs {N} S&P", (m, v) => `מול ${v(m[1])} ל-S&P`);
+  P("{N} managers: (.+)", (m, v) => `${v(m[1])} מנהלים: ${m[2]}`);
+  P("(BlackRock|Vanguard|State Street) {N} above its flows", (m, v) => `${HE_M[m[1]]} ${v(m[2])} מעל הזרימה שלה`);
+  P("{N} insiders bought {N}", (m, v) => `${v(m[1])} בעלי עניין קנו ב-${v(m[2])}`);
+  P("Big Three stake {N}, {N} in a year", (m, v) => `החלק של שלוש הגדולות ${v(m[1])}, ${v(m[2])} בשנה`);
+  P("(.+), filed {D}", (m, v) => `${m[1]}, הוגש ב-${v(m[2])}`);
   P("Loading {X}…", (m) => `טוען…`);
   P("Money flows: an ETF that takes in money buys more of everything it holds in the same proportion, so the share count of most holdings moves by the same ratio\\. Trintel takes that ratio as the day’s flow; what moves differently is a change in the fund’s mix \\(index additions and removals, rebalances, corporate actions\\)\\. iShares \\(BlackRock\\) and Vanguard do not publish a daily holdings file that can be downloaded, so their funds are tracked monthly from N-PORT filings on the ETFs page\\. Source: State Street, checked {X}\\.", (m, v) =>
     `כסף נכנס ויוצא: תעודת סל שמקבלת כסף קונה עוד מכל מה שהיא מחזיקה באותו יחס, אז מספר המניות של רוב האחזקות זז באותו יחס. Trintel מתייחס ליחס הזה ככסף שנכנס או יצא באותו יום; מה שזז אחרת הוא שינוי בהרכב הקרן (הוספות והוצאות מהמדד, איזון מחדש, אירועים תאגידיים). iShares (בלקרוק) וואנגארד לא מפרסמות קובץ אחזקות יומי שאפשר להוריד, אז הקרנות שלהן מתעדכנות פעם בחודש מדוחות N-PORT בעמוד תעודות הסל. מקור: סטייט סטריט, נבדק ${v(m[1])}.`);

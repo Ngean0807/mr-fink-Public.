@@ -780,3 +780,4 @@ sup { font-size: 10px; color: var(--muted); }
 .today-movers a { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 16px; background: var(--chip); color: var(--ink); text-decoration: none; }
 .badge.tone-up { background: var(--pos-soft); color: var(--pos); }
 .badge.tone-down { background: var(--neg-soft); color: var(--neg); }
+.bt-note { margin-top: 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 14px; line-height: 1.55; }

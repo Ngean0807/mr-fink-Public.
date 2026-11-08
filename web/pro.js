@@ -202,6 +202,50 @@
   T.page("today", { match: (h) => h === "today", render: todayPage });
   T.chip(() => `<a class="chip chip-today" href="#today" ${T.state.page === "today" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--pos-line)"></span>My day</a>`, true);
 
+  // ---------- 9. Signals, with every signal's score since the day it was issued (pipeline/signals.py) ----------
+  const SIG = {
+    active: ["Bought above index flows", "The Big Three bought clearly more than the money flowing into their index funds"],
+    consensus: ["Famous investors agree", "Three or more famous investors bought it in their latest 13F"],
+    activist: ["New activist stake", "A new Schedule 13D in the last 30 days: 5%+ with intent to push for change"],
+    insiders: ["Insiders buying", "Two or more insiders bought on the open market in the last 90 days"],
+    emerging: ["Emerging small caps", "The Emerging screen’s small caps with the largest stake gain over a year"],
+  };
+  function sigWhy(k, x, g) {
+    const w = x.why || {};
+    if (k === "active") return w.m.map(([m, e]) => `${T.MGR_NAME[m]} ${e != null ? pct(e, 1) + " above its flows" : ""}`).join(" · ");
+    if (k === "consensus") return `${w.by.length} managers: ${w.by.map((id) => ((g && g.managers.find((m) => m.id === id)) || {}).name || id).join(", ")}`;
+    if (k === "activist") return `${((g && g.managers.find((m) => m.id === w.g)) || {}).name || w.g}, filed ${dateL(w.filed)}`;
+    if (k === "insiders") return `${w.buyers} insiders bought ${usd(w.bought)}`;
+    if (k === "emerging") return `Big Three stake ${w.stake != null ? pct(w.stake, 1, false) : "—"}, ${w.yoy != null ? pct(w.yoy, 1) + " in a year" : ""}`;
+    return "";
+  }
+  function signalsPage(app) {
+    const d = data("signals", ["signals"]);
+    const g = data("gurus", ["signals"]);
+    const bt = data("backtest", ["signals"]);
+    if (d === undefined) { app.innerHTML = `<div class="main">${loading("signals")}</div>`; return; }
+    if (!d) { app.innerHTML = `<div class="main"><p class="empty-state">Signals could not be loaded.</p></div>`; return; }
+    const led = new Map(d.ledger.map((x) => [x.key, x]));
+    const ret = (x) => (x && x.r != null ? `${signed(x.r)} <small class="muted">vs ${signed(x.rs).replace(/<[^>]+>/g, "")} S&amp;P</small>` : "—");
+    const bs = bt && bt.summary;
+    app.innerHTML = `<div class="main">
+      <div class="hero"><h1>Signals, with their track record</h1>
+        <p class="hero-sub">Five signals from the filings. Each one is recorded on the day it first appears, at that day’s price, and scored against the S&amp;P 500 from then on. Nothing is back-filled or removed.</p></div>
+      <section class="section" aria-labelledby="sg-r"><div class="section-head"><h2 id="sg-r">Track record so far</h2><span class="note">Return since each signal was issued, against SPY over the same days</span></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Signal</th><th scope="col">Tracked since</th><th scope="col">Signals</th><th scope="col">Average return</th><th scope="col">Versus the S&amp;P 500</th><th scope="col">Beat the S&amp;P 500</th></tr></thead>
+        <tbody>${Object.keys(SIG).map((k) => { const x = d.summary[k] || {}; return `<tr><td class="l"><b>${SIG[k][0]}</b></td><td>${x.since ? dateL(x.since) : "—"}</td><td>${x.n || 0}</td><td>${x.avg == null ? "—" : signed(x.avg)}</td><td>${x.avgVsSpy == null ? "—" : signed(x.avgVsSpy)}</td><td>${x.beat == null || !x.aged ? "—" : pct(x.beat, 0, false)}</td></tr>`; }).join("")}</tbody></table></div>
+        <p class="foot">${Object.values(d.summary).every((x) => !x.aged) ? "The record is young: no signal is 30 days old yet, so these numbers say little for now. " : ""}Prices from Yahoo Finance, before dividends and costs. Past results do not predict future ones; not investment advice.</p>
+        ${bs ? `<div class="bt-note"><b>The Emerging screen, tested back to 2018:</b> bought each quarter once the 13F data was public and held 12 months, it returned ${pct(bs.avg12, 1)} a year on average, against ${pct(bs.avgIwm12, 1)} for the Russell 2000 (IWM), and beat it in ${pct(bs.beatIwm12, 0, false)} of ${bs.cohorts12} quarters. <a href="#emerging">The full backtest, on the Emerging page</a></div>` : ""}
+      </section>
+      ${Object.keys(SIG).map((k) => `<section class="section" aria-labelledby="sg-${k}"><div class="section-head"><div><h2 id="sg-${k}">${SIG[k][0]}</h2><p class="note">${SIG[k][1]}</p></div></div>
+        ${(d.current[k] || []).length ? `<div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th class="l" scope="col">Why</th><th scope="col">Since</th><th scope="col">Return since</th></tr></thead>
+        <tbody>${d.current[k].map((x) => { const l = led.get(x.key); return `<tr><td class="l">${coLink(x.t, x.n)}</td><td class="l wrapc">${esc(sigWhy(k, x, g))}</td><td>${l ? dateL(l.date) : "—"}</td><td>${ret(l)}</td></tr>`; }).join("")}</tbody></table></div>` : '<p class="foot">None right now.</p>'}
+      </section>`).join("")}
+    </div>`;
+  }
+  T.page("signals", { match: (h) => h === "signals", render: signalsPage });
+  T.chip(() => `<a class="chip" href="#signals" ${T.state.page === "signals" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--neg-line)"></span>Signals <small>with track record</small></a>`);
+
   // ---------- 5. Famous investors and activists (pipeline/gurus.py) ----------
   let guruOpen = null;
   const chg = (r) => (r.st === "new" ? '<span class="act new">New</span>' : r.st === "exited" ? '<span class="act out">Sold out</span>' : r.d != null ? T.pill(r.d, { sm: true }) : "—");
