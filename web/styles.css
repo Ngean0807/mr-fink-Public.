@@ -757,3 +757,6 @@ sup { font-size: 10px; color: var(--muted); }
 .mini-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 24px; vertical-align: middle; }
 .mini-bars i { display: block; width: 4px; border-radius: 1px; background: var(--pos-line); }
 .mini-bars i.down { background: var(--neg-line); }
+.sty { display: inline-block; font: 500 11px var(--font-ui); padding: 2px 7px; border-radius: 10px; margin-inline-start: 6px; white-space: nowrap; background: var(--chip); color: var(--ink-2); }
+.sty-more { background: var(--pos-soft); color: var(--pos); }
+.sty-less { background: var(--neg-soft); color: var(--neg); }
