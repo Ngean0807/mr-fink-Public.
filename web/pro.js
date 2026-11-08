@@ -205,6 +205,39 @@
     </section>`;
   });
 
+  // ---------- 8. Israeli companies listed in the US, in dollars or shekels (pipeline/israel.py) ----------
+  let ilsOn = (() => { try { return localStorage.getItem("mrfink.ils") === "1"; } catch (e) { return false; } })();
+  function israelPage(app) {
+    const d = data("israel", ["israel"]);
+    if (d === undefined) { app.innerHTML = `<div class="main">${loading("Israeli companies")}</div>`; return; }
+    if (!d) { app.innerHTML = `<div class="main"><p class="empty-state">The Israeli companies could not be loaded.</p></div>`; return; }
+    const fx = d.usdils;
+    const money = (v) => (v == null ? "—" : ilsOn && fx ? "₪" + T.num(v * fx) : usd(v));
+    const price = (r) => { const p = T.pxOf(r.t) || r.price; return p == null ? "—" : ilsOn && fx ? "₪" + (p * fx).toFixed(2) : "$" + p.toFixed(2); };
+    const day = (r) => { const p = T.pxOf(r.t) || r.price; return p && r.prev ? T.pill(p / r.prev - 1, { sm: true }) : "—"; };
+    const G = (data("gurus", ["israel"]) || { managers: [] }).managers;
+    const held = d.rows.filter((r) => r.own).reduce((a, r) => a + r.own.v, 0);
+    const rows = d.rows.slice().sort((a, b) => ((b.own && b.own.v) || 0) - ((a.own && a.own.v) || 0));
+    app.innerHTML = `<div class="main">
+      <div class="hero">
+        <h1>Israeli companies on Wall Street</h1>
+        <p class="hero-sub">${d.rows.length} Israeli companies listed in the US: how much of each the Big Three hold, what they did last quarter, and which famous investors are in.</p>
+        ${held ? `<div class="figure"><span class="figure-value">${money(held)}</span><span class="muted">held by the Big Three in these companies</span></div>` : ""}
+        <div class="toggles" role="group" aria-label="Currency"><button type="button" class="chip" data-cur="usd" aria-pressed="${!ilsOn}">$ Dollars</button><button type="button" class="chip" data-cur="ils" aria-pressed="${ilsOn}">₪ Shekels</button>${fx ? `<span class="muted fx">$1 = ₪${fx.toFixed(3)}</span>` : ""}</div>
+      </div>
+      <div class="table-scroll"><table class="tbl pro-tbl">
+        <thead><tr><th class="l" scope="col">Company</th><th class="l" scope="col">Field</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Big Three hold</th><th scope="col">Stake</th><th class="l" scope="col">Last quarter</th><th class="l" scope="col">Famous investors</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr><td class="l">${coLink(r.t, r.n)}</td><td class="l">${esc(r.f)}</td><td>${price(r)}</td><td>${day(r)}</td><td>${r.own ? money(r.own.v) : '<span class="na">—</span>'}</td><td>${r.own && r.own.s != null ? pct(r.own.s, 1, false) : '<span class="na">n/a</span>'}</td>
+          <td class="l pf-why">${r.own ? interpret(r.own).map((x) => `<span>${esc(x)}</span>`).join("") || (r.own.q != null ? T.pill(r.own.q, { sm: true }) : "—") : d.ownersPending ? '<span class="muted">Ownership data is being added</span>' : '<span class="muted">Below $50M held</span>'}</td>
+          <td class="l wrapc">${r.famous.map((id) => { const m = G.find((x) => x.id === id); return m ? `<a href="#gurus/${id}">${esc(m.name)}</a>` : ""; }).join(", ") || "—"}</td></tr>`).join("")}</tbody>
+      </table></div>
+      <p class="foot">Israeli-founded or Israel-headquartered companies with a US listing. Holdings from the Big Three’s 13F filings for ${T.qlabel(T.D.meta.latest)}; stake where the company reports its share count to the SEC (many Israeli companies file a 20-F and do not). Prices from Yahoo Finance; shekel amounts at the latest dollar-shekel rate. Not investment advice.</p>
+    </div>`;
+    app.querySelectorAll("[data-cur]").forEach((b) => b.addEventListener("click", () => { ilsOn = b.dataset.cur === "ils"; try { localStorage.setItem("mrfink.ils", ilsOn ? "1" : "0"); } catch (e) { /* storage unavailable */ } T.render(); }));
+  }
+  T.page("israel", { match: (h) => h === "israel", render: israelPage });
+  T.chip(() => `<a class="chip" href="#israel" ${T.state.page === "israel" ? 'aria-current="page"' : ""}><span class="sw il-sw"></span>Israel <small>on Wall Street</small></a>`);
+
   // ---------- 2. Daily: State Street's SPDR funds, day by day (pipeline/daily.py) ----------
   const kindOf = (x) => (x.add ? "Added to the fund" : x.drop ? "Removed from the fund" : "Weight changed");
   function dailyPage(app) {

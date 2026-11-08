@@ -774,3 +774,5 @@ sup { font-size: 10px; color: var(--muted); }
 .pf-mg span + span { margin-top: 4px; }
 .pro-tbl .co { min-width: 190px; }
 .pro-tbl td.wrapc { white-space: normal; min-width: 260px; font-size: 13px; line-height: 1.5; }
+.il-sw { background: linear-gradient(#fff 0 30%, #0038b8 30% 40%, #fff 40% 60%, #0038b8 60% 70%, #fff 70%); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.toggles .fx { font-size: 13px; margin-inline-start: 8px; align-self: center; }

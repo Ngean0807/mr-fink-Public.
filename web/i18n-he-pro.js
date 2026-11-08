@@ -111,6 +111,41 @@
     "Long/short": "לונג/שורט",
     "Multi-strategy": "רב-אסטרטגי",
     "Quant": "כמותי",
+    // Israel
+    "Israel": "ישראל",
+    "on Wall Street": "בוול סטריט",
+    "Israeli companies on Wall Street": "חברות ישראליות בוול סטריט",
+    "held by the Big Three in these companies": "ששלוש הגדולות מחזיקות בחברות האלה",
+    "$ Dollars": "$ דולרים",
+    "₪ Shekels": "₪ שקלים",
+    "Field": "תחום",
+    "Big Three hold": "שלוש הגדולות מחזיקות",
+    "Stake": "חלק",
+    "Below $50M held": "מתחת ל-50 מיליון דולר",
+    "Ownership data is being added": "נתוני האחזקות בתהליך הוספה",
+    "The Israeli companies could not be loaded.": "לא הצלחנו לטעון את החברות הישראליות.",
+    "Pharma": "תרופות",
+    "Cyber security": "סייבר",
+    "Software": "תוכנה",
+    "Autonomous driving": "נהיגה אוטונומית",
+    "Defense": "ביטחון",
+    "Chemicals": "כימיקלים",
+    "Semiconductors": "שבבים",
+    "E-commerce": "מסחר מקוון",
+    "Solar energy": "אנרגיה סולארית",
+    "Internet": "אינטרנט",
+    "Medical devices": "מכשור רפואי",
+    "Insurance": "ביטוח",
+    "Shipping": "ספנות",
+    "Digital forensics": "פורנזיקה דיגיטלית",
+    "Renewable energy": "אנרגיה מתחדשת",
+    "Gaming": "משחקים",
+    "Communications": "תקשורת",
+    "Telematics": "טלמטיקה",
+    "Advertising": "פרסום",
+    "Printing technology": "טכנולוגיית הדפסה",
+    "Electric vehicles": "רכב חשמלי",
+    "Networking": "תקשורת נתונים",
     // passive or active
     "Passive or active": "פסיבי או אקטיבי",
     "With the flows": "פסיבי, עם הזרימה",
@@ -147,6 +182,11 @@
   P("From (.+)’s Form 13F on SEC EDGAR \\(US-listed stocks and options are reported; options are left out\\), compared with {Q}\\. A 13F is filed up to 45 days after the quarter ends\\.", (m, v) =>
     `מדוח ה-13F של ${m[1]} ב-SEC EDGAR (מדווחים מניות ואופציות שנסחרות בארה״ב; האופציות לא נכללות כאן), בהשוואה ל${v(m[2])}. דוח 13F מוגש עד 45 יום אחרי סוף הרבעון.`);
   P("(.+): (13D amendment|new 13D stake), {D}", (m, v) => `${m[1]}: ${m[2] === "13D amendment" ? "עדכון 13D" : "אחזקת 13D חדשה"}, ${v(m[3])}`);
+  P("{N} Israeli companies listed in the US: how much of each the Big Three hold, what they did last quarter, and which famous investors are in\\.", (m, v) =>
+    `${v(m[1])} חברות ישראליות שנסחרות בארה״ב: כמה מכל אחת מחזיקות שלוש הגדולות, מה הן עשו ברבעון האחרון, ואילו משקיעים מפורסמים בפנים.`);
+  P("Israeli-founded or Israel-headquartered companies with a US listing\\. Holdings from the Big Three’s 13F filings for {Q}; stake where the company reports its share count to the SEC \\(many Israeli companies file a 20-F and do not\\)\\. Prices from Yahoo Finance; shekel amounts at the latest dollar-shekel rate\\. Not investment advice\\.", (m, v) =>
+    `חברות שנוסדו בישראל או שהמטה שלהן בישראל, ונסחרות בארה״ב. האחזקות מדוחות ה-13F של שלוש הגדולות ל${v(m[1])}; החלק מוצג כשהחברה מדווחת ל-SEC על מספר המניות שלה (חברות ישראליות רבות מגישות 20-F ולא מדווחות). המחירים מ-Yahoo Finance; סכומים בשקלים לפי שער הדולר האחרון. לא ייעוץ השקעות.`);
+  P("\\$1 = ₪{N}", (m) => `$1 = ₪${m[1]}`);
   P("Loading {X}…", (m) => `טוען…`);
   P("Money flows: an ETF that takes in money buys more of everything it holds in the same proportion, so the share count of most holdings moves by the same ratio\\. Trintel takes that ratio as the day’s flow; what moves differently is a change in the fund’s mix \\(index additions and removals, rebalances, corporate actions\\)\\. iShares \\(BlackRock\\) and Vanguard do not publish a daily holdings file that can be downloaded, so their funds are tracked monthly from N-PORT filings on the ETFs page\\. Source: State Street, checked {X}\\.", (m, v) =>
     `כסף נכנס ויוצא: תעודת סל שמקבלת כסף קונה עוד מכל מה שהיא מחזיקה באותו יחס, אז מספר המניות של רוב האחזקות זז באותו יחס. Trintel מתייחס ליחס הזה ככסף שנכנס או יצא באותו יום; מה שזז אחרת הוא שינוי בהרכב הקרן (הוספות והוצאות מהמדד, איזון מחדש, אירועים תאגידיים). iShares (בלקרוק) וואנגארד לא מפרסמות קובץ אחזקות יומי שאפשר להוריד, אז הקרנות שלהן מתעדכנות פעם בחודש מדוחות N-PORT בעמוד תעודות הסל. מקור: סטייט סטריט, נבדק ${v(m[1])}.`);

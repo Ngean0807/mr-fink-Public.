@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, feed, fundamentals, gurus, insiders, movers, news, nport, owners, periods, quotes, securities, style, thirteenf
+from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, style, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -538,6 +538,10 @@ def main() -> None:
         gurus.build()
     except Exception as e:
         print(f"Famous investors skipped: {e}")
+    try:  # Israeli companies listed in the US (after the ownership index and the famous investors)
+        israel.build()
+    except Exception as e:
+        print(f"Israel page skipped: {e}")
     try:  # State Street's SPDR funds day by day (their daily holdings files; checked once an hour)
         daily.write({t: q.get("price") for t, q in data["quotes"]["quotes"].items() if isinstance(q, dict)})
     except Exception as e:
