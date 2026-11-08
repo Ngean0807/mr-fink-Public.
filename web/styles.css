@@ -93,9 +93,9 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none !important; }
 .brand-mark { width: 36px; height: 36px; flex: none; display: block; }
-/* Trintel wordmark: TRINTEL in mono type and a redaction bar in the logo's aurora gradient */
+/* Trintel wordmark: TRINTEL in mono type and a green redaction bar, as in the logo */
 .wm { font: 700 19px/1 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: -.02em; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
-.wm i { display: inline-block; width: 16px; height: 6px; border-radius: 2px; background: linear-gradient(90deg, #7C3AED, #D946EF 55%, #FB923C); }
+.wm i { display: inline-block; width: 16px; height: 6px; border-radius: 2px; background: #12B76A; }
 .brand-name { font: 500 20px/1 var(--font-ui); letter-spacing: -.01em; white-space: nowrap; }
 .brand-name span { color: var(--muted); font-weight: 400; }
 .search { position: relative; max-width: 620px; width: 100%; justify-self: center; }
