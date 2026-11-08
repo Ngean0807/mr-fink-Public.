@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, exports, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, signals, style, thirteenf, votes
+from . import analytics, audit, aum, backtest, config, daily, digest, edgar, emerging, etfs, exports, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, signals, style, thirteenf, votes
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -550,6 +550,10 @@ def main() -> None:
         signals.build(data)
     except Exception as e:
         print(f"Signals skipped: {e}")
+    try:  # the weekly digest (after the signals; the push server sends it on Friday evening)
+        digest.build(data)
+    except Exception as e:
+        print(f"Weekly digest skipped: {e}")
     try:  # proxy votes from Form N-PX (read once a year; per-company files every run)
         votes.build()
     except Exception as e:

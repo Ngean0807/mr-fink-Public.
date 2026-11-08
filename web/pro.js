@@ -343,6 +343,60 @@
   T.page("israel", { match: (h) => h === "israel", render: israelPage });
   T.chip(() => `<a class="chip" href="#israel" ${T.state.page === "israel" ? 'aria-current="page"' : ""}><span class="sw il-sw"></span>Israel <small>on Wall Street</small></a>`);
 
+  // ---------- 7. The weekly digest (pipeline/digest.py; sent by the push server on Friday evening) ----------
+  let digestWeek = null, tgInfo;
+  const HE_MGR = { blackrock: "בלקרוק", vanguard: "ואנגארד", statestreet: "סטייט סטריט" };
+  const isHe = () => { try { return localStorage.getItem("mrfink.lang") === "he"; } catch (e) { return false; } };
+  /** The digest's headlines as sentences (the push server writes the same ones). */
+  function digestLines(issue, he) {
+    const M = (m) => (he ? HE_MGR[m] : T.MGR_NAME[m]) || m;
+    return issue.lines.map(([kind, x]) => {
+      if (kind === "stake") return he ? `${M(x.m)} דיווחה על ${(x.pct * 100).toFixed(1)}% ב-${x.t}${x.n > 1 ? ` (ועוד ${x.n - 1} דיווחי אחזקה)` : ""}` : `${M(x.m)} reported ${(x.pct * 100).toFixed(1)}% of ${x.t}${x.n > 1 ? ` (and ${x.n - 1} more stake filings)` : ""}`;
+      if (kind === "spdr") return he ? `קרנות SPDR: ${usdS(x.flow)} נטו השבוע${x.buy ? `, הקנייה הגדולה ${x.buy[0]} (${usdS(x.buy[1])})` : ""}` : `SPDR funds: ${usdS(x.flow)} net this week${x.buy ? `, biggest buy ${x.buy[0]} (${usdS(x.buy[1])})` : ""}`;
+      if (kind === "d13") return he ? `${x.g}: ${x.amend ? "עדכון אחזקה אקטיביסטית" : "אחזקה אקטיביסטית חדשה"} ב-${x.t || x.n}` : `${x.g}: ${x.amend ? "changed its activist stake" : "new activist stake"} in ${x.t || x.n}`;
+      if (kind === "g13f") return he ? `${x.g} הגישה 13F${x.buy && x.buy.t ? `, הקנייה הגדולה ${x.buy.t}` : ""}` : `${x.g} filed its 13F${x.buy && x.buy.t ? `, biggest buy ${x.buy.t}` : ""}`;
+      if (kind === "signals") return he ? `${x.n} סיגנלים חדשים` : `${x.n} new signals`;
+      if (kind === "reports") return he ? `${x.n} דיווחים מהותיים (8-K)${x.t.length ? `: ${x.t.join(", ")}` : ""}` : `${x.n} key 8-K reports${x.t.length ? `: ${x.t.join(", ")}` : ""}`;
+      if (kind === "f13") return he ? `דוחות 13F חדשים: ${x.m.map(M).join(", ")}` : `New 13F filings: ${x.m.map(M).join(", ")}`;
+      return "";
+    }).filter(Boolean);
+  }
+  function digestPage(app) {
+    const d = data("digest", ["digest"]);
+    if (d === undefined) { app.innerHTML = `<div class="main">${loading("the weekly digest")}</div>`; return; }
+    if (!d || !d.current) { app.innerHTML = `<div class="main"><p class="empty-state">The weekly digest could not be loaded.</p></div>`; return; }
+    if (tgInfo === undefined && T.pushUrl) {
+      tgInfo = null;
+      fetch(T.pushUrl + "/health").then((r) => r.json()).then((h) => { tgInfo = h.telegram || false; T.rerender(["digest"]); }).catch(() => {});
+    }
+    const all = [d.current, ...(d.archive || [])];
+    const issue = all.find((x) => x.week === digestWeek) || d.current;
+    const he = isHe();
+    const lines = digestLines(issue, he);
+    const sec = (id, title, body) => (body ? `<section class="section" aria-labelledby="dg-${id}"><div class="section-head"><h2 id="dg-${id}">${title}</h2></div>${body}</section>` : "");
+    const list = (rows) => (rows.length ? `<div class="list wrap">${rows.join("")}</div>` : "");
+    const item = (href, badge, title, sub, ext) => `<a href="${esc(href)}"${ext ? ' target="_blank" rel="noopener"' : ""}><span class="badge frep">${esc(badge)}</span><span class="nm"><b>${title}</b><small>${sub}</small></span><span></span></a>`;
+    app.innerHTML = `<div class="main">
+      <div class="hero"><h1>Weekly digest</h1>
+        <p class="hero-sub">${dateL(issue.from)} – ${dateL(issue.to)}${issue === d.current && !issue.ready ? " · this week so far" : ""}</p>
+        <div class="toggles dg-weeks" role="group" aria-label="Week">${all.slice(0, 8).map((x) => `<a class="chip" href="#digest/${x.week}" aria-pressed="${x.week === issue.week}">${dateL(x.from).replace(/, \d{4}$/, "")}</a>`).join("")}</div>
+      </div>
+      <section class="section dg-lines" aria-labelledby="dg-h"><h2 id="dg-h" class="sr">The week in short</h2>
+        ${lines.length ? `<ul>${lines.map((l) => `<li translate="no">${esc(l)}</li>`).join("")}</ul>` : '<p class="foot">A quiet week so far.</p>'}
+      </section>
+      <div class="dg-get">${T.pushUrl ? `<span>Get it every Friday as a push notification: turn on <b>Weekly digest</b> under the bell.</span>` : ""}${tgInfo ? `<a class="btn" href="https://t.me/${typeof tgInfo === "string" ? esc(tgInfo) : ""}" target="_blank" rel="noopener">Get it on Telegram</a>` : ""}</div>
+      ${sec("st", "Big Three stake filings (13G/13D)", list(issue.stakes.map((e) => item(`#t-${slugOf((e.tickers || [])[0] || "")}`, "13G", `${esc(T.MGR_NAME[e.manager] || "")}: ${pct(e.percent, 2, false)} of ${esc((e.tickers || [])[0] || "")}`, `${esc(e.entity)} · ${dateL(e.filed)}`))))}
+      ${sec("sp", "SPDR funds this week", issue.spdrFlow == null ? "" : `<p class="foot">Net money in or out: <b>${usdS(issue.spdrFlow)}</b></p>${list([...issue.spdrBuys, ...issue.spdrSells].map(([t, u, m]) => item(`#t-${slugOf(t)}`, u >= 0 ? "Buy" : "Sell", `${esc(t)}: ${usdS(u)}`, Math.abs(m) >= Math.abs(u) * 0.5 ? "Mostly a change in the funds’ mix" : "Mostly money flows")))}`)}
+      ${sec("ac", "Activists", list(issue.d13.map((x) => item(x.t ? `#t-${slugOf(x.t)}` : "#gurus", x.amend ? "13D/A" : "13D", `${esc(x.g)} · ${esc(x.t || T.niceName(x.n))}`, `${x.amend ? "Amended its stake" : "New 5%+ stake"} · ${dateL(x.filed)}`))))}
+      ${sec("gf", "Famous investors’ 13F filings", list(issue.g13f.map((x) => item("#gurus", "13F", esc(x.g), `${T.qlabel(x.period)}${x.buy && x.buy.t ? ` · biggest buy ${esc(x.buy.t)} (${usdS(x.buy.f)})` : ""}`))))}
+      ${sec("sg", "New signals", list(issue.newSignals.map((x) => item(`#t-${slugOf(x.t)}`, "Signal", esc(x.t), `${esc((SIG[x.kind] || [x.kind])[0])} · ${esc(T.niceName(x.n))}`))))}
+      ${sec("bs", "Best signals so far", list(issue.best.map((x) => item("#signals", "Signal", `${esc(x.t)}: ${signed(x.r)}`, `${esc((SIG[x.kind] || [x.kind])[0])} · since ${dateL(x.date)} · S&amp;P 500 ${signed(x.rs).replace(/<[^>]+>/g, "")}`))))}
+      ${sec("rp", "Key company reports (8-K)", list(issue.reports.map((e) => { const [a, b] = T.feedTitle(e); return item(e.url, "8-K", esc(a), esc(b || ""), true); })))}
+    </div>`;
+  }
+  T.page("digest", { match: (h) => h === "digest" || h.startsWith("digest/"), onRoute: (h) => { digestWeek = h.startsWith("digest/") ? h.slice(7) : null; }, render: digestPage });
+  T.chip(() => `<a class="chip" href="#digest" ${T.state.page === "digest" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--warn)"></span>Weekly digest</a>`);
+
   // ---------- 10. Pro tools: proxy votes (pipeline/votes.py), CSV for spreadsheets and the data API ----------
   const VOTE = { FOR: "For", AGAINST: "Against", WITHHOLD: "Withheld", ABSTAIN: "Abstained" };
   const voteTag = (v, it) => { if (!v) return '<span class="na">—</span>'; const w = v === (it.s === "Shareholder" ? "AGAINST" : "FOR"); return `<span class="vote ${w ? "with" : "against"}" title="${w ? "With management" : "Against management"}">${esc(VOTE[v] || v.toLowerCase())}</span>`; };

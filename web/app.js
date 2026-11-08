@@ -2395,10 +2395,11 @@
     ["report", "10-Q / 10-K", "A tracked company files its quarterly or annual report"],
     ["nport", "Fund holdings (N-PORT)", "A flagship index fund (IWM, VTI, SPSM…) publishes its portfolio"],
     ["health", "Site health", "Trintel stops updating or recovers, or a data check finds something to review (push only)"],
+    ["digest", "Weekly digest", "The week’s most important changes, every Friday after the US close (push only)"],
   ];
   const nprefs = (() => {
     try { return JSON.parse(localStorage.getItem("mrfink.notify") || "null"); } catch (e) { return null; }
-  })() || { kinds: ["13f", "13g", "8k"], browser: false };
+  })() || { kinds: ["13f", "13g", "8k", "digest"], browser: false };
   const saveN = () => { try { localStorage.setItem("mrfink.notify", JSON.stringify(nprefs)); } catch (e) { /* storage unavailable */ } };
   const canNotify = () => "Notification" in window;
   function browserNotify(events, watchedOnly = false) {
@@ -2435,7 +2436,7 @@
     if (!PUSH_URL || !pushSupported()) return false;
     const sub = await pushSubscription(create);
     if (!sub) return false;
-    const r = await fetch(PUSH_URL + "/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds: nprefs.kinds, tickers: watch }) });
+    const r = await fetch(PUSH_URL + "/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds: nprefs.kinds, tickers: watch, lang: (() => { try { return localStorage.getItem("mrfink.lang") || "en"; } catch (e) { return "en"; } })() }) });
     return r.ok;
   }
   let pushTimer = null;
@@ -2689,7 +2690,7 @@
     $, esc, usd, usdS, num, pct, pp, signed, pill, dateL, ago, qlabel, niceName, tkChip, live, pxOf, dayChg, mColor, dot,
     styleOf, styleTag, MGR_NAME, MGRS, VIEWS, aumOf, holder, anySec, isWatched, toggleWatch, toast, render, exportBtn, slugOf,
     secByTicker: (t) => Object.values(D.securities).find((s) => s.ticker === t) || emergingAll().find((r) => r.ticker === t),
-    page(name, def) { EXTRA[name] = def; }, chip(fn, first) { (first ? EXTRA_CHIPS_FIRST : EXTRA_CHIPS).push(fn); }, feedTitle, company(fn) { EXTRA_CO.push(fn); }, onBoot(fn) { if (D) fn(); else ON_BOOT.push(fn); },
+    get pushUrl() { return PUSH_URL; }, page(name, def) { EXTRA[name] = def; }, chip(fn, first) { (first ? EXTRA_CHIPS_FIRST : EXTRA_CHIPS).push(fn); }, feedTitle, company(fn) { EXTRA_CO.push(fn); }, onBoot(fn) { if (D) fn(); else ON_BOOT.push(fn); },
     rerender(pages) { if (!pages || pages.includes(state.page)) render(); },
   };
   function boot(data) {

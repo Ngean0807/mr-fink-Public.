@@ -15,3 +15,4 @@ web/data/signals.json
 web/data/votes.json
 web/data/votes/
 web/data/csv/
+web/data/digest.json
