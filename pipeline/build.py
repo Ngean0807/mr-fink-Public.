@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, aum, backtest, config, daily, digest, edgar, emerging, etfs, exports, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, signals, style, thirteenf, votes
+from . import analytics, askdata, audit, aum, backtest, config, daily, digest, edgar, emerging, etfs, exports, feed, fundamentals, gurus, insiders, israel, movers, news, nport, owners, periods, quotes, securities, signals, style, thirteenf, votes
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -558,6 +558,10 @@ def main() -> None:
         votes.build()
     except Exception as e:
         print(f"Proxy votes skipped: {e}")
+    try:  # small files for the Ask tools on the push server
+        askdata.write(data)
+    except Exception as e:
+        print(f"Ask data skipped: {e}")
     try:  # CSV copies for spreadsheets (last: they read the JSON files written above)
         exports.write(data)
     except Exception as e:

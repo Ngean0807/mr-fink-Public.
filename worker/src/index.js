@@ -11,13 +11,16 @@
 //   POST /subscribe    { subscription, kinds, tickers }   (also updates preferences)
 //   POST /unsubscribe  { endpoint }
 //   POST /test         { endpoint }   one test push to that subscription
+//   POST /ask          { question, lang, history }  questions answered by Claude (src/ask.js)
 //   GET  /health
 //   POST /telegram     Telegram bot webhook (/start, /stop), when TELEGRAM_BOT_TOKEN is set
 //   GET  /telegram/setup  points the bot's webhook here (run once after adding the token)
 //
 // The weekly digest (data/digest.json) goes out once, from Friday after the US close: a push to
 // subscribers who chose "digest" and a Telegram message to everyone who started the bot.
+import Anthropic from "@anthropic-ai/sdk";
 import { generateVapid, sendPush } from "./webpush.js";
+import { ask } from "./ask.js";
 
 const KINDS = new Set(["13f", "13g", "8k", "report", "nport", "health", "digest"]);
 const STALE_MIN = 40;          // no fresh data for this long: the refresh is stuck
@@ -31,7 +34,7 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/vapid") return json({ publicKey: (await vapid(env)).publicKey }, cors);
-      if (url.pathname === "/health") return json({ ok: true, subscribers: (await env.PUSH.list({ prefix: "sub:" })).keys.length, telegram: env.TELEGRAM_BOT_TOKEN ? (env.TELEGRAM_BOT_NAME || true) : false }, cors);
+      if (url.pathname === "/health") return json({ ok: true, subscribers: (await env.PUSH.list({ prefix: "sub:" })).keys.length, telegram: env.TELEGRAM_BOT_TOKEN ? (env.TELEGRAM_BOT_NAME || true) : false, ask: !!env.ANTHROPIC_API_KEY }, cors);
       if (url.pathname === "/telegram/setup" && env.TELEGRAM_BOT_TOKEN) {
         const hook = `${url.origin}/telegram`;
         const r = await tg(env, "setWebhook", { url: hook, secret_token: await tgSecret(env), allowed_updates: ["message"] });
@@ -44,6 +47,17 @@ export default {
       }
       if (request.method !== "POST") return json({ error: "not found" }, cors, 404);
       const body = await request.json();
+      if (url.pathname === "/ask") {
+        try {
+          const r = await ask(request, env, body);
+          return json(r.body, cors, r.status);
+        } catch (e) {
+          if (e instanceof Anthropic.RateLimitError) return json({ error: "busy" }, cors, 503);
+          if (e instanceof Anthropic.AuthenticationError) return json({ error: "not_configured" }, cors, 503);
+          if (e instanceof Anthropic.APIError) return json({ error: "upstream", status: e.status }, cors, 502);
+          throw e;
+        }
+      }
       if (url.pathname === "/subscribe") {
         const sub = body.subscription;
         if (!sub || typeof sub.endpoint !== "string" || !/^https:\/\//.test(sub.endpoint) || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
