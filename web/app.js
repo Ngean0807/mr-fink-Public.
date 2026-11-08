@@ -503,7 +503,7 @@
       const cx = m.l + slot * i + slot / 2;
       const g = el("g", {}, svg);
       el("rect", { x: cx - slot / 2, y: m.t, width: slot, height: H - m.t - m.b, fill: "transparent" }, g);
-      [[q.revenue, "var(--accent)", -1], [q.netIncome, "var(--vg)", 1]].forEach(([v, c, side]) => {
+      [[q.revenue, "var(--accent)", -1], [q.netIncome, "var(--c-gold)", 1]].forEach(([v, c, side]) => {
         if (v == null) return;
         const y0 = y(0), y1 = y(v);
         el("rect", { x: side < 0 ? cx - bw - 1 : cx + 1, y: Math.min(y0, y1), width: bw, height: Math.max(1, Math.abs(y1 - y0)), rx: 2, fill: c }, g);
@@ -512,7 +512,7 @@
       g.addEventListener("pointermove", (ev) => showTip(
         `<strong>Quarter ended ${dateL(q.end)}</strong>
          <div class="row"><span><i style="background:var(--accent)"></i>Revenue</span><b>${usd(q.revenue)}</b></div>
-         <div class="row"><span><i style="background:var(--vg)"></i>Net income</span><b>${usd(q.netIncome)}</b></div>
+         <div class="row"><span><i style="background:var(--c-gold)"></i>Net income</span><b>${usd(q.netIncome)}</b></div>
          <div class="row"><span>Net margin</span><b>${q.netIncome == null ? "—" : pct(q.netIncome / q.revenue, 1, false)}</b></div>`, ev.clientX, ev.clientY));
       g.addEventListener("pointerleave", hideTip);
     });
@@ -544,7 +544,7 @@
       const t = D.views[id].totals;
       const sw = id === "big3" ? "background:conic-gradient(var(--blk) 0 33%, var(--vg) 0 66%, var(--ss) 0)" : `background:${mColor(id)}`;
       const cur = state.view === id;
-      return `<a class="chip" href="#${id}" ${cur && state.page === "home" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(t[t.length - 1])}</small></a>`;
+      return `<a class="chip" href="#${id}" ${cur && state.page === "home" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(aumOf(id) ? aumOf(id).value : t[t.length - 1])}</small></a>`;
     }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "")
       + `<a class="chip chip-an" href="#analytics" ${state.page === "analytics" ? 'aria-current="page"' : ""}><svg class="an-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>Analytics <small>charts</small></a>`
       + `<a class="chip" href="#etfs" ${state.page === "etfs" ? 'aria-current="page"' : ""}><span class="sw" style="background:linear-gradient(90deg,var(--blk) 0 33%,var(--vg) 0 66%,var(--ss) 0)"></span>ETFs <small>iShares · Vanguard · SPDR</small></a>`;
@@ -607,12 +607,23 @@
 
   // ---------- total AUM: the 13F is only the US-listed-stock part of what each manager runs ----------
   const aumOf = (view) => ((D.meta.aum || {})[view] && D.meta.aum[view].value ? D.meta.aum[view] : null);
-  function aumLine(view, total13f) {
-    const a = aumOf(view);
-    if (!a) return "";
-    const src = view === "big3" ? "sum of each manager’s latest report" : a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.source)}</a>` : esc(a.source);
-    return `<p class="aum-line"><span>Total assets under management</span> <b>${usd(a.value)}</b> <span class="muted">as of ${dateL(a.asOf)} · ${src}</span><br>
-      <span class="muted">The 13F above covers only US-listed stocks: ${pct(total13f / a.value, 0, false)} of it. Bonds, non-US stocks, cash and private funds are not in a 13F.</span></p>`;
+  // The headline is the manager's total AUM as it reports it; the 13F (US-listed stocks only, what the
+  // chart and tables below are built from) comes under it. Without an AUM figure, the 13F is the headline.
+  function heroFigure(v, t0, t1, lastFiled) {
+    const a = aumOf(state.view);
+    const change = `${pill(t1 / t0 - 1)}<span class="figure-chg ${t1 >= t0 ? "txt-up" : "txt-down"}">${usdS(t1 - t0)}</span><span class="muted">${rangeLabel()}</span>`;
+    const held = `<p class="figure-note">Holdings as of ${dateL(D.meta.latest)} · last filed ${dateL(lastFiled)}</p>`;
+    if (!a) {
+      return `<p class="hero-sub">13F reported equity holdings · ${v.positions.toLocaleString("en-US")} securities</p>
+          <div class="figure"><span class="figure-value">${usd(t1)}</span>${change}</div>${held}`;
+    }
+    const src = state.view === "big3" ? "sum of each manager’s latest report" : a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.source)}</a>` : esc(a.source);
+    return `<p class="hero-sub">Total assets under management</p>
+          <div class="figure"><span class="figure-value">${usd(a.value)}</span></div>
+          <p class="figure-note">as of ${dateL(a.asOf)} · ${src}</p>
+          <div class="figure f13"><span class="f13-label">US-listed stocks in the 13F</span><b class="f13-value">${usd(t1)}</b><span class="muted">${pct(t1 / a.value, 0, false)} of AUM</span>${change}</div>
+          ${held}
+          <p class="figure-note">The 13F covers only US-listed stocks. Bonds, non-US stocks, cash and private funds are not in it. The chart and tables below are the 13F.</p>`;
   }
   // ---------- rail cards ----------
   function feedTitle(e) {
@@ -791,15 +802,7 @@
         <div class="hero">
           <nav class="crumbs" aria-label="Breadcrumb"><a href="#big3">Managers</a><span aria-hidden="true">›</span><span>${esc(MGR_NAME[state.view])}</span></nav>
           <h1>${state.view === "big3" ? "BlackRock, Vanguard &amp; State Street" : esc(v.name)}</h1>
-          <p class="hero-sub">13F reported equity holdings · ${v.positions.toLocaleString("en-US")} securities</p>
-          <div class="figure">
-            <span class="figure-value">${usd(t1)}</span>
-            ${pill(t1 / t0 - 1)}
-            <span class="figure-chg ${t1 >= t0 ? "txt-up" : "txt-down"}">${usdS(t1 - t0)}</span>
-            <span class="muted">${rangeLabel()}</span>
-          </div>
-          <p class="figure-note">Holdings as of ${dateL(D.meta.latest)} · last filed ${dateL(lastFiled)}</p>
-          ${aumLine(state.view, v.totals[v.totals.length - 1])}
+          ${heroFigure(v, t0, t1, lastFiled)}
         </div>
         ${seasonBanner(v)}
         ${v.early && state.early ? earlySection(v) : ""}
@@ -1154,8 +1157,8 @@
     const pc1 = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%");
     const first = c[0], end = c[g.screen.length - 1];
     const rows = [
-      ["S&amp;P 500 (SPY)", "spy", "var(--muted)"], ["Russell 2000 (IWM)", "iwm", "var(--ss)"], ["This screen", "screen", "var(--accent)"],
-      ["All three managers buying", "allThree", "var(--vg)"], ["All small caps, no signal", "universe", "var(--line-strong)"], ["Top 25 by stake gain", "top25", "var(--neg-line)"],
+      ["S&amp;P 500 (SPY)", "spy", "var(--muted)"], ["Russell 2000 (IWM)", "iwm", "var(--c-purple)"], ["This screen", "screen", "var(--accent)"],
+      ["All three managers buying", "allThree", "var(--c-gold)"], ["All small caps, no signal", "universe", "var(--line-strong)"], ["Top 25 by stake gain", "top25", "var(--neg-line)"],
     ].filter((r) => g[r[1]] && g[r[1]].length);
     return `<div class="section-head"><div><h2 id="bt-h">Has this screen worked?</h2>
         <p class="note">Backtest ${qlabel(first.period)}–${qlabel(end.period)}: each quarter’s list bought at the first quarter end after its 13F was public, equal weight, rebalanced quarterly</p></div></div>
@@ -1175,8 +1178,8 @@
     dates.push(y.toISOString().slice(0, 10));
     const ser = (k, name, color) => ({ name, color, values: [1, ...g[k].slice(0, n)] });
     lineChart(host, {
-      series: [ser("spy", "S&P 500", "var(--muted)"), ser("iwm", "Russell 2000", "var(--ss)"), ser("universe", "All small caps", "var(--line-strong)"),
-        ser("allThree", "All three buying", "var(--vg)"), ser("top25", "Top 25", "var(--neg-line)"), ser("screen", "This screen", "var(--accent)")],
+      series: [ser("spy", "S&P 500", "var(--muted)"), ser("iwm", "Russell 2000", "var(--c-purple)"), ser("universe", "All small caps", "var(--line-strong)"),
+        ser("allThree", "All three buying", "var(--c-gold)"), ser("top25", "Top 25", "var(--neg-line)"), ser("screen", "This screen", "var(--accent)")],
       dates, height: 260, fmt: (v) => "$" + v.toFixed(2), axisFmt: (v) => "$" + v.toFixed(1), xLabel: (i) => dates[i].slice(0, 4),
       tipTitle: (i) => `<strong>${dateL(dates[i])}</strong>`,
     });
@@ -1405,7 +1408,7 @@
         ${f.available ? `<section class="section" aria-labelledby="fin-h">
           <div class="section-head"><h2 id="fin-h">Financials</h2><span class="note">From SEC XBRL filings</span></div>
           <div class="fin">
-            <div class="fin-chart-wrap"><div class="legend"><span><i style="background:var(--accent)"></i>Revenue</span><span><i style="background:var(--vg)"></i>Net income</span></div><div class="chart" id="fin-chart"></div></div>
+            <div class="fin-chart-wrap"><div class="legend"><span><i style="background:var(--accent)"></i>Revenue</span><span><i style="background:var(--c-gold)"></i>Net income</span></div><div class="chart" id="fin-chart"></div></div>
             <div>
               <table class="fin-table">
                 <thead><tr><th class="l" scope="col">Quarter (USD)</th><th scope="col">${lq ? monthL(lq.end) : ""}</th><th scope="col">Y/Y change</th></tr></thead>
