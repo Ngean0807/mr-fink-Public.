@@ -5,3 +5,6 @@ dist/
 web/data/co/
 web/data/news.json
 web/data/press.json
+web/data/daily.json
+web/data/daily-snap.json
+web/data/config.json
