@@ -760,3 +760,15 @@ sup { font-size: 10px; color: var(--muted); }
 .sty { display: inline-block; font: 500 11px var(--font-ui); padding: 2px 7px; border-radius: 10px; margin-inline-start: 6px; white-space: nowrap; background: var(--chip); color: var(--ink-2); }
 .sty-more { background: var(--pos-soft); color: var(--pos); }
 .sty-less { background: var(--neg-soft); color: var(--neg); }
+.pf-input { display: grid; gap: 8px; }
+.pf-input textarea { width: 100%; box-sizing: border-box; font: 400 15px/1.5 ui-monospace, monospace; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); resize: vertical; }
+.pf-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.pf-acts label.btn { cursor: pointer; }
+.pf-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 16px 0; }
+@media (max-width: 720px) { .pf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pf-why span { display: block; font-size: 13px; line-height: 1.4; }
+.pf-why span + span { margin-top: 2px; }
+.pf-tbl .co { min-width: 190px; }
+.pf-tbl .pf-why { min-width: 240px; white-space: normal; }
+.pf-mg span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pf-mg span + span { margin-top: 4px; }

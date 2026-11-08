@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, periods, quotes, securities, style, thirteenf
+from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, owners, periods, quotes, securities, style, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -458,6 +458,10 @@ def main() -> None:
             for r in side:
                 r["style"] = style.classify(r.get("status"), r.get("dSharesPct"), base)
 
+    try:  # every Big Three position of $50M or more, by ticker (portfolio X-ray, Israel page, Ask)
+        owners.build(books, latest, prev, figi)
+    except Exception as e:
+        print(f"Ownership index skipped: {e}")
     warnings = audit.check(out_views, latest, period_list)
     # The fingerprint changes whenever any filing behind the page changes; the browser polls
     # status.json and reloads the data only when it differs.
