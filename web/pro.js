@@ -141,6 +141,67 @@
   T.page("portfolio", { match: (h) => h === "portfolio", render: portfolioPage });
   T.chip(() => `<a class="chip" href="#portfolio" ${T.state.page === "portfolio" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--accent)"></span>My portfolio <small>X-ray</small></a>`);
 
+  // ---------- 1. My day: what changed for the companies I follow or own ----------
+  function todayPage(app) {
+    const mine = [...new Set([...T.watch, ...pf.map((x) => x.t)])];
+    const idx = data("owners", ["today", "portfolio", "israel"]);
+    const dl = data("daily", ["today", "daily", "company"]);
+    const g = data("gurus", ["today", "gurus", "company"]);
+    const news = data("news", ["today"]);
+    if (!mine.length) {
+      app.innerHTML = `<div class="main"><div class="hero"><h1>My day</h1><p class="hero-sub">What changed today for the companies you follow or own, in one place, with what it means.</p></div>
+        <p class="empty-state">Follow companies (☆ Follow on any company page) or add your holdings in <a href="#portfolio">My portfolio</a>, and this page fills with what changed for them.</p></div>`;
+      return;
+    }
+    const set = new Set(mine);
+    const ev = [];
+    const now = Date.now();
+    // SEC filings
+    (T.D.feed || []).filter((e) => (e.tickers || []).some((t) => set.has(t))).slice(0, 40).forEach((e) => {
+      const [a, b] = T.feedTitle(e);
+      ev.push({ at: e.accepted, t: (e.tickers || []).find((t) => set.has(t)), kind: "SEC filing", badge: e.form.replace("SCHEDULE ", "").replace("SC ", ""), title: a, sub: b, url: e.url });
+    });
+    // insider trades, last 30 days
+    mine.forEach((t) => {
+      const s = T.secByTicker(t);
+      ((s && s.insiders && s.insiders.trades) || []).filter((x) => (x.code === "P" || x.code === "S") && now - Date.parse(x.date) < 30 * 864e5).slice(0, 4).forEach((x) => {
+        ev.push({ at: x.date + "T12:00:00Z", t, kind: "Insider", badge: "Form 4", title: `${t}: ${x.name} ${x.code === "P" ? "bought" : "sold"} ${usd(x.value)}`, sub: `${x.role || "Insider"}${x.plan ? " · pre-arranged plan (10b5-1)" : ""}`, url: x.url, tone: x.code === "P" ? "up" : "down" });
+      });
+    });
+    // SPDR funds day by day
+    if (dl && dl.byTicker) mine.forEach((t) => (dl.byTicker[t] || []).slice(-2).forEach(([day, u, m]) => {
+      ev.push({ at: day + "T21:00:00Z", t, kind: "Daily trades", badge: "SPDR", title: `${t}: State Street’s SPDR funds ${u >= 0 ? "bought" : "sold"} ${usd(Math.abs(u))}`, sub: Math.abs(m) >= Math.abs(u) * 0.5 && Math.abs(m) >= 1e6 ? "Mostly a change in the funds’ mix, not money flows" : "Mostly money flowing in or out of the funds", url: "#daily", tone: u >= 0 ? "up" : "down" });
+    }));
+    // activists and famous investors
+    if (g) {
+      g.d13.filter((x) => set.has(x.t)).forEach((x) => ev.push({ at: x.filed + "T12:00:00Z", t: x.t, kind: "Activist", badge: x.amend ? "13D/A" : "13D", title: `${x.t}: ${(g.managers.find((m) => m.id === x.g) || {}).name || x.g} ${x.amend ? "changed its activist stake" : "took an activist stake of 5% or more"}`, sub: T.niceName(x.name), url: x.url }));
+      g.managers.forEach((m) => m.buys.concat(m.sells).filter((r) => set.has(r.t) && (r.st || Math.abs(r.f) > 5e7)).forEach((r) => ev.push({ at: (m.filed || m.period) + "T12:00:00Z", t: r.t, kind: "Famous investor", badge: "13F", title: `${r.t}: ${m.name} ${r.st === "new" ? "opened a position" : r.st === "exited" ? "sold out" : r.f > 0 ? "bought more" : "sold some"} (${usdS(r.f)})`, sub: `${m.person} · ${T.qlabel(m.period)}`, url: "#gurus/" + m.id, tone: r.f > 0 ? "up" : "down" })));
+    }
+    // headlines
+    if (news && news.companies) mine.forEach((t) => ((news.companies[t] || {}).items || []).slice(0, 2).forEach((n) => ev.push({ at: new Date(n.t * 1000).toISOString(), t, kind: "News", badge: "News", title: n.h, sub: `${t} · ${n.s}`, url: n.u })));
+    ev.sort((a, b) => (a.at < b.at ? 1 : -1));
+    const glance = mine.map((t) => {
+      const o = ownerOf(t, idx);
+      const d = T.dayChg(t);
+      return { t, o, d, lines: interpret(o) };
+    });
+    const movers = glance.filter((x) => x.d != null && Math.abs(x.d) >= 0.03);
+    app.innerHTML = `<div class="main">
+      <div class="hero"><h1>My day</h1><p class="hero-sub">What changed for the ${mine.length} companies you follow or own, newest first, with what it means.</p></div>
+      ${movers.length ? `<div class="today-movers">${movers.map((x) => `<a href="#t-${slugOf(x.t)}"><b>${esc(x.t)}</b>${T.pill(x.d, { sm: true })}</a>`).join("")}<span class="muted">moving 3% or more today</span></div>` : ""}
+      <section class="section" aria-labelledby="td-f"><div class="section-head"><h2 id="td-f">What happened</h2><span class="note">SEC filings, insiders, daily fund trades, activists, famous investors, news</span></div>
+        ${ev.length ? `<div class="list wrap today-list">${ev.slice(0, 60).map((e) => `<a href="${esc(e.url)}"${e.url.startsWith("#") ? "" : ' target="_blank" rel="noopener"'}><span class="badge ${e.tone === "up" ? "tone-up" : e.tone === "down" ? "tone-down" : "frep"}">${esc(e.badge)}</span><span class="nm"><b>${esc(e.title)}</b><small>${esc(e.kind)} · ${esc(e.sub || "")}</small></span><span class="rt muted">${ago(e.at)}</span></a>`).join("")}</div>`
+          : '<p class="foot">Nothing new for your companies yet.</p>'}
+      </section>
+      <section class="section" aria-labelledby="td-g"><div class="section-head"><h2 id="td-g">Your companies at a glance</h2><span class="note">Last quarter, from the Big Three’s 13F filings</span></div>
+        <div class="table-scroll"><table class="tbl pro-tbl"><thead><tr><th class="l" scope="col">Company</th><th scope="col">Price</th><th scope="col">Today</th><th scope="col">Big Three stake</th><th class="l" scope="col">What it means</th></tr></thead>
+        <tbody>${glance.map((x) => `<tr><td class="l">${coLink(x.t, x.o && x.o.n)}</td><td>${T.live("px", x.t)}</td><td>${T.live("pill", x.t)}</td><td>${x.o && x.o.s != null ? pct(x.o.s, 1, false) : '<span class="na">n/a</span>'}</td><td class="l pf-why">${x.lines.map((l) => `<span>${esc(l)}</span>`).join("") || '<span class="muted">—</span>'}</td></tr>`).join("")}</tbody></table></div>
+      </section>
+    </div>`;
+  }
+  T.page("today", { match: (h) => h === "today", render: todayPage });
+  T.chip(() => `<a class="chip chip-today" href="#today" ${T.state.page === "today" ? 'aria-current="page"' : ""}><span class="sw" style="background:var(--pos-line)"></span>My day</a>`, true);
+
   // ---------- 5. Famous investors and activists (pipeline/gurus.py) ----------
   let guruOpen = null;
   const chg = (r) => (r.st === "new" ? '<span class="act new">New</span>' : r.st === "exited" ? '<span class="act out">Sold out</span>' : r.d != null ? T.pill(r.d, { sm: true }) : "—");

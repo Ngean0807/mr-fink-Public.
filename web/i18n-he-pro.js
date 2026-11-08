@@ -146,6 +146,23 @@
     "Printing technology": "טכנולוגיית הדפסה",
     "Electric vehicles": "רכב חשמלי",
     "Networking": "תקשורת נתונים",
+    // my day
+    "My day": "היום שלי",
+    "What changed today for the companies you follow or own, in one place, with what it means.": "מה השתנה היום בחברות שאתם עוקבים אחריהן או מחזיקים, במקום אחד, עם הסבר מה זה אומר.",
+    "What happened": "מה קרה",
+    "SEC filings, insiders, daily fund trades, activists, famous investors, news": "דיווחים ל-SEC, בעלי עניין, מסחר יומי של קרנות, אקטיביסטים, משקיעים מפורסמים, חדשות",
+    "Your companies at a glance": "החברות שלכם במבט אחד",
+    "Last quarter, from the Big Three’s 13F filings": "הרבעון האחרון, מדוחות ה-13F של שלוש הגדולות",
+    "moving 3% or more today": "זזות היום ב-3% או יותר",
+    "Nothing new for your companies yet.": "עדיין אין חדש בחברות שלכם.",
+    "SEC filing": "דיווח ל-SEC",
+    "Insider": "בעל עניין",
+    "Daily trades": "מסחר יומי",
+    "Famous investor": "משקיע מפורסם",
+    "News": "חדשות",
+    "pre-arranged plan (10b5-1)": "תוכנית מכירה מתוכננת מראש (10b5-1)",
+    "Mostly a change in the funds’ mix, not money flows": "בעיקר שינוי בהרכב הקרנות, לא כסף שנכנס או יצא",
+    "Mostly money flowing in or out of the funds": "בעיקר כסף שנכנס לקרנות או יצא מהן",
     // passive or active
     "Passive or active": "פסיבי או אקטיבי",
     "With the flows": "פסיבי, עם הזרימה",
@@ -187,6 +204,13 @@
   P("Israeli-founded or Israel-headquartered companies with a US listing\\. Holdings from the Big Three’s 13F filings for {Q}; stake where the company reports its share count to the SEC \\(many Israeli companies file a 20-F and do not\\)\\. Prices from Yahoo Finance; shekel amounts at the latest dollar-shekel rate\\. Not investment advice\\.", (m, v) =>
     `חברות שנוסדו בישראל או שהמטה שלהן בישראל, ונסחרות בארה״ב. האחזקות מדוחות ה-13F של שלוש הגדולות ל${v(m[1])}; החלק מוצג כשהחברה מדווחת ל-SEC על מספר המניות שלה (חברות ישראליות רבות מגישות 20-F ולא מדווחות). המחירים מ-Yahoo Finance; סכומים בשקלים לפי שער הדולר האחרון. לא ייעוץ השקעות.`);
   P("\\$1 = ₪{N}", (m) => `$1 = ₪${m[1]}`);
+  P("What changed for the {N} companies you follow or own, newest first, with what it means\\.", (m, v) => `מה השתנה ב-${v(m[1])} החברות שאתם עוקבים אחריהן או מחזיקים, מהחדש לישן, עם הסבר מה זה אומר.`);
+  P("Follow companies \\(☆ Follow on any company page\\) or add your holdings in", () => "עקבו אחרי חברות (☆ מעקב בעמוד של כל חברה) או הוסיפו את האחזקות שלכם ב");
+  P("and this page fills with what changed for them\\.", () => "והעמוד הזה יתמלא במה שהשתנה בהן.");
+  P("{T}: (.+) (bought|sold) {N}", (m, v) => `${m[1]}: ${m[2]} ${m[3] === "bought" ? "קנה" : "מכר"} ב-${v(m[4])}`);
+  P("{T}: State Street’s SPDR funds (bought|sold) {N}", (m, v) => `${m[1]}: קרנות SPDR של סטייט סטריט ${m[2] === "bought" ? "קנו" : "מכרו"} ב-${v(m[3])}`);
+  P("{T}: (.+) (changed its activist stake|took an activist stake of 5% or more)", (m) => `${m[1]}: ${m[2]} ${m[3].startsWith("changed") ? "עדכנה את האחזקה האקטיביסטית שלה" : "לקחה אחזקה אקטיביסטית של 5% ומעלה"}`);
+  P("{T}: (.+) (opened a position|sold out|bought more|sold some) \\(({N})\\)", (m, v) => `${m[1]}: ${m[2]} ${({ "opened a position": "פתחה פוזיציה", "sold out": "מכרה את כל האחזקה", "bought more": "קנתה עוד", "sold some": "מכרה חלק" })[m[3]]} (${v(m[4])})`);
   P("Loading {X}…", (m) => `טוען…`);
   P("Money flows: an ETF that takes in money buys more of everything it holds in the same proportion, so the share count of most holdings moves by the same ratio\\. Trintel takes that ratio as the day’s flow; what moves differently is a change in the fund’s mix \\(index additions and removals, rebalances, corporate actions\\)\\. iShares \\(BlackRock\\) and Vanguard do not publish a daily holdings file that can be downloaded, so their funds are tracked monthly from N-PORT filings on the ETFs page\\. Source: State Street, checked {X}\\.", (m, v) =>
     `כסף נכנס ויוצא: תעודת סל שמקבלת כסף קונה עוד מכל מה שהיא מחזיקה באותו יחס, אז מספר המניות של רוב האחזקות זז באותו יחס. Trintel מתייחס ליחס הזה ככסף שנכנס או יצא באותו יום; מה שזז אחרת הוא שינוי בהרכב הקרן (הוספות והוצאות מהמדד, איזון מחדש, אירועים תאגידיים). iShares (בלקרוק) וואנגארד לא מפרסמות קובץ אחזקות יומי שאפשר להוריד, אז הקרנות שלהן מתעדכנות פעם בחודש מדוחות N-PORT בעמוד תעודות הסל. מקור: סטייט סטריט, נבדק ${v(m[1])}.`);
