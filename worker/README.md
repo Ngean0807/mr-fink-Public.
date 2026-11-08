@@ -1,4 +1,4 @@
-# TriQ push server
+# Trintel push server
 
 A Cloudflare Worker (free tier) that sends Web Push notifications for new SEC filings, so phones
 and desktops get them with the site closed, without the ntfy app.

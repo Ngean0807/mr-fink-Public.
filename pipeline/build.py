@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, aum, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -463,9 +463,15 @@ def main() -> None:
     except Exception as e:
         print(f"News skipped: {e}")
     print(f"[{time.time() - t0:,.0f}s] news")
+    try:  # each manager's total AUM as it reports it (the 13F covers US-listed stocks only)
+        aum_now = aum.build()
+    except Exception as e:
+        print(f"AUM skipped: {e}")
+        aum_now = {}
     data = {
         "meta": {
-            "app": "TriQ",
+            "aum": aum_now,
+            "app": "Trintel",
             "generatedAt": now,
             "fingerprint": fingerprint,
             "latest": latest,
@@ -509,7 +515,7 @@ def main() -> None:
     print(f"[{time.time() - t0:,.0f}s] quotes")
     write_company_pages(lite, data["quotes"]["quotes"])
     print(f"[{time.time() - t0:,.0f}s] company pages written")
-    # Notifications go out from the TriQ push server (worker/), which reads this data; the
+    # Notifications go out from the Trintel push server (worker/), which reads this data; the
     # pipeline itself sends nothing. New audit warnings reach it through status.json.
     try:  # the Big Three's ETFs (prices every run; N-PORT summaries cached per filing)
         etfs.write()

@@ -118,7 +118,7 @@ def ssga_daily(ticker: str) -> dict:
         data = path.read_bytes()
     else:
         import urllib.request
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (TriQ dashboard)"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Trintel dashboard)"})
         data = urllib.request.urlopen(req, timeout=60).read()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)

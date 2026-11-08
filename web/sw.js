@@ -1,6 +1,6 @@
-// TriQ service worker: the installed app opens offline with the last data it saw.
+// Trintel service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
-const CACHE = "mrfink-v9";
+const CACHE = "mrfink-v10";
 const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/logo.svg"];
 
 self.addEventListener("install", (e) => {
@@ -25,11 +25,11 @@ self.addEventListener("fetch", (e) => {
   );
 });
 
-// Push notifications from the TriQ push server (worker/): show them, open the page on tap.
+// Push notifications from the Trintel push server (worker/): show them, open the page on tap.
 self.addEventListener("push", (e) => {
   let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "TriQ", body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || "TriQ", {
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "Trintel", body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Trintel", {
     body: d.body || "", tag: d.tag, icon: "icons/icon-192.png", badge: "icons/badge-96.png", data: { url: d.url || "./" },
   }));
 });

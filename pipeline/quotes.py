@@ -17,7 +17,7 @@ from . import edgar
 
 WORKERS = 6  # parallel requests to Yahoo
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval={interval}&range={range}&includePrePost=false"
-HEADERS = {"User-Agent": "Mozilla/5.0 (TriQ dashboard)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (Trintel dashboard)"}
 
 
 def yahoo_symbol(ticker: str) -> str:

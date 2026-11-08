@@ -1,6 +1,6 @@
 {
-  "name": "TriQ: Big Three holdings",
-  "short_name": "TriQ",
+  "name": "Trintel: Big Three holdings",
+  "short_name": "Trintel",
   "description": "What BlackRock, Vanguard and State Street own and trade, from their SEC filings: holdings, analytics, small caps, ETFs and alerts.",
   "start_url": "./#big3",
   "scope": "./",

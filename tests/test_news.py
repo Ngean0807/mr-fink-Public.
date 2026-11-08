@@ -36,3 +36,12 @@ class CompanyFilterTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AumParseTest(unittest.TestCase):
+    def test_blackrock_and_state_street_release_text(self):
+        from pipeline import aum
+        self.assertEqual(aum.parse("blackrock", "Total AUM (end of period) $ 15,488,263 $ 13,463,625"), 15_488_263e6)
+        self.assertEqual(aum.parse("statestreet", "AUM as of quarter-end increased 16% to a record $6.3 trillion"), 6.3e12)
+        self.assertEqual(aum._quarter_end_before("2026-10-14"), "2026-09-30")
+        self.assertEqual(aum._quarter_end_before("2026-01-15"), "2025-12-31")

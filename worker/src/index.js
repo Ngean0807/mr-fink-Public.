@@ -1,4 +1,4 @@
-// TriQ push server (Cloudflare Worker + KV, free tier). Every notification TriQ sends goes
+// Trintel push server (Cloudflare Worker + KV, free tier). Every notification Trintel sends goes
 // through here.
 //
 // Browsers subscribe with their filing types and watchlist; every 5 minutes a cron reads the
@@ -51,7 +51,7 @@ export default {
         const rec = await env.PUSH.get("sub:" + (await id(body.endpoint || "")), "json");
         if (!rec) return json({ error: "not subscribed" }, cors, 404);
         const status = await sendPush(rec.subscription, {
-          title: "TriQ notifications are on", body: "You will get a push for each new filing you chose, even with the site closed.",
+          title: "Trintel notifications are on", body: "You will get a push for each new filing you chose, even with the site closed.",
           url: env.SITE_URL, tag: "test",
         }, await vapid(env), env.VAPID_SUBJECT);
         return json({ ok: status < 300, status }, cors);
@@ -112,7 +112,7 @@ async function checkSite(env) {
       || (rec.kinds.includes(e.kind) && (e.kind !== "8k" || e.key)));
     if (!mine.length) continue;
     const pushes = mine.slice(0, MAX_PER_SUB).map((e) => message(e, site));
-    if (mine.length > MAX_PER_SUB) pushes.push({ title: `${mine.length - MAX_PER_SUB} more new SEC filings`, body: "Open TriQ for the full list.", url: site, tag: "more" });
+    if (mine.length > MAX_PER_SUB) pushes.push({ title: `${mine.length - MAX_PER_SUB} more new SEC filings`, body: "Open Trintel for the full list.", url: site, tag: "more" });
     for (const p of pushes) {
       const code = await sendPush(rec.subscription, p, keys, env.VAPID_SUBJECT).catch(() => 0);
       if (code === 404 || code === 410) { await env.PUSH.delete(key); break; }  // the browser unsubscribed
@@ -145,10 +145,10 @@ async function checkHealth(env, site, status) {
   if (ageMin > STALE_MIN && !was) {
     await env.PUSH.put("health:stale", "1");
     const since = at ? new Date(at).toISOString().slice(11, 16) + " UTC" : "unknown";
-    await pushHealth(env, await allSubs(env), { title: "TriQ stopped updating", body: `No fresh SEC data since ${since}. The refresh may have failed; check GitHub Actions.`, url: site, tag: "health", urgent: true });
+    await pushHealth(env, await allSubs(env), { title: "Trintel stopped updating", body: `No fresh SEC data since ${since}. The refresh may have failed; check GitHub Actions.`, url: site, tag: "health", urgent: true });
   } else if (ageMin <= STALE_MIN && was) {
     await env.PUSH.put("health:stale", "0");
-    await pushHealth(env, await allSubs(env), { title: "TriQ is updating again", body: "Fresh SEC data is coming in again.", url: site, tag: "health" });
+    await pushHealth(env, await allSubs(env), { title: "Trintel is updating again", body: "Fresh SEC data is coming in again.", url: site, tag: "health" });
   }
 }
 /** Each data-check warning once (the pipeline publishes them with the data). */
@@ -158,7 +158,7 @@ async function announceWarnings(env, site, subs, warnings) {
   if (!fresh.length) return;
   await env.PUSH.put("health:warnings", JSON.stringify([...seen, ...fresh].slice(-300)));
   if (!seen.size && fresh.length > 10) return;  // first run: record, don't flood
-  await pushHealth(env, subs, { title: `TriQ data check: ${fresh.length} new warning${fresh.length === 1 ? "" : "s"}`, body: fresh.slice(0, 3).join("\n") + (fresh.length > 3 ? `\n…and ${fresh.length - 3} more` : ""), url: site, tag: "warnings" });
+  await pushHealth(env, subs, { title: `Trintel data check: ${fresh.length} new warning${fresh.length === 1 ? "" : "s"}`, body: fresh.slice(0, 3).join("\n") + (fresh.length > 3 ? `\n…and ${fresh.length - 3} more` : ""), url: site, tag: "warnings" });
 }
 
 const MGR = { blackrock: "BlackRock", vanguard: "Vanguard", statestreet: "State Street" };
