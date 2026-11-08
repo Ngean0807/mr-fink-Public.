@@ -547,7 +547,8 @@
       return `<a class="chip" href="#${id}" ${cur && state.page === "home" ? 'aria-current="page"' : ""}><span class="sw" style="${sw}"></span>${MGR_NAME[id]} <small>${usd(aumOf(id) ? aumOf(id).value : t[t.length - 1])}</small></a>`;
     }).join("") + (D.emerging ? `<a class="chip chip-em" href="#emerging" ${state.page === "emerging" ? 'aria-current="page"' : ""}><span class="sw em-sw"></span>Emerging <small>${emergingRows().length} small caps</small></a>` : "")
       + `<a class="chip chip-an" href="#analytics" ${state.page === "analytics" ? 'aria-current="page"' : ""}><svg class="an-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>Analytics <small>charts</small></a>`
-      + `<a class="chip" href="#etfs" ${state.page === "etfs" ? 'aria-current="page"' : ""}><span class="sw" style="background:linear-gradient(90deg,var(--blk) 0 33%,var(--vg) 0 66%,var(--ss) 0)"></span>ETFs <small>iShares · Vanguard · SPDR</small></a>`;
+      + `<a class="chip" href="#etfs" ${state.page === "etfs" ? 'aria-current="page"' : ""}><span class="sw" style="background:linear-gradient(90deg,var(--blk) 0 33%,var(--vg) 0 66%,var(--ss) 0)"></span>ETFs <small>iShares · Vanguard · SPDR</small></a>`
+      + EXTRA_CHIPS.map((f) => f()).join("");
   }
 
   function renderLive() {
@@ -1396,6 +1397,7 @@
         ${emergingSection(s)}
         ${fundsSection(s)}
         ${insidersSection(s)}
+        ${EXTRA_CO.map((f) => { try { return f(s) || ""; } catch (e) { return ""; } }).join("")}
         <section class="section" aria-labelledby="own-h">
           <div class="section-head"><h2 id="own-h">Big Three ownership</h2><span class="note">${qlabel(D.meta.latest)} 13F filings</span></div>
           <div class="table-scroll flat"><table class="own-table">
@@ -2314,6 +2316,7 @@
     else if (state.page === "watch") renderWatch();
     else if (state.page === "etfs") renderEtfs();
     else if (state.page === "analytics") renderAnalytics();
+    else if (EXTRA[state.page]) EXTRA[state.page].render($("app"));
     else renderHome();
     syncSubscriptions();
     renderLive();
@@ -2349,6 +2352,10 @@
       state.page = "etfs";
       state.slug = null;
       if (h.startsWith("etfs/")) etfWant = h.slice(5).toUpperCase();
+    } else if (Object.keys(EXTRA).some((k) => EXTRA[k].match(h))) {
+      state.page = Object.keys(EXTRA).find((k) => EXTRA[k].match(h));
+      state.slug = null;
+      if (EXTRA[state.page].onRoute) EXTRA[state.page].onRoute(h);
     } else {
       state.page = "home";
       state.slug = null;
@@ -2660,6 +2667,16 @@
     } catch (e) { /* offline or opened from disk: keep the snapshot */ }
   }
 
+  // ---------- pages added by pro.js (window.TRINTEL) ----------
+  const EXTRA = {}, EXTRA_CHIPS = [], EXTRA_CO = [], ON_BOOT = [];
+  window.TRINTEL = {
+    get D() { return D; }, get Q() { return Q; }, get watch() { return watch; }, state,
+    $, esc, usd, usdS, num, pct, pp, signed, pill, dateL, ago, qlabel, niceName, tkChip, live, pxOf, dayChg, mColor, dot,
+    MGR_NAME, MGRS, VIEWS, aumOf, holder, anySec, isWatched, toggleWatch, toast, render, exportBtn, slugOf,
+    secByTicker: (t) => Object.values(D.securities).find((s) => s.ticker === t) || emergingAll().find((r) => r.ticker === t),
+    page(name, def) { EXTRA[name] = def; }, chip(fn) { EXTRA_CHIPS.push(fn); }, company(fn) { EXTRA_CO.push(fn); }, onBoot(fn) { if (D) fn(); else ON_BOOT.push(fn); },
+    rerender(pages) { if (!pages || pages.includes(state.page)) render(); },
+  };
   function boot(data) {
     D = data;
     Q = JSON.parse(JSON.stringify((D.quotes && D.quotes.quotes) || {}));
@@ -2697,6 +2714,7 @@
     let rt, lastW = innerWidth;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 150); });
     route();
+    ON_BOOT.splice(0).forEach((f) => { try { f(); } catch (e) { console.error(e); } });
     if (HOSTED) {
       poll();
       setInterval(poll, POLL_MS);

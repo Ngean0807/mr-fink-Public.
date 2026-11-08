@@ -1,7 +1,7 @@
 // Trintel service worker: the installed app opens offline with the last data it saw.
 // Network first for everything, so a new deploy or a new 13F is never hidden behind a cache.
-const CACHE = "mrfink-v12";
-const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n.js", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/logo.svg"];
+const CACHE = "mrfink-v13";
+const SHELL = ["./", "index.html", "styles.css", "i18n-he.js", "i18n-he-pro.js", "i18n.js", "app.js", "pro.js", "manifest.webmanifest", "icons/icon-192.png", "icons/logo.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

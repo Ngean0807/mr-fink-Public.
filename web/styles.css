@@ -752,3 +752,8 @@ sup { font-size: 10px; color: var(--muted); }
 .f13-label { font: 500 14px var(--font-ui); color: var(--ink-2); }
 .f13-value { font: 500 22px/1.2 var(--font-ui); color: var(--ink); }
 .tk[style*="var(--blk)"] { color: var(--blk-ink); }  /* BlackRock is near-white in dark mode */
+
+/* pro pages */
+.mini-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 24px; vertical-align: middle; }
+.mini-bars i { display: block; width: 4px; border-radius: 1px; background: var(--pos-line); }
+.mini-bars i.down { background: var(--neg-line); }

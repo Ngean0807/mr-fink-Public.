@@ -13,7 +13,7 @@ from pathlib import Path
 import hashlib
 import re
 
-from . import analytics, audit, aum, backtest, config, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, periods, quotes, securities, thirteenf
+from . import analytics, audit, aum, backtest, config, daily, edgar, emerging, etfs, feed, fundamentals, insiders, movers, news, nport, periods, quotes, securities, thirteenf
 
 OUT = Path(__file__).resolve().parent.parent / "web" / "data" / "dashboard.json"
 STATUS = OUT.with_name("status.json")
@@ -521,6 +521,10 @@ def main() -> None:
         etfs.write()
     except Exception as e:
         print(f"ETFs skipped: {e}")
+    try:  # State Street's SPDR funds day by day (their daily holdings files; checked once an hour)
+        daily.write({t: q.get("price") for t, q in data["quotes"]["quotes"].items() if isinstance(q, dict)})
+    except Exception as e:
+        print(f"Daily SPDR trades skipped: {e}")
     # The Emerging backtest is re-run once per new quarter (it reads every 13F since 2017).
     try:
         bt = json.loads(backtest.OUT.read_text()) if backtest.OUT.exists() else {}
