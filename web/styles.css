@@ -22,9 +22,10 @@
   --neg-line: #d93025;
   --warn: #b06000;
   --warn-soft: #fef7e0;
-  --blk: #3a63d8;
-  --vg: #b07d00;
-  --ss: #8a4fbf;
+  --blk: #000000;  /* BlackRock black, Vanguard red, State Street blue */
+  --vg: #96151d;
+  --ss: #0033a1;
+  --c-gold: #b07d00; --c-purple: #8a4fbf; --blk-ink: #fff;  /* chart colours that are not a manager */
   --heat-1: #e8f0fe;
   --heat-2: #d2e3fc;
   --heat-3: #aecbfa;
@@ -43,7 +44,7 @@
     --muted: #9aa0a6; --line: #3c4043; --line-strong: #5f6368; --accent: #8ab4f8; --accent-ink: #8ab4f8; --accent-soft: #283a55;
     --pos: #81c995; --pos-soft: #1e3a2a; --pos-line: #81c995; --neg: #f28b82; --neg-soft: #4a2522; --neg-line: #f28b82;
     --warn: #fdd663; --warn-soft: #42392a;
-    --blk: #5f84f0; --vg: #b3841a; --ss: #9d68d6;
+    --blk: #e8eaed; --vg: #e0525b; --ss: #5b8def; --c-gold: #b3841a; --c-purple: #9d68d6; --blk-ink: #000;
     --heat-1: #24324a; --heat-2: #2c4366; --heat-3: #355686; --heat-4: #4170b0; --heat-ink: #ffffff;
     --shadow: 0 1px 3px rgba(0, 0, 0, .6), 0 4px 8px 3px rgba(0, 0, 0, .3);
     color-scheme: dark;
@@ -54,7 +55,7 @@
   --muted: #9aa0a6; --line: #3c4043; --line-strong: #5f6368; --accent: #8ab4f8; --accent-ink: #8ab4f8; --accent-soft: #283a55;
   --pos: #81c995; --pos-soft: #1e3a2a; --pos-line: #81c995; --neg: #f28b82; --neg-soft: #4a2522; --neg-line: #f28b82;
   --warn: #fdd663; --warn-soft: #42392a;
-  --blk: #5f84f0; --vg: #b3841a; --ss: #9d68d6;
+  --blk: #e8eaed; --vg: #e0525b; --ss: #5b8def; --c-gold: #b3841a; --c-purple: #9d68d6; --blk-ink: #000;
   --heat-1: #24324a; --heat-2: #2c4366; --heat-3: #355686; --heat-4: #4170b0; --heat-ink: #ffffff;
   --shadow: 0 1px 3px rgba(0, 0, 0, .6), 0 4px 8px 3px rgba(0, 0, 0, .3);
   color-scheme: dark;
@@ -340,8 +341,6 @@ details.callout[open] > summary::after { content: "▴"; }
 .hero { display: grid; gap: 6px; }
 .hero h1 { font-size: 28px; line-height: 1.25; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .hero-sub { color: var(--ink-2); font-size: 14px; }
-.aum-line { margin-top: 10px; font-size: 14px; line-height: 1.5; }
-.aum-line b { font: 600 18px var(--font-ui); margin-inline: 4px; }
 .figure { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
 .figure-value { font: 400 36px/1.1 var(--font-ui); letter-spacing: -.01em; }
 .figure-chg { font: 500 16px var(--font-ui); }
@@ -747,3 +746,9 @@ sup { font-size: 10px; color: var(--muted); }
 .an-p .hb-row { grid-template-columns: 104px minmax(0, 1fr) 82px; }
 @media (max-width: 640px) { .an-p .hb-row { grid-template-columns: 88px minmax(0, 1fr) 70px; } }
 @media (max-width: 600px) { [dir="rtl"] .npanel { left: 8px; right: 8px; } }
+
+/* the 13F line under the AUM headline */
+.figure.f13 { margin-top: 12px; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.f13-label { font: 500 14px var(--font-ui); color: var(--ink-2); }
+.f13-value { font: 500 22px/1.2 var(--font-ui); color: var(--ink); }
+.tk[style*="var(--blk)"] { color: var(--blk-ink); }  /* BlackRock is near-white in dark mode */

@@ -31,6 +31,8 @@
     "BlackRock, Vanguard & State Street": "בלקרוק, ואנגארד וסטייט סטריט",
     "Big Three": "שלוש הגדולות",
     "Total assets under management": "סך הנכסים המנוהלים",
+    "US-listed stocks in the 13F": "מניות אמריקאיות בדוח ה-13F",
+    "The 13F covers only US-listed stocks. Bonds, non-US stocks, cash and private funds are not in it. The chart and tables below are the 13F.": "דוח ה-13F כולל רק מניות שנסחרות בארה״ב. אג״ח, מניות מחוץ לארה״ב, מזומן וקרנות פרטיות לא נכללים בו. הגרף והטבלאות למטה מבוססים על ה-13F.",
     "Total AUM (reported)": "סך הנכסים המנוהלים (מדווח)",
     "13F share of AUM": "חלק ה-13F מהנכסים המנוהלים",
     "sum of each manager’s latest report": "סכום הדיווח האחרון של כל מנהלת",
