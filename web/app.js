@@ -540,7 +540,7 @@
   }
   function renderChips() {
     const watchChip = `<a class="chip chip-watch" href="#watchlist" ${state.page === "watch" ? 'aria-current="page"' : ""}><span class="star" aria-hidden="true">★</span>Watchlist <small>${watch.length || ""}</small></a>`;
-    $("chips").innerHTML = watchChip + VIEWS.map((id) => {
+    $("chips").innerHTML = EXTRA_CHIPS_FIRST.map((f) => f()).join("") + watchChip + VIEWS.map((id) => {
       const t = D.views[id].totals;
       const sw = id === "big3" ? "background:conic-gradient(var(--blk) 0 33%, var(--vg) 0 66%, var(--ss) 0)" : `background:${mColor(id)}`;
       const cur = state.view === id;
@@ -2683,13 +2683,13 @@
   }
 
   // ---------- pages added by pro.js (window.TRINTEL) ----------
-  const EXTRA = {}, EXTRA_CHIPS = [], EXTRA_CO = [], ON_BOOT = [];
+  const EXTRA = {}, EXTRA_CHIPS = [], EXTRA_CHIPS_FIRST = [], EXTRA_CO = [], ON_BOOT = [];
   window.TRINTEL = {
     get D() { return D; }, get Q() { return Q; }, get watch() { return watch; }, state,
     $, esc, usd, usdS, num, pct, pp, signed, pill, dateL, ago, qlabel, niceName, tkChip, live, pxOf, dayChg, mColor, dot,
     styleOf, styleTag, MGR_NAME, MGRS, VIEWS, aumOf, holder, anySec, isWatched, toggleWatch, toast, render, exportBtn, slugOf,
     secByTicker: (t) => Object.values(D.securities).find((s) => s.ticker === t) || emergingAll().find((r) => r.ticker === t),
-    page(name, def) { EXTRA[name] = def; }, chip(fn) { EXTRA_CHIPS.push(fn); }, company(fn) { EXTRA_CO.push(fn); }, onBoot(fn) { if (D) fn(); else ON_BOOT.push(fn); },
+    page(name, def) { EXTRA[name] = def; }, chip(fn, first) { (first ? EXTRA_CHIPS_FIRST : EXTRA_CHIPS).push(fn); }, feedTitle, company(fn) { EXTRA_CO.push(fn); }, onBoot(fn) { if (D) fn(); else ON_BOOT.push(fn); },
     rerender(pages) { if (!pages || pages.includes(state.page)) render(); },
   };
   function boot(data) {

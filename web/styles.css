@@ -776,3 +776,8 @@ sup { font-size: 10px; color: var(--muted); }
 .pro-tbl td.wrapc { white-space: normal; min-width: 260px; font-size: 13px; line-height: 1.5; }
 .il-sw { background: linear-gradient(#fff 0 30%, #0038b8 30% 40%, #fff 40% 60%, #0038b8 60% 70%, #fff 70%); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .toggles .fx { font-size: 13px; margin-inline-start: 8px; align-self: center; }
+.today-movers { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.today-movers a { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 16px; background: var(--chip); color: var(--ink); text-decoration: none; }
+.badge.tone-up { background: var(--pos-soft); color: var(--pos); }
+.badge.tone-down { background: var(--neg-soft); color: var(--neg); }
+.bt-note { margin-top: 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 14px; line-height: 1.55; }
