@@ -140,6 +140,18 @@ def load_filing(f: Filing) -> dict:
     return parsed
 
 
+# Same company, new CUSIP: a corporate reorganization that swapped the shares one for one, so
+# filers report the new CUSIP from the next quarter on. Counted under the old CUSIP, so the
+# quarter shows the real change in shares instead of a new position plus a full exit.
+# new CUSIP -> old CUSIP; each checked in State Street's Q2 and Q3 2026 13Fs (similar shares and price).
+CUSIP_SUCCESSORS = {
+    "30233Q108": "30231G102",  # ExxonMobil -> ExxonMobil Holdings Corp (holding-company reorganization)
+    "30609A109": "682680103",  # ONEOK (new holding company)
+    "M8769Q102": "881624209",  # Teva: US-listed ADSs -> ordinary shares (1 ADS = 1 share)
+    "G39104107": "G39108108",  # Gates Industrial: plc -> Ltd redomiciliation
+}
+
+
 def build_complex(complex_cfg: dict, periods: list[str], log=print) -> dict:
     """Sum every entity's effective 13F-HR per period into one holdings book for the complex."""
     by_key: dict[tuple[str, str], list[Filing]] = defaultdict(list)
@@ -162,6 +174,7 @@ def build_complex(complex_cfg: dict, periods: list[str], log=print) -> dict:
                 total += parsed["total"]
                 sources.append({"entity": f.entity, "form": f.form, "filed": f.filed, "accession": f.accession, "url": f.index_url, "value": parsed["total"], "rows": parsed["rows"]})
                 for cusip, (shares, value, name, cls) in parsed["holdings"].items():
+                    cusip = CUSIP_SUCCESSORS.get(cusip, cusip)
                     slot = book.get(cusip)
                     if slot is None:
                         book[cusip] = [shares, value, name, cls]

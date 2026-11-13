@@ -24,6 +24,19 @@ class InfoTableTest(unittest.TestCase):
         self.assertEqual(parsed["rows"], 4)
 
 
+    def test_successor_cusip_counts_as_the_same_holding(self):
+        from unittest import mock
+        q2 = thirteenf.Filing("0000093751", "STATE STREET CORP", "13F-HR", "2026-06-30", "2026-08-14", "a-2")
+        q3 = thirteenf.Filing("0000093751", "STATE STREET CORP", "13F-HR", "2026-09-30", "2026-11-12", "a-3")
+        books = {"a-2": {"30231G102": [100, 10_000, "EXXON MOBIL CORP", "COM"]},
+                 "a-3": {"30233Q108": [103, 11_000, "EXXONMOBIL HOLDINGS CORP", "COM"]}}
+        with mock.patch.object(thirteenf, "list_filings", return_value=[q2, q3]), \
+             mock.patch.object(thirteenf, "select_filings", side_effect=lambda g: g), \
+             mock.patch.object(thirteenf, "load_filing", side_effect=lambda f: {"holdings": books[f.accession], "total": 0, "rows": 1}):
+            q = thirteenf.build_complex({"id": "statestreet", "ciks": ["0000093751"]}, ["2026-06-30", "2026-09-30"], log=lambda *a: None)
+        self.assertEqual(q["2026-09-30"]["book"]["30231G102"][0], 103)
+        self.assertNotIn("30233Q108", q["2026-09-30"]["book"])
+
 class FundamentalsTest(unittest.TestCase):
     def test_derives_fourth_quarter_from_full_year(self):
         pts = {
